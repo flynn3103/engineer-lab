@@ -1,0 +1,4 @@
+interface:
+  display_name: "Engineering Feature Specs"
+  short_description: "Create scoped specs and capacity designs"
+  default_prompt: "Use $engineering-feature-specs to turn this PRD into feature specifications and an HLD."
