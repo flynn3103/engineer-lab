@@ -86,11 +86,12 @@ flowchart TD
 ## Use cases và roadmap
 
 `TBU` nghĩa là use case đã được planned nhưng chưa có tài liệu chi tiết hoặc
-implementation. Feature 03 hiện chưa có use case document nào.
+implementation. UC-01 đã có tài liệu; các use case còn lại là `TBU`.
 
-### UC-01 — TBU: Action entry
+### [UC-01 — Action entry](../use-case/feature-03/01-action-entry.md)
 
-Gọi `PlanJob`, validate runtime options và tạo job context.
+Gọi `PlanJob`, validate runtime options và tạo job context. Chưa tạo task,
+worker hay source I/O.
 
 ### UC-02 — TBU: Local task specifications
 
