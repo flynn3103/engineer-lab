@@ -11,7 +11,7 @@ Source có thể đến từ:
 
 - các `Row` có sẵn trong memory;
 - file JSON Lines;
-- file CSV;
+- file CSV
 - file text.
 
 Kết quả của use case là metadata đã được validate:

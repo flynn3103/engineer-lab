@@ -79,14 +79,14 @@ computation của RDD.
 
 ## Use cases
 
-| Use case | Outcome | Liên kết |
-| --- | --- | --- |
-| UC-01 | Tạo `SourceSpec` immutable cho memory hoặc file source | [01-source-descriptor](../use-case/feature-01/01-source-descriptor.md) |
-| UC-02 | Tạo lazy, immutable RDD lineage và branching | [02-lazy-rdd-pipeline](../use-case/feature-01/02-lazy-rdd-pipeline.md) |
-| UC-03 | Chia memory rows thành contiguous partitions | [03-memory-partitioning](../use-case/feature-01/03-memory-partitioning.md) |
-| UC-04 | Chia file bytes nhưng stream mỗi complete line đúng một lần | [04-file-byte-ranges](../use-case/feature-01/04-file-byte-ranges.md) |
-| UC-05 | Decode complete line thành `Row` theo JSONL, text hoặc CSV | [05-source-record-decoding](../use-case/feature-01/05-source-record-decoding.md) |
-| UC-06 | Quan sát RDD ID, parent, partition metadata qua snapshot an toàn | [06-rdd-observability](../use-case/feature-01/06-rdd-observability.md) |
+| Use case | Outcome                                                          | Liên kết                                                                         |
+| -------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| UC-01    | Tạo `SourceSpec` immutable cho memory hoặc file source           | [01-source-descriptor](../use-case/feature-01/01-source-descriptor.md)           |
+| UC-02    | Tạo lazy, immutable RDD lineage và branching                     | [02-lazy-rdd-pipeline](../use-case/feature-01/02-lazy-rdd-pipeline.md)           |
+| UC-03    | Chia memory rows thành contiguous partitions                     | [03-memory-partitioning](../use-case/feature-01/03-memory-partitioning.md)       |
+| UC-04    | Chia file bytes nhưng stream mỗi complete line đúng một lần      | [04-file-byte-ranges](../use-case/feature-01/04-file-byte-ranges.md)             |
+| UC-05    | Decode complete line thành `Row` theo JSONL, text hoặc CSV       | [05-source-record-decoding](../use-case/feature-01/05-source-record-decoding.md) |
+| UC-06    | Quan sát RDD ID, parent, partition metadata qua snapshot an toàn | [06-rdd-observability](../use-case/feature-01/06-rdd-observability.md)           |
 
 ## Feature boundary
 

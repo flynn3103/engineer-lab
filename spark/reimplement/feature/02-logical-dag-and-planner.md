@@ -90,16 +90,16 @@ partition. Planner không yêu cầu hai parent có cùng partition count.
 `TBU` nghĩa là use case đã được xác định trong roadmap nhưng chưa có tài liệu
 chi tiết hoặc implementation. Chỉ UC-01 và UC-02 có tài liệu chi tiết hiện tại.
 
-| Use case | Status | Năng lực đóng góp cho Feature 02 | Liên kết |
-| --- | --- | --- | --- |
-| UC-01 | Available | Tạo lazy `ReduceByKey` RDD: keyed parent, private reducer closure, `HashPartitioner` và `ShuffleDependency`. Đây là stage boundary để planner nhận ra. | [01-reduce-by-key-logical-node](../use-case/feature-02/01-reduce-by-key-logical-node.md) |
-| UC-02 | Available | Từ final RDD, DAGScheduler walk qua narrow dependencies và collect immediate shuffle dependencies. | [02-logical-dag-walk](../use-case/feature-02/02-logical-dag-walk.md) |
-| UC-03 | TBU | Biểu diễn `DependencySpec` và partition mapping cho narrow/shuffle edge, bao gồm range mapping của `Union`. | TBU |
-| UC-04 | TBU | Tạo `ResultStage` từ final RDD của action và link các parent shuffle stages. | TBU |
-| UC-05 | TBU | Tạo hoặc reuse `ShuffleMapStage` đệ quy từ mỗi shuffle producer. | TBU |
-| UC-06 | TBU | Tạo `TaskSetTemplate` theo partition IDs của mỗi runnable stage; chưa launch task. | TBU |
-| UC-07 | TBU | Mô tả lifecycle `JobID`, `StageID`, `StageAttemptID` và ranh giới với future `TaskID`. | TBU |
-| UC-08 | TBU | Render `JobPlan`/stage graph để inspect mà không execute. | TBU |
+| Use case | Status    | Năng lực đóng góp cho Feature 02                                                                                                                       | Liên kết                                                                                 |
+| -------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| UC-01    | Available | Tạo lazy `ReduceByKey` RDD: keyed parent, private reducer closure, `HashPartitioner` và `ShuffleDependency`. Đây là stage boundary để planner nhận ra. | [01-reduce-by-key-logical-node](../use-case/feature-02/01-reduce-by-key-logical-node.md) |
+| UC-02    | Available | Từ final RDD, DAGScheduler walk qua narrow dependencies và collect immediate shuffle dependencies.                                                     | [02-logical-dag-walk](../use-case/feature-02/02-logical-dag-walk.md)                     |
+| UC-03    | TBU       | Biểu diễn `DependencySpec` và partition mapping cho narrow/shuffle edge, bao gồm range mapping của `Union`.                                            | TBU                                                                                      |
+| UC-04    | TBU       | Tạo `ResultStage` từ final RDD của action và link các parent shuffle stages.                                                                           | TBU                                                                                      |
+| UC-05    | TBU       | Tạo hoặc reuse `ShuffleMapStage` đệ quy từ mỗi shuffle producer.                                                                                       | TBU                                                                                      |
+| UC-06    | TBU       | Tạo `TaskSetTemplate` theo partition IDs của mỗi runnable stage; chưa launch task.                                                                     | TBU                                                                                      |
+| UC-07    | TBU       | Mô tả lifecycle `JobID`, `StageID`, `StageAttemptID` và ranh giới với future `TaskID`.                                                                 | TBU                                                                                      |
+| UC-08    | TBU       | Render `JobPlan`/stage graph để inspect mà không execute.                                                                                              | TBU                                                                                      |
 
 Thứ tự dependency giữa các use case:
 
