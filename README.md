@@ -1,10 +1,5 @@
 # Engineer Lab
 
-Hands-on systems labs organized by technology.
+A hands-on learning repository for systems engineering — focused on understanding how distributed systems, data platforms, and infrastructure technologies actually work. Each technology is explored through two complementary approaches: rebuilding core internals from scratch (to grasp design decisions), and running experiments on real implementations (to validate theory against practice).
 
-Every technology has two tracks:
-
-- `reimplement/` — a Go workspace for a deliberately reduced, from-scratch implementation of the system's important internals. It is for learning the design, not for making a compatible replacement.
-- `on-production/` — experiments that run the real technology. Create each experiment as `YYYY-MM-DD-experiment-name/` and record the hypothesis, configuration, observations, and outcome.
-
-Run a reimplementation development container with `docker compose up -d` from its `reimplement/` directory. Production templates live in `on-production/template/`; copy one into a dated experiment directory before changing it.
+The repository contains learning materials organized by technology: deep-dive reimplementations in Go for systems like Spark and Kubernetes, production-scale deployment guides and operational runbooks, performance benchmarks, and troubleshooting playbooks. Everything is geared toward building intuition about the tradeoffs that shape real systems — not just reading about them.
