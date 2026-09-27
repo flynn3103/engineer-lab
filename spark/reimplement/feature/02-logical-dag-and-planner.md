@@ -88,18 +88,18 @@ partition. Planner không yêu cầu hai parent có cùng partition count.
 ## Use cases và roadmap
 
 `TBU` nghĩa là use case đã được xác định trong roadmap nhưng chưa có tài liệu
-chi tiết hoặc implementation. Chỉ UC-01 và UC-02 có tài liệu chi tiết hiện tại.
+chi tiết hoặc implementation. UC-01 đến UC-08 có tài liệu chi tiết hiện tại.
 
 | Use case | Status    | Năng lực đóng góp cho Feature 02                                                                                                                       | Liên kết                                                                                 |
 | -------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | UC-01    | Available | Tạo lazy `ReduceByKey` RDD: keyed parent, private reducer closure, `HashPartitioner` và `ShuffleDependency`. Đây là stage boundary để planner nhận ra. | [01-reduce-by-key-logical-node](../use-case/feature-02/01-reduce-by-key-logical-node.md) |
 | UC-02    | Available | Từ final RDD, DAGScheduler walk qua narrow dependencies và collect immediate shuffle dependencies.                                                     | [02-logical-dag-walk](../use-case/feature-02/02-logical-dag-walk.md)                     |
-| UC-03    | TBU       | Biểu diễn `DependencySpec` và partition mapping cho narrow/shuffle edge, bao gồm range mapping của `Union`.                                            | TBU                                                                                      |
-| UC-04    | TBU       | Tạo `ResultStage` từ final RDD của action và link các parent shuffle stages.                                                                           | TBU                                                                                      |
-| UC-05    | TBU       | Tạo hoặc reuse `ShuffleMapStage` đệ quy từ mỗi shuffle producer.                                                                                       | TBU                                                                                      |
-| UC-06    | TBU       | Tạo `TaskSetTemplate` theo partition IDs của mỗi runnable stage; chưa launch task.                                                                     | TBU                                                                                      |
-| UC-07    | TBU       | Mô tả lifecycle `JobID`, `StageID`, `StageAttemptID` và ranh giới với future `TaskID`.                                                                 | TBU                                                                                      |
-| UC-08    | TBU       | Render `JobPlan`/stage graph để inspect mà không execute.                                                                                              | TBU                                                                                      |
+| UC-03    | Available | Biểu diễn `DependencySpec` và partition mapping cho narrow/shuffle edge, bao gồm range mapping của `Union`.                                            | [03-dependency-partition-mapping](../use-case/feature-02/03-dependency-partition-mapping.md) |
+| UC-04    | Available | Tạo `ResultStage` từ final RDD của action và link các parent shuffle stages.                                                                           | [04-result-stage](../use-case/feature-02/04-result-stage.md)                           |
+| UC-05    | Available | Tạo hoặc reuse `ShuffleMapStage` đệ quy từ mỗi shuffle producer.                                                                                       | [05-shuffle-map-stage](../use-case/feature-02/05-shuffle-map-stage.md)                  |
+| UC-06    | Available | Tạo `TaskSetTemplate` theo partition IDs của mỗi runnable stage; chưa launch task.                                                                     | [06-task-set-template](../use-case/feature-02/06-task-set-template.md)                  |
+| UC-07    | Available | Mô tả lifecycle `JobID`, `StageID`, `StageAttemptID` và ranh giới với future `TaskID`.                                                                 | [07-scheduler-id-lifecycle](../use-case/feature-02/07-scheduler-id-lifecycle.md)        |
+| UC-08    | Available | Render `JobPlan`/stage graph để inspect mà không execute.                                                                                              | [08-job-plan-inspect](../use-case/feature-02/08-job-plan-inspect.md)                    |
 
 Thứ tự dependency giữa các use case:
 

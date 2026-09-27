@@ -86,40 +86,41 @@ flowchart TD
 ## Use cases và roadmap
 
 `TBU` nghĩa là use case đã được planned nhưng chưa có tài liệu chi tiết hoặc
-implementation. UC-01 đã có tài liệu; các use case còn lại là `TBU`.
+implementation. UC-01 đến UC-08 đã có tài liệu chi tiết; runtime implementation
+vẫn là công việc tiếp theo.
 
 ### [UC-01 — Action entry](../use-case/feature-03/01-action-entry.md)
 
 Gọi `PlanJob`, validate runtime options và tạo job context. Chưa tạo task,
 worker hay source I/O.
 
-### UC-02 — TBU: Local task specifications
+### [UC-02 — Local task specifications](../use-case/feature-03/02-local-task-specifications.md)
 
 Chuyển runnable stage partitions thành local task specifications; một task cho
 một partition.
 
-### UC-03 — TBU: Narrow task execution
+### [UC-03 — Narrow task execution](../use-case/feature-03/03-narrow-task-execution.md)
 
 Thực thi streaming source reader → private closures → action sink.
 
-### UC-04 — TBU: Coordinator và worker limit
+### [UC-04 — Coordinator và worker limit](../use-case/feature-03/04-coordinator-worker-limit.md)
 
 Chạy tasks với worker limit; chỉ mở stage khi parent stages complete.
 
-### UC-05 — TBU: Count và Collect
+### [UC-05 — Count và Collect](../use-case/feature-03/05-count-and-collect.md)
 
 Gom task results theo deterministic partition order.
 
-### UC-06 — TBU: WriteJSONLines
+### [UC-06 — WriteJSONLines](../use-case/feature-03/06-write-json-lines.md)
 
 Ghi partition outputs vào temporary location rồi atomic publish target directory.
 
-### UC-07 — TBU: Cancellation và failure
+### [UC-07 — Cancellation và failure](../use-case/feature-03/07-cancellation-and-failure.md)
 
 Propagate cancellation/task error, cancel remaining local tasks và cleanup
 temporary output.
 
-### UC-08 — TBU: Process-worker boundary
+### [UC-08 — Process-worker boundary](../use-case/feature-03/08-process-worker-boundary.md)
 
 Define closure transport contract cho future process workers. Không implement
 process execution trong Feature 03.
@@ -160,5 +161,5 @@ còn consumer cần đọc và reduce output đó. Hai việc thuộc Feature 04
   partial final output;
 - `Count` độc lập với worker concurrency; `Collect` giữ deterministic partition
   order; `WriteJSONLines` publish all-or-nothing;
-- process-worker design vẫn được đánh dấu `TBU`, không ngầm thêm named-operation
-  indirection hoặc closure serialization không có contract.
+- process-worker boundary được mô tả rõ nhưng chưa có implementation; không ngầm
+  thêm named-operation indirection hoặc closure serialization không có contract.
