@@ -10,8 +10,7 @@ compaction honor them so an older SSTable value cannot reappear.
 A delete must be represented until every relevant read can see it and
 replicas can be reconciled. Removing a tombstone merely because it is old
 may resurrect data from an older SSTable or a lagging replica. This feature
-keeps tombstones; safe garbage collection follows repair in future Feature
-07.
+keeps tombstones whenever purge safety is uncertain.
 
 ```mermaid
 flowchart LR
@@ -27,7 +26,7 @@ flowchart LR
 | --- | --- | --- |
 | delete tombstone | versioned logical deletion | row-level subset |
 | TTL | expiration creates effective deletion | one clock source |
-| tombstone GC | disabled until safety is proven | no repair yet |
+| tombstone GC | disabled until safety is proven | no early purge |
 
 ## Dependency
 
@@ -36,9 +35,9 @@ flowchart LR
 
 ## Strength, cost, and next question
 
-Logical deletion works across immutable files and later replicas, but
-tombstones add read and storage cost. Future Feature 07 adds repair-aware
-garbage collection; Feature 10 explores compaction policy tradeoffs.
+Logical deletion works across immutable files and replicas, but tombstones
+add read and storage cost. Feature 08 explores compaction policy tradeoffs
+while retaining deletion evidence.
 
 ## Use cases và roadmap
 
@@ -65,8 +64,7 @@ data stays hidden. Repeat with a delayed replica after Feature 06.
 
 ## Feature boundary
 
-No early tombstone purge, distributed repair, range tombstones or
-production-equivalent GC modes.
+No early tombstone purge, range tombstones or production-equivalent GC modes.
 
 ## Hoàn thành khi
 

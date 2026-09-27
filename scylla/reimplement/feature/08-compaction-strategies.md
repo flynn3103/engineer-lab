@@ -1,4 +1,4 @@
-# Feature 10: Compaction strategies
+# Feature 08: Compaction strategies
 
 ## Outcome
 
@@ -11,7 +11,7 @@ without changing mutation visibility.
 The merge executor from Feature 03 stays fixed; only file selection and
 scheduling change. Size-tiered, leveled, incremental and time-window
 policies optimize different workloads. All policies retain tombstones
-unless safe garbage collection is proven by future Feature 07.
+unless safe garbage collection can be proven.
 
 ```mermaid
 flowchart LR
@@ -35,7 +35,7 @@ flowchart LR
 
 - Feature 03 supplies merge and atomic publish.
 - Feature 04 supplies tombstone and TTL semantics.
-- Feature 09 supplies read-cost measurements.
+- Feature 07 supplies read-cost measurements.
 
 ## Strength, cost, and next question
 

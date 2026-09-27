@@ -1,4 +1,4 @@
-# Feature 09: Bloom filters, indexes and cache
+# Feature 07: Bloom filters, indexes and cache
 
 ## Outcome
 
@@ -41,7 +41,7 @@ flowchart LR
 
 Filters and indexes reduce unnecessary reads; caches cut repeated work.
 They consume memory and may still touch many candidate SSTables. Feature
-10 attacks that underlying file-count and amplification problem.
+08 attacks that underlying file-count and amplification problem.
 
 ## Use cases và roadmap
 
@@ -67,8 +67,7 @@ latency with optimizations enabled and disabled.
 
 ## Feature boundary
 
-No global cache coherency, secondary index, materialized view or
-production-equivalent cache policy.
+No global cache coherency or production-equivalent cache policy.
 
 ## Hoàn thành khi
 

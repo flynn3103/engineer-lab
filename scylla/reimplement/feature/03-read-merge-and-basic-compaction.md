@@ -39,7 +39,7 @@ flowchart LR
 ## Strength, cost, and next question
 
 Compaction limits read and space amplification, but spends CPU, I/O and
-temporary disk space. Feature 09 optimizes lookups; Feature 10 compares
+temporary disk space. Feature 07 optimizes lookups; Feature 08 compares
 compaction policies. Feature 04 adds tombstones that a merge must preserve.
 
 ## Use cases và roadmap

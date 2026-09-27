@@ -31,7 +31,6 @@ flowchart LR
 | replication factor | fixed three-replica placement | one data center |
 | consistency level | ONE, QUORUM and ALL | reduced timeout policy |
 | coordinator | per-request fan-out and read reconcile | no fixed data leader |
-| metadata Raft / LWT Paxos | later control/conditional paths | outside core data path |
 
 ## Dependency
 
@@ -42,9 +41,9 @@ flowchart LR
 ## Strength, cost, and next question
 
 Leaderless replicas can serve requests under different latency and
-availability policies. Missed writes leave replica mismatch; future
-Feature 07 adds repair and hints. Conditional linearizable updates need
-a later LWT/Paxos path.
+availability policies. Missed writes leave replica mismatch that remains
+visible in diagnostics; the selected consistency level does not make
+ordinary writes conditionally linearizable.
 
 ## Use cases và roadmap
 
@@ -67,17 +66,17 @@ visible value.
 ### UC-04 — TBU: Replica-failure experiment
 
 Drop one replica write, compare read results across consistency levels and
-report mismatch without claiming it is automatically repaired.
+report mismatch without claiming it is automatically resolved.
 
 ## Feature boundary
 
-No anti-entropy repair, hinted handoff, multi-data-center policy,
-metadata Raft, Paxos/LWT or strong-consistency claim for ordinary writes.
+No automatic reconciliation of missed writes or strong-consistency claim
+for ordinary writes.
 
 ## Hoàn thành khi
 
 - request success matches the selected response count;
 - coordinator choice does not imply a fixed partition leader;
 - a missed write is visible in diagnostics and cannot be silently
-  described as repaired;
+  described as resolved;
 - all use cases remain `TBU` until specified and implemented.

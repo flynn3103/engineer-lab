@@ -38,8 +38,8 @@ flowchart LR
 ## Strength, cost, and next question
 
 Ownership avoids locks on the hot storage path, but one overloaded shard
-can dominate tail latency. Future Feature 08 explores moving tablet
-ranges; workload prioritization and admission control are later topics.
+can dominate tail latency. Bounded queues make overload visible and keep
+memory use within the configured budget.
 
 ## Use cases và roadmap
 
@@ -65,8 +65,7 @@ latency.
 
 ## Feature boundary
 
-No OS-level core pinning, Seastar reactor, workload service levels or
-automatic shard rebalancing.
+No OS-level core pinning, Seastar reactor or dynamic shard ownership.
 
 ## Hoàn thành khi
 
