@@ -52,7 +52,6 @@ flowchart LR
     D <--> PG[(Managed Postgres<br/>Iceberg catalog + Airflow DB)]
     AF <--> PG
 ```
-
 ---
 
 ## 2. Back-of-envelope
@@ -153,18 +152,18 @@ eastus), không có discount/commitment. Region Singapore đắt hơn ~10-25%.
 
 ### 3.1 Chi phí hằng tháng
 
-| Hạng mục | EKS (AWS) | GKE (GCP) | AKS (Azure) |
-|---|---|---|---|
-| Control plane | $73 | $0 (credit free tier cho 1 cluster zonal/Autopilot) | $0 Free tier (không SLA) / $73 Standard |
-| System pool 2 node 4 vCPU/16 GiB | m6i.xlarge ~$280 | e2-standard-4 ~$195 | D4s_v5 ~$280 |
-| Driver pool ~450 node-giờ | ~$85 | ~$60 | ~$85 |
-| Executor pool ~300 node-giờ spot (8 vCPU) | ~$50 | ~$40 | ~$40 |
-| Disk node | ~$30 | ~$25 | ~$30 |
-| Object storage ~23 TB | S3 Standard ~$540 | GCS Standard ~$470 | Blob Hot LRS ~$420 |
-| Managed Postgres nhỏ | ~$30 | ~$30 | ~$15 |
-| NAT + load balancer | ~$55 | ~$40 | ~$55 |
-| Khác (registry, PV Prometheus) | ~$15 | ~$15 | ~$15 |
-| **Tổng** | **~$1.160** | **~$875** | **~$940** (+$73 nếu Standard) |
+| Hạng mục                                  | EKS (AWS)         | GKE (GCP)                                           | AKS (Azure)                             |
+| ----------------------------------------- | ----------------- | --------------------------------------------------- | --------------------------------------- |
+| Control plane                             | $73               | $0 (credit free tier cho 1 cluster zonal/Autopilot) | $0 Free tier (không SLA) / $73 Standard |
+| System pool 2 node 4 vCPU/16 GiB          | m6i.xlarge ~$280  | e2-standard-4 ~$195                                 | D4s_v5 ~$280                            |
+| Driver pool ~450 node-giờ                 | ~$85              | ~$60                                                | ~$85                                    |
+| Executor pool ~300 node-giờ spot (8 vCPU) | ~$50              | ~$40                                                | ~$40                                    |
+| Disk node                                 | ~$30              | ~$25                                                | ~$30                                    |
+| Object storage ~23 TB                     | S3 Standard ~$540 | GCS Standard ~$470                                  | Blob Hot LRS ~$420                      |
+| Managed Postgres nhỏ                      | ~$30              | ~$30                                                | ~$15                                    |
+| NAT + load balancer                       | ~$55              | ~$40                                                | ~$55                                    |
+| Khác (registry, PV Prometheus)            | ~$15              | ~$15                                                | ~$15                                    |
+| **Tổng**                                  | **~$1.160**       | **~$875**                                           | **~$940** (+$73 nếu Standard)           |
 
 Nhận xét:
 
@@ -195,19 +194,19 @@ Nhận xét:
 
 ### 4.1 Stack chung (giống nhau trên mọi provider)
 
-| Lớp | Chọn cho Phase 1 | Lý do | Phương án khác |
-|---|---|---|---|
-| Kubernetes | Managed K8s, 1 cluster, 1 zone | Ít việc vận hành nhất | Regional cluster khi cần HA control plane |
-| Spark | 3.5.x hoặc 4.0.x, pin một version | 3.5 nếu thư viện chưa hỗ trợ 4.0 | — |
-| Operator | Kubeflow Spark Operator (Helm) | Trưởng thành, nhiều tài liệu, Airflow có operator submit `SparkApplication` | Apache Spark Kubernetes Operator (chính thức nhưng còn 0.x) |
-| Table format | Apache Iceberg | Engine-neutral, BI/warehouse đọc được | Delta Lake |
-| Catalog | Iceberg JDBC catalog trên managed Postgres | Rẻ, không phụ thuộc provider, dùng chung DB với Airflow | Glue Data Catalog (AWS), Iceberg REST catalog |
-| Orchestration | Airflow (Helm chart chính thức, KubernetesExecutor) trên system pool | Rẻ hơn managed Airflow (~$300+/tháng) | MWAA, Cloud Composer, Astronomer |
-| Autoscaling | Autoscaler của provider, pool min 0 | Scale về 0 khi không có job | — |
-| Observability | kube-prometheus-stack, Loki, Spark History Server | Mã nguồn mở, lưu trên object storage, rẻ | Logging/monitoring của cloud (đắt hơn với log Spark) |
-| Deploy | Helm + CI (GitHub Actions/GitLab CI) | Đủ cho 1 team | Argo CD khi có nhiều môi trường/team |
-| IaC | Terraform | Tạo lại cluster từ code | Pulumi |
-| Secrets | External Secrets Operator + secret manager của cloud | Không lưu credential trong Git | Sealed Secrets |
+| Lớp           | Chọn cho Phase 1                                                     | Lý do                                                                       | Phương án khác                                              |
+| ------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Kubernetes    | Managed K8s, 1 cluster, 1 zone                                       | Ít việc vận hành nhất                                                       | Regional cluster khi cần HA control plane                   |
+| Spark         | 3.5.x hoặc 4.0.x, pin một version                                    | 3.5 nếu thư viện chưa hỗ trợ 4.0                                            | —                                                           |
+| Operator      | Kubeflow Spark Operator (Helm)                                       | Trưởng thành, nhiều tài liệu, Airflow có operator submit `SparkApplication` | Apache Spark Kubernetes Operator (chính thức nhưng còn 0.x) |
+| Table format  | Apache Iceberg                                                       | Engine-neutral, BI/warehouse đọc được                                       | Delta Lake                                                  |
+| Catalog       | Iceberg JDBC catalog trên managed Postgres                           | Rẻ, không phụ thuộc provider, dùng chung DB với Airflow                     | Glue Data Catalog (AWS), Iceberg REST catalog               |
+| Orchestration | Airflow (Helm chart chính thức, KubernetesExecutor) trên system pool | Rẻ hơn managed Airflow (~$300+/tháng)                                       | MWAA, Cloud Composer, Astronomer                            |
+| Autoscaling   | Autoscaler của provider, pool min 0                                  | Scale về 0 khi không có job                                                 | —                                                           |
+| Observability | kube-prometheus-stack, Loki, Spark History Server                    | Mã nguồn mở, lưu trên object storage, rẻ                                    | Logging/monitoring của cloud (đắt hơn với log Spark)        |
+| Deploy        | Helm + CI (GitHub Actions/GitLab CI)                                 | Đủ cho 1 team                                                               | Argo CD khi có nhiều môi trường/team                        |
+| IaC           | Terraform                                                            | Tạo lại cluster từ code                                                     | Pulumi                                                      |
+
 
 ### 4.2 So sánh provider
 
