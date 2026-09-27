@@ -20,7 +20,7 @@ unsafe under skew, overload, crash, or replica failure.
 
 ## Core roadmap
 
-1. [Partition and token routing](feature/01-partition-and-token-routing.md)
+1. [Partition keys and static token routing](feature/01-partition-keys-and-static-token-routing.md)
 2. [Commitlog, memtable and SSTable](feature/02-commitlog-memtable-and-sstable.md)
 3. [Read merge and basic compaction](feature/03-read-merge-and-basic-compaction.md)
 4. [TTL, tombstones and delete safety](feature/04-ttl-tombstones-and-delete-safety.md)
@@ -31,9 +31,12 @@ unsafe under skew, overload, crash, or replica failure.
 
 7. [Bloom filters, indexes and cache](feature/07-bloom-filters-indexes-and-cache.md)
 8. [Compaction strategies](feature/08-compaction-strategies.md)
+9. [Tablet placement, split and data migration](feature/09-tablet-placement-split-and-data-migration.md)
 
 Feature 07 depends on the read path in Feature 03. Feature 08 depends on
 Features 03–04 and uses Feature 07's read-cost measurements.
+Feature 09 builds on static token routing in Feature 01, stored data in
+Features 02–04, shard ownership in Feature 05, and replicas in Feature 06.
 
 ## Scope
 
@@ -43,4 +46,5 @@ CPU pinning, ScyllaDB's storage formats, or its full CQL protocol.
 
 Background: [partition and clustering keys](https://docs.scylladb.com/manual/stable/cql/ddl.html),
 [compaction](https://docs.scylladb.com/manual/stable/kb/compaction.html),
-[fault tolerance](https://docs.scylladb.com/manual/stable/architecture/architecture-fault-tolerance.html).
+[fault tolerance](https://docs.scylladb.com/manual/stable/architecture/architecture-fault-tolerance.html),
+and [tablets](https://docs.scylladb.com/manual/stable/architecture/tablets.html).

@@ -1,10 +1,10 @@
-# Feature 01: Partition and token routing
+# Feature 01: Partition keys and static token routing
 
 ## Outcome
 
 A table accepts a partition key and optional clustering key. The partition
 key hashes to a token and a fixed owner; clustering keys order rows inside
-one partition.
+one partition. This feature routes requests but does not migrate stored data.
 
 ## Ý tưởng chính
 
@@ -63,7 +63,7 @@ per-partition bytes and request counts.
 
 ## Feature boundary
 
-No CQL parser, mutable topology or global sort.
+No CQL parser, mutable topology, existing-data migration or global sort.
 
 ## Hoàn thành khi
 
