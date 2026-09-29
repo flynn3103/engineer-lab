@@ -1,105 +1,91 @@
-# Feature 09: Tablet placement, split and data migration
+# Feature 09: Tablet, chia token range và chuyển dữ liệu an toàn
 
-## Outcome
+## Feature này giải quyết vấn đề gì?
 
-Replace Feature 01's fixed token-range owner with a versioned, per-table
-tablet placement map. A tablet owns a token range containing whole
-partitions; its replicas are assigned to node/shard locations. Existing
-data can move between locations without changing partition-key tokens or
-losing acknowledged writes.
+Routing cố định cho biết dữ liệu ở đâu, nhưng không giúp chuyển dữ liệu khi
+node quá tải. Sửa owner trong map sẽ đưa request tới nơi chưa có dữ liệu.
+Tablet bổ sung một token range của một table, identity riêng và placement
+gồm ba replica ở các vị trí `(node, shard)`.
 
-## Ý tưởng chính
+Ví dụ T7 nằm ở A/1, B/0, C/2. Muốn thay A/1 bằng D/1, D phải nhận bản sao và
+bắt kịp write phát sinh trong lúc copy trước khi trở thành replica hợp lệ.
+Một lần đổi map đơn thuần chưa làm được việc này.
 
-Token routing answers which range contains a partition. Tablet placement
-answers where that range's replicas currently live. A migration copies
-existing data to a new location, catches up concurrent mutations, validates
-the destination, then changes ownership. Merely changing a routing map is
-not data migration. A split divides a tablet's token range, never one
-partition's rows.
+## Kết quả mong đợi
+
+Map có epoch tăng đơn điệu; mỗi token thuộc đúng một tablet trong table;
+RF luôn là ba node khác nhau. Migration có journal durable, resume được sau
+restart và bảo toàn mutation đã ACK trên source bị thay thế.
+
+Split chỉ chia token range: mọi dòng cùng partition và các partition trùng
+token đi cùng child. Hai child ban đầu giữ nguyên replicas; move là bước riêng.
+
+Đây là thiết kế chi tiết chưa triển khai. Một topology coordinator duy nhất
+có storage durable, không có Raft/failover. Coordinator unavailable làm admission
+và transition phụ thuộc nó bị chặn; không có cơ chế chống split-brain giả định.
+
+## Giao thức chuyển dữ liệu
 
 ```mermaid
 flowchart LR
-    K[Partition key] --> T[Stable token]
-    T --> M[Versioned tablet map]
-    M --> R[Current replica locations]
-    R --> S[Stream and catch up data]
-    S --> V[Validate destination]
-    V --> C[Commit new placement]
+    P[Source authoritative] --> S[Snapshot và giữ delta log]
+    S --> C[Copy, catch up]
+    C --> B[Đóng write admission, drain replica set]
+    B --> F[Fence durable sequence, validate]
+    F --> M[Commit epoch mới durable]
+    M --> O[Mở write admission]
+    O --> G[Chờ reader cũ rồi cleanup]
 ```
 
-## Mapping với ScyllaDB
+Trong copy, write gửi tới ba replica cũ; destination provisional không được
+tính quorum. Tại cutover, chặn write mới, đợi operation đã admit hoàn tất trên
+replica set, lấy fence sequence cục bộ của source và copy tới fence đó.
 
-| ScyllaDB | Project | Deliberate limit |
+Source và destination khớp inventory mutation/version/tombstone/absolute expiry
+tại fence. Fsync commit map trước khi mở writes. Mọi epoch cũ bị fence, kể cả
+request tới replica được giữ lại. Copy giữ nguyên ID/version/expiry.
+
+## Ví dụ dễ hình dung
+
+Snapshot A có sequence 100; lúc copy A nhận thêm 101–120. Barrier đợi write
+đang chạy xong, lấy fence 120 và copy đủ delta sang D. Chỉ sau D durable và
+validation thành công mới đổi `[A,B,C]` thành `[D,B,C]`.
+
+Crash sau commit durable nhưng trước reply phải resume epoch mới. Không được
+quay lại A chỉ vì caller chưa nhận thông báo thành công.
+
+## Đối chiếu với ScyllaDB
+
+| Khái niệm | Trong project | Giới hạn |
 | --- | --- | --- |
-| tablet | per-table token range with replica locations | fixed small tablet set initially |
-| tablet load balancing | explicit move/split planner | no autonomous balancing loop |
-| tablet migration | copy, catch up, validate, commit | one migration at a time |
-| topology metadata | versioned placement snapshot | single coordinator, no Raft |
+| tablet | token range theo table | bộ tablet nhỏ |
+| placement | map có epoch, RF3 | một datacenter |
+| migration | snapshot, delta, barrier, commit | từng migration một |
+| topology coordination | journal tại một coordinator | không HA/Raft |
 
-## Dependency
+## Use case và roadmap
 
-- Feature 01 supplies stable key-to-token routing and the fixed-ownership baseline.
-- Features 02–04 supply stored mutations, reads and deletion safety.
-- Feature 05 supplies node/shard ownership and asynchronous work.
-- Feature 06 supplies replica placement and acknowledgement semantics.
+| UC | Câu hỏi | Thiết kế |
+| --- | --- | --- |
+| UC-01 | Map đại diện tablet thế nào? | [Identity và placement](../use-case/feature-09/01-tablet-identity-and-placement-map.md) |
+| UC-02 | Request map cũ bị xử lý thế nào? | [Tablet-aware routing](../use-case/feature-09/02-tablet-aware-request-routing.md) |
+| UC-03 | Copy không mất write đã ACK thế nào? | [Safe migration](../use-case/feature-09/03-safe-replica-migration.md) |
+| UC-04 | Crash thì resume hay abort? | [Recovery](../use-case/feature-09/04-interrupted-migration-recovery.md) |
+| UC-05 | Split không xé partition thế nào? | [Tablet split](../use-case/feature-09/05-tablet-split.md) |
+| UC-06 | Move giảm skew và tốn bao nhiêu? | [Rebalance experiment](../use-case/feature-09/06-rebalance-experiment-and-diagnostics.md) |
 
-## Strength, cost, and next question
+## Phụ thuộc và đánh đổi
 
-Tablets make a table's placement granular enough to rebalance across nodes
-and shards without changing partition keys. The cost is a coordinated
-metadata transition plus data streaming: stale placement, concurrent writes
-and interrupted transfers must not lose or duplicate visible mutations.
+F01 giữ key/token; F02–04 giữ durability/delete safety; F05 giữ shard ownership;
+F06 giữ RF/ACK/consistency semantics. Tablet placement thay static owner lookup,
+không chạy song song với modulo chọn shard khác.
 
-## Use cases và roadmap
+Migration tốn disk tạm, copy traffic, retained log và khoảng chặn write.
+Không drain/validate được thì giữ barrier hoặc abort an toàn trước commit;
+không hứa cutover luôn nhanh. Cleanup source phải đợi reader leases/pins cũ hết.
 
-`TBU` means planned, without a detailed use-case document or implementation.
+## Giới hạn và điều kiện nghiệm thu
 
-### UC-01 — TBU: Tablet identity and placement map
-
-Define table-scoped tablet IDs, non-overlapping token ranges, placement
-versions and replica node/shard locations. Every token maps to exactly one
-tablet for its table.
-
-### UC-02 — TBU: Tablet-aware request routing
-
-Resolve token to tablet and current replicas; reject or refresh stale
-placement versions instead of silently routing to a former owner.
-
-### UC-03 — TBU: Safe replica migration
-
-Stream an existing tablet replica to a destination, catch up concurrent
-mutations, validate the copy and atomically publish the new placement.
-Keep the old replica authoritative until the transition is committed.
-
-### UC-04 — TBU: Interrupted migration recovery
-
-Resume or roll back an interrupted transfer without exposing an incomplete
-replica or discarding acknowledged writes.
-
-### UC-05 — TBU: Tablet split
-
-Split one tablet's token range at a boundary while keeping every partition
-whole. Assign the two child tablets independent placements only after their
-data and metadata are consistent.
-
-### UC-06 — TBU: Rebalance experiment and diagnostics
-
-Compare fixed ownership with tablet moves under uneven node/shard load;
-report streamed bytes, placement versions, migration duration and skew.
-
-## Feature boundary
-
-No production ScyllaDB tablet protocol, Raft topology coordination,
-automatic load balancer, multi-datacenter placement policy, concurrent
-migrations or arbitrary partition splitting.
-
-## Hoàn thành khi
-
-- Feature 01's static routing and Feature 09's data migration are visibly
-  distinct in explain/diagnostics;
-- every partition remains wholly inside one tablet after routing or split;
-- a committed migration preserves acknowledged data and replica count;
-- interruption leaves either the old placement valid or a validated new one;
-- all use cases remain `TBU` until specified and implemented.
-
-Background: [ScyllaDB Data Distribution with Tablets](https://docs.scylladb.com/manual/stable/architecture/tablets.html).
+Không autonomous balancing, concurrent migration, arbitrary partition split,
+multi-DC hay giao thức production. Nghiệm thu cần crash matrix, stale epoch
+test, invariant RF3 và kiểm chứng acknowledged state sau restart.

@@ -75,8 +75,8 @@ seek. UC-02 mô tả interface cần có và các lựa chọn dữ liệu.
 
 ## Vì sao Feature 02 chưa đủ thành một LSM engine hoàn chỉnh?
 
-Feature 02 xây tầng ingest/durability và tạo sorted runs. Feature 03 xây merge
-reader cùng compaction cơ bản; Feature 08 nghiên cứu chính sách chọn runs/files.
+Feature 02 xây tầng ingest/durability và tạo sorted runs. Feature 03 giải thích
+cách vận hành compaction và chọn runs/files; nội dung Feature 08 đã gộp vào đó.
 LSM cần cả các phần đó để vận hành lâu dài: chỉ flush mà không merge sẽ khiến
 số file, read cost và disk usage tăng.
 

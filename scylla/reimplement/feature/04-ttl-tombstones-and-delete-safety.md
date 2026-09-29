@@ -36,7 +36,7 @@ flowchart LR
 ## Strength, cost, and next question
 
 Logical deletion works across immutable files and replicas, but tombstones
-add read and storage cost. Feature 08 explores compaction policy tradeoffs
+add read and storage cost. Feature 03 (including the former Feature 08) explores compaction policy tradeoffs
 while retaining deletion evidence.
 
 ## Use cases và roadmap

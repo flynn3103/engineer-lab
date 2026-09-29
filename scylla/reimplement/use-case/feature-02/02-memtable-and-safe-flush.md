@@ -283,4 +283,4 @@ tạo SSTable dài hơn tốc độ memtable đầy sẽ gây backpressure; UC-0
 
 UC này dựa trên [mutation/ACK](01-mutation-and-acknowledgement-contract.md),
 cung cấp durable prefix cho [recovery](03-restart-replay.md). Việc chọn nhiều
-SSTable để compact thuộc Feature 03/08, Bloom/index thuộc Feature 07.
+SSTable để compact thuộc Feature 03 (đã gộp Feature 08), Bloom/index thuộc Feature 07.

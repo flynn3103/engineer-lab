@@ -1,50 +1,93 @@
-# Scylla, rebuilt for learning
+# Scylla: xây lại để hiểu từng quyết định thiết kế
 
-Build a small Go wide-column store to study the decisions that dominate
-ScyllaDB operations: key-based data placement, LSM read/write cost,
-tombstones, shard ownership, and leaderless replication with tunable
-consistency. This is a learning model, not a CQL-compatible ScyllaDB clone.
+Project mô tả một wide-column store nhỏ bằng Go. Mục tiêu là hiểu vì sao hệ
+thống chọn cách đặt dữ liệu, xác nhận write, merge khi đọc, giữ dấu xoá và chia
+công việc giữa owner/replica; sau đó quan sát mỗi lựa chọn tốn gì khi tải lệch,
+disk chậm hoặc process chết.
 
-## Learning rule
+Các tài liệu là **thiết kế cho mô hình học tập, chưa phải implementation**.
+API Go và pseudocode minh hoạ contract dự kiến. Các bảng test là tiêu chí cần
+kiểm chứng khi viết code; không phải báo cáo test đã chạy.
 
-Each feature explains one invariant, then asks what becomes expensive or
-unsafe under skew, overload, crash, or replica failure.
+## Cách đọc giống bộ tài liệu Spark
 
-| Core principle | Benefit | Cost that motivates later work |
+Bắt đầu ở overview của feature để hiểu vấn đề, ví dụ và đánh đổi. Mỗi overview
+liên kết tới các use case riêng trong `use-case/feature-XX/`. Use case đi sâu
+vào input/output, model, thuật toán, lỗi, điều kiện luôn đúng và test cụ thể.
+
+Một **invariant** là điều kiện phải luôn đúng trong mọi trạng thái hợp lệ.
+Ví dụ “file chưa publish không được reader nhìn thấy” phải đúng cả khi flush
+thành công, crash giữa chừng hay recovery chạy lại.
+
+Không cần học API trước khi hiểu bài toán. Hãy đọc ví dụ và kết quả mong đợi,
+rồi dùng model/thuật toán để giải thích vì sao hệ thống đạt kết quả đó.
+
+## Roadmap và bộ use case
+
+| Feature | Vấn đề cần giải quyết | Số UC |
 | --- | --- | --- |
-| Partition and clustering keys | fast colocated reads and range order | hot/wide partitions and limited alternate queries |
-| Commitlog, memtable, SSTable | sequential durable writes | read, write, and space amplification |
-| Tombstones and TTL | distributed delete semantics | read cost and unsafe early garbage collection |
-| Shard ownership and async work | less shared-state contention | hot shards and queueing latency |
-| Leaderless replicas and consistency levels | flexible availability/latency | divergent replicas and conditional-write complexity |
+| [01 — Key và routing cố định](feature/01-partition-keys-and-static-token-routing.md) | Biết request đi đâu và nhóm dữ liệu nào được đọc cùng nhau. | 4 |
+| [02 — Commitlog, memtable, SSTable](feature/02-commitlog-memtable-and-sstable.md) | Sau ACK rồi crash, lấy lại dữ liệu bằng cách nào? | 4 |
+| [03 — Tự xây compaction để hiểu LSM](feature/03-read-merge-and-basic-compaction.md) | Implement cost observer, planner, windowing, scheduler, purge guard và executor; mapping sang ScyllaDB. | 6 |
+| [04 — TTL và tombstone](feature/04-ttl-tombstones-and-delete-safety.md) | Dữ liệu đã xoá/hết hạn không được xuất hiện lại. | 4 |
+| [05 — Shard và xử lý bất đồng bộ](feature/05-shard-ownership-and-async-scheduling.md) | Ai được sửa state, và quá tải được giới hạn thế nào? | 4 |
+| [06 — Replication và consistency](feature/06-leaderless-replication-and-consistency.md) | Phải chờ bao nhiêu replica và làm gì khi chúng khác nhau? | 4 |
+| [07 — Bloom, index và cache](feature/07-bloom-filters-indexes-and-cache.md) | Tránh đọc/merge không cần thiết mà giữ nguyên kết quả. | 4 |
+| [09 — Tablet, split và migration](feature/09-tablet-placement-split-and-data-migration.md) | Chuyển dữ liệu thật trước khi đổi nơi phục vụ request. | 6 |
 
-## Core roadmap
+Roadmap Feature 02–09 còn 32 use case sau khi gộp; Feature 01 có 4 use case
+riêng. Đây là số mục tiêu của roadmap, không khẳng định mọi UC đã được viết
+hoặc triển khai. Feature 03 có 6 UC đặc tả implement từ đầu và 2 phụ lục kỹ
+thuật không tính vào số UC chính. File Feature 08 đã xoá sau khi gộp nội dung;
+giữ số Feature 09 để tránh đổi các đường dẫn còn lại.
 
-1. [Partition keys and static token routing](feature/01-partition-keys-and-static-token-routing.md)
-2. [Commitlog, memtable and SSTable](feature/02-commitlog-memtable-and-sstable.md)
-3. [Read merge and basic compaction](feature/03-read-merge-and-basic-compaction.md)
-4. [TTL, tombstones and delete safety](feature/04-ttl-tombstones-and-delete-safety.md)
-5. [Shard ownership and async scheduling](feature/05-shard-ownership-and-async-scheduling.md)
-6. [Leaderless replication and consistency](feature/06-leaderless-replication-and-consistency.md)
+```mermaid
+flowchart LR
+    F1[01 Key và routing] --> F2[02 Durable write]
+    F2 --> F3[03 Tự xây compaction, gồm F08 cũ]
+    F3 --> F4[04 Delete và TTL]
+    F4 --> F5[05 Owner và queue]
+    F5 --> F6[06 Replica]
+    F3 --> F7[07 Read optimization]
+    F4 --> F7
+    F5 --> F7
+    F6 --> F9[09 Tablet migration]
+    F1 --> F9
+```
 
-## Advanced roadmap
+Sơ đồ thể hiện đường học chính. Trong từng overview/use case có dependency cụ
+thể; ví dụ migration cũng sử dụng durability và read/delete semantics đã học
+từ Feature 02–04.
 
-7. [Bloom filters, indexes and cache](feature/07-bloom-filters-indexes-and-cache.md)
-8. [Compaction strategies](feature/08-compaction-strategies.md)
-9. [Tablet placement, split and data migration](feature/09-tablet-placement-split-and-data-migration.md)
+## Những quy ước dùng xuyên suốt
 
-Feature 07 depends on the read path in Feature 03. Feature 08 depends on
-Features 03–04 and uses Feature 07's read-cost measurements.
-Feature 09 builds on static token routing in Feature 01, stored data in
-Features 02–04, shard ownership in Feature 05, and replicas in Feature 06.
+| Quy ước | Nơi định nghĩa | Các phần phải giữ đúng |
+| --- | --- | --- |
+| Row identity chứa table, partition key, clustering key | [F01 UC-01](use-case/feature-01/01-key-conventions-and-row-identity.md) | Log, merge, index, cache và migration không gộp row chỉ vì trùng token. |
+| Mutation có ID bất biến, version, kind và expiry tuyệt đối | [F02 UC-01](use-case/feature-02/01-mutation-and-acknowledgement-contract.md) | Retry và replica copy giữ nguyên mutation. |
+| Winner dùng cùng total order | [F02 UC-01](use-case/feature-02/01-mutation-and-acknowledgement-contract.md) | Replay, read merge, compaction và replica reconcile cho cùng kết quả. |
+| ACK cục bộ sau log sync và apply state | [F02 UC-01](use-case/feature-02/01-mutation-and-acknowledgement-contract.md) | Timeout không có nghĩa rollback. |
+| Manifest công bố file, watermark bảo vệ prefix log | [F02 UC-02](use-case/feature-02/02-memtable-and-safe-flush.md) | File tạm không visible; chưa đủ prefix thì chưa recycle. |
+| Chọn winner trước, xét expiry sau | Feature 04 | Expired winner che value cũ; không cấp lại TTL khi restart/copy. |
+| Tối ưu không đổi dữ liệu visible | Feature 03 và 07 | Tắt Bloom/index/cache hoặc đổi policy phải giữ kết quả đọc. |
+| Placement đổi theo epoch, dữ liệu được copy trước cutover | Feature 09 | Destination provisional chưa là replica được tính ACK. |
 
-## Scope
+Total order của mutation trong mô hình:
+`(Version.Logical, kindRank, Version.WriterID, ID)`, chọn lớn nhất;
+`Delete > Upsert` khi cùng logical version. Đây là quy tắc riêng, có chủ đích
+của lab, không phải mô tả đầy đủ mọi semantics timestamp của CQL.
 
-These are roadmap documents. All use cases are marked `TBU` until detailed
-design and implementation exist. The Go model does not reproduce Seastar's
-CPU pinning, ScyllaDB's storage formats, or its full CQL protocol.
+Local sequence commitlog phục vụ recovery trên một owner; không so sequence
+của hai replica để chọn winner. Clustering order lấy từ schema, không suy ra
+bằng cách so toàn bộ serialized bytes của key.
 
-Background: [partition and clustering keys](https://docs.scylladb.com/manual/stable/cql/ddl.html),
-[compaction](https://docs.scylladb.com/manual/stable/kb/compaction.html),
-[fault tolerance](https://docs.scylladb.com/manual/stable/architecture/architecture-fault-tolerance.html),
-and [tablets](https://docs.scylladb.com/manual/stable/architecture/tablets.html).
+## Giới hạn và tài liệu nền
+
+Project không tái tạo Seastar, CQL protocol, format SSTable, full repair,
+Raft topology hay thuật toán tối ưu production. Những điểm giản lược được
+nêu ở từng use case để người học biết điều gì có thể kết luận từ thí nghiệm.
+
+Khái niệm tablet theo table/partition có thể đối chiếu với
+[ScyllaDB Data Distribution with Tablets](https://docs.scylladb.com/manual/stable/architecture/tablets.html).
+Bản thiết kế Feature 09 dùng một coordinator và giao thức cutover rút gọn
+được mô tả riêng trong project.
