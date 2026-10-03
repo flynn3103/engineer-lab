@@ -4,74 +4,22 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Spark Internals End-to-End</title>
+<link rel="stylesheet" href="../../assets/lab.css">
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2230;--mut:#667085;--line:#d9dee7;--acc:#e25a1c;--acc2:#2f6fed;--ok:#1a9b5a;--bad:#d64545;
---p0:#dbe9ff;--p1:#ffe6cf;--p2:#d9f4e3;--p3:#f1defa;--p4:#fff3b8;--p5:#ffd9de;--p6:#d6f2f2;--p7:#e6e6e6;
---t0:#2f6fed;--t1:#e25a1c;--t2:#1a9b5a;--t3:#9b4fd0;--t4:#c9a400;--t5:#d6456b;--t6:#12a1a1;--t7:#6b7280}
-@media(prefers-color-scheme:dark){:root{--bg:#10141c;--card:#181e29;--ink:#e8ecf3;--mut:#93a0b5;--line:#2b3445;--acc:#ff7a3d;--acc2:#6c9bff;--ok:#43c783;--bad:#ff6b6b;
---p0:#1f3556;--p1:#53361c;--p2:#1d4630;--p3:#44274f;--p4:#524a17;--p5:#552630;--p6:#17454a;--p7:#3a3f48}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
-header,main{max-width:1180px;margin:auto;padding:0 16px}
-header{padding-top:24px}
-h1{margin:0 0 4px;font-size:25px}h1 span{color:var(--acc)}
-header p{margin:0;color:var(--mut)}
-section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-top:16px}
-section>h2{margin:0 0 6px;font-size:17px}
-section>h2 em{font-style:normal;background:var(--acc);color:#fff;border-radius:6px;padding:1px 8px;font-size:12px;margin-right:8px;vertical-align:2px}
-h3{font-size:14px;margin:14px 0 6px}
-button,select,input[type=text],input[type=number],textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 10px}
-button{cursor:pointer}button:hover{border-color:var(--acc)}
-button.primary{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
-button.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
-button:disabled{opacity:.45;cursor:default}
-.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
-label{color:var(--mut);font-size:13px}
-.mono,code,pre,textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
-textarea{width:100%;resize:vertical}
-pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;margin:0;max-height:340px;white-space:pre}
-.note{font-size:13px;color:var(--mut);margin:6px 0 0}
-.ok{color:var(--ok)}.bad{color:var(--bad)}
+:root{--acc:#e25a1c;--acc2:#2f6fed}
+@media(prefers-color-scheme:dark){:root{--acc:#ff7a3d;--acc2:#6c9bff}}
 .sep{color:var(--line)}
-.box{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--bg);min-width:0}
-.chips{display:flex;flex-wrap:wrap;gap:4px}
-.chip{font-family:ui-monospace,monospace;font-size:11.5px;border:1px solid var(--line);border-radius:5px;padding:1px 7px;background:var(--card)}
-.tag{display:inline-block;font-size:10.5px;padding:0 6px;border-radius:5px;background:var(--acc2);color:#fff;margin-left:4px;font-weight:400}
-.tag.r{background:var(--bad)}.tag.g{background:var(--ok)}.tag.o{background:var(--acc)}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
 .part{border:1.5px solid var(--line);border-radius:8px;padding:8px;min-width:0}
 .part h4{margin:0 0 6px;font-size:12.5px}
-.row{display:block;padding:2px 6px;margin:2px 0;border-radius:5px;border:1px solid var(--line);background:var(--bg);font-family:ui-monospace,monospace;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.row.x{color:var(--mut);border-style:dashed}
-.meter{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin:4px 0}
-.meter i{display:block;height:100%;background:var(--acc)}
-table{border-collapse:collapse;width:100%;font-size:12.5px}td,th{border:1px solid var(--line);padding:3px 7px;text-align:left}
-td.n,th.n{text-align:right}
-svg{display:block;width:100%}
-svg text{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;fill:var(--ink)}
-
 /* job panel */
-.jobgrid{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:10px}
-.jobgrid>span,.jobgrid>label{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 input.sm{width:90px}
-
 /* phase nav */
-.nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
-.nv{flex:1;min-width:116px;border:1.5px solid var(--line);border-radius:10px;padding:6px 8px;cursor:pointer;background:var(--bg);font-size:12px;line-height:1.3}
-.nv b{display:block;font-size:12.5px}
-.nv small{color:var(--mut)}
-.nv.act{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 12%,var(--card))}
-.nv.done b::after{content:" ✓";color:var(--ok)}
-.blurb{padding:10px 12px;border-left:5px solid var(--acc);background:var(--bg);border-radius:8px;margin:6px 0 10px;font-size:14px}
-.blurb .ft{color:var(--mut);font-size:12px;margin-top:3px}
-
 /* strip */
 .strip{position:relative;display:flex;height:30px;border-radius:6px;overflow:hidden;border:1px solid var(--line);margin:8px 0 4px}
-.seg{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600}
-.tick{position:absolute;top:0;bottom:0;width:1px;background:var(--ink);opacity:.35}
-.tick.h{background:var(--acc);opacity:1;width:2px}
-.cut{position:absolute;top:-2px;bottom:-2px;width:3px;background:var(--bad);z-index:2}
-
+.strip .seg{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600}
+.strip .tick{position:absolute;top:0;bottom:0;width:1px;background:var(--ink);opacity:.35}
+.strip .tick.h{background:var(--acc);opacity:1;width:2px}
+.strip .cut{position:absolute;top:-2px;bottom:-2px;width:3px;background:var(--bad);z-index:2}
 /* row groups */
 .rg{border:1.5px solid var(--line);border-radius:8px;padding:6px;margin:6px 0;transition:opacity .3s}
 .rg.skip{opacity:.55;border-style:dashed;border-color:var(--bad)}
@@ -80,7 +28,6 @@ input.sm{width:90px}
 .cc{font-family:ui-monospace,monospace;font-size:10.5px;border-radius:4px;padding:1px 5px;border:1px solid var(--line)}
 .cc.rd{background:color-mix(in srgb,var(--ok) 22%,var(--card));border-color:var(--ok)}
 .cc.no{color:var(--mut);text-decoration:line-through}
-
 /* dag */
 .nd rect{fill:var(--card);stroke:var(--line);stroke-width:1.5;transition:fill .3s}
 .nd.cur rect{stroke:var(--acc);stroke-width:4}
@@ -89,140 +36,196 @@ input.sm{width:90px}
 .edge.shuf{stroke:var(--bad);stroke-dasharray:6 4;stroke-width:2.2}
 .edge.walk{stroke:var(--acc);stroke-width:3.5}
 .edge.found{stroke:var(--bad);stroke-width:4.5;stroke-dasharray:none}
-.caption{margin:10px 0;padding:10px 12px;border-radius:8px;background:var(--bg);border-left:5px solid var(--acc);font-size:15px;min-height:52px}
-.caption.cut{border-left-color:var(--bad)}.caption.make{border-left-color:var(--ok)}
 .st{border-radius:8px;padding:6px 12px;border:2px solid var(--line);margin-top:6px;font-size:13px}
 .st.reuse{border-style:dashed}
-
 /* lanes */
 .lane{display:grid;grid-template-columns:34px 1fr;gap:8px;align-items:start;margin:8px 0}
 .lane .lh{font-weight:700;font-size:12px;padding:6px 0;text-align:center;border-radius:6px}
-.track{position:relative;display:flex;gap:30px;min-height:74px;padding:7px 6px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.track{position:relative;display:flex;gap:clamp(8px,3vw,30px);min-height:74px;padding:7px 6px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 .nd2{position:relative;flex:1;min-width:0;height:56px;margin:auto 0;border:2px solid var(--line);border-radius:8px;background:var(--card);display:flex;flex-direction:column;align-items:center;padding-top:3px;font-size:11.5px;z-index:1}
 .nd2 .nm{font-weight:700}.nd2 .ct{margin-top:auto;margin-bottom:2px;font-family:ui-monospace,monospace;color:var(--mut);font-size:11px}
 .tok{position:absolute;z-index:3;width:20px;height:20px;border-radius:50%;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px #0005}
 .cap{font-family:ui-monospace,monospace;font-size:11.5px;color:var(--mut);min-height:17px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-
 /* misc */
-.big{font-size:42px;font-weight:700;color:var(--acc);line-height:1.1}
 .file{font-family:ui-monospace,monospace;font-size:12px;padding:2px 0}
 .tabs{display:flex;gap:6px;margin:6px 0}
-details.dd{border:1px solid var(--line);border-radius:10px;padding:8px 14px;margin-top:10px;background:var(--bg)}
-details.dd summary{cursor:pointer;font-weight:600}
-details.dd summary small{color:var(--mut);font-weight:400;margin-left:6px}
 .cell{display:inline-block;min-width:28px;text-align:center;border-radius:4px;padding:1px 4px;font-family:ui-monospace,monospace;font-size:11.5px}
-.bar2{height:16px;border-radius:4px;background:var(--acc2);display:inline-block;vertical-align:middle}
 .blk{display:inline-block;width:86px;border:2px solid var(--line);border-radius:8px;padding:6px;margin:4px;text-align:center;font-size:12px}
 .blk.cached{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 15%,var(--card))}
 .blk.evicted,.blk.lost{border-style:dashed;color:var(--mut)}
 .blk.lost{border-color:var(--bad)}
-@keyframes flow{to{stroke-dashoffset:-20}}
-.flow{stroke-dasharray:6 4;animation:flow .6s linear infinite}
-
-.ovn{cursor:pointer}.ovn rect{stroke:var(--line);stroke-width:1.5;transition:opacity .2s}
-.ovn.sel rect{stroke:var(--acc);stroke-width:3.5}.ovn.cur rect{stroke:var(--ink);stroke-width:3}
-.ovn.act rect{stroke:var(--acc);stroke-width:4}
-.ove{fill:none;stroke:#8a94a6;stroke-width:1.8}.ove.ctl{stroke-dasharray:6 4}.ove.async{stroke-dasharray:2 4;stroke:var(--bad)}.ove.act{stroke:var(--acc);stroke-width:3.5}
-.ove.flow{animation:flow .6s linear infinite}
-.simgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:900px){.simgrid{grid-template-columns:1fr}}.simgrid>div{min-width:0}
-.simlog{max-height:210px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:4px}.simev{font-size:12px;padding:2px 6px;border-radius:5px;cursor:pointer;border:1px solid transparent}.simev:hover{border-color:var(--line)}.simev.cur{background:color-mix(in srgb,var(--acc) 16%,var(--card));border-color:var(--acc)}.simev.fut{opacity:.45}
-.simtag{display:inline-block;color:#fff;font-size:10px;border-radius:4px;padding:0 5px}
-#acc{display:flex;flex-direction:column;gap:8px;margin-top:10px}
-details.acc{border:1px solid var(--line);border-radius:12px;background:var(--bg);overflow:hidden}
-details.acc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 14px;background:color-mix(in srgb,var(--pc) 55%,var(--card))}
-details.acc>summary::-webkit-details-marker{display:none}
-details.acc>summary::after{content:'▾';margin-left:auto;color:var(--mut);transition:transform .15s}
-details.acc:not([open])>summary::after{transform:rotate(-90deg)}
-details.acc[open]{border-color:var(--acc2);box-shadow:0 0 0 1px var(--acc2)}
-.accn{flex:none;width:26px;height:26px;border-radius:50%;background:var(--card);border:2px solid var(--acc2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
-.acct{display:flex;flex-direction:column;min-width:0}.acct small{color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.accg{font-size:11px;color:var(--mut);margin-left:auto;padding-right:6px;white-space:nowrap}@media(max-width:700px){.accg{display:none}}
-.accb{padding:12px 14px;background:var(--card)}
-.ddb{padding:8px 4px 4px;line-height:1.6}.ddb ul{margin:4px 0 0;padding-left:18px}.ddb li{margin:3px 0}
-.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:700px){.pc{grid-template-columns:1fr}}
-.pc .pro,.pc .con{border-radius:8px;padding:8px 12px;background:var(--bg);border-left:4px solid var(--ok)}.pc .con{border-left-color:var(--bad)}
-table.fm{width:100%;border-collapse:collapse;font-size:13px}table.fm th,table.fm td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}table.fm th{background:var(--bg);font-size:12px}
-@media(max-width:700px){table.fm{display:block;overflow-x:auto}}
-
+.caption.cut{border-left-color:var(--bad)}.caption.make{border-left-color:var(--ok)}
+.jobcode{margin-top:14px}.jobcode .lbl{font-size:13px;color:var(--mut);margin-bottom:4px}.jobcode pre{font-size:12.5px;white-space:pre;overflow-x:auto}
+.ddb{overflow-x:auto}.ddb table{display:block;overflow-x:auto;max-width:100%;white-space:nowrap}
+.ddb .bar label{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center}
+.ddb svg{min-width:0}
+.nd2{padding:3px 2px 0;text-align:center}.nd2 .nm{line-height:1.15;font-size:11px}
+@media(max-width:560px){.lane{grid-template-columns:28px 1fr;gap:6px}.track{padding:6px 4px}.nd2 .nm{font-size:10px}}
+.sim .ctl select,.ddb select{max-width:100%}
+#simScn{max-width:calc(100vw - 96px)}
 </style>
 </head>
 <body>
-<header>
-  <h1><span>Spark</span> Internals · End-to-End</h1>
-  <p>One job, one engine: file → partitions → lineage → stage plan → scheduler → tasks → shuffle → action → events. Everything below is computed from <b>your</b> data, not canned.</p>
-</header>
-<main>
-
-<section>
-  <h2><em>1</em>Your data &amp; job</h2>
-  <div class="bar">
-    <input type="file" id="file" accept=".csv,.json,.jsonl,.ndjson,.txt">
-    <button data-sample="orders">Orders CSV</button><button data-sample="events">Events JSONL</button><button data-sample="users">Users JSON</button>
+<div id="dataSlot" hidden>
+<div class="sample-row"><span class="lbl">Every chapter below runs one real job on a dataset:</span>
+  <button data-sample="orders">Orders (CSV)</button><button data-sample="events">Events (JSONL)</button><button data-sample="users">Users (JSON array)</button></div>
+<div class="jobcode"><div class="lbl">The job, as a program (it follows your settings)</div><pre><code id="jobLine"></code></pre></div>
+<details class="mydata"><summary>Change the job, the data, the file format or the partitions</summary>
+  <div class="jobgrid">
+    <label>Job <select id="tpl"><option value="agg">Group &amp; aggregate (has a shuffle)</option><option value="narrow">Filter &amp; project (narrow only)</option></select></label>
+    <span>Filter <select id="fcol"></select><select id="fop"><option>&gt;=</option><option>&gt;</option><option>&lt;=</option><option>&lt;</option><option>=</option><option>!=</option></select><input type="text" id="fval" class="sm" placeholder="value" aria-label="Filter value"></span>
+    <span id="aggBox">Group by <select id="kcol"></select> aggregate <select id="agg"><option value="sum">sum</option><option value="count">count</option></select> <select id="vcol"></select></span>
+    <span id="projBox">Select columns <input type="text" id="proj" style="width:min(200px,60vw)" placeholder="a,b,c"></span>
+    <label>Action <select id="act"><option>Count</option><option>Collect</option><option>WriteJSONLines</option></select></label>
+  </div>
+  <div class="bar" style="margin-top:12px">
+    <input type="file" id="file" accept=".csv,.json,.jsonl,.ndjson,.txt" aria-label="Load a file">
     <label>Storage format <select id="fmt">
       <option value="auto">auto-detect (row file)</option><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="json">JSON array</option>
       <option value="parquet">Parquet (simulated, columnar)</option></select></label>
     <label>Source partitions <input type="range" id="P" min="1" max="6" value="3"> <b id="Pv">3</b></label>
   </div>
-  <textarea id="src" rows="5" spellcheck="false"></textarea>
+  <textarea id="src" rows="5" spellcheck="false" aria-label="Input data"></textarea>
   <div class="note" id="srcInfo"></div>
-  <div class="jobgrid">
-    <label>Job <select id="tpl"><option value="agg">Group &amp; aggregate (has a shuffle)</option><option value="narrow">Filter &amp; project (narrow only)</option></select></label>
-    <span>Filter <select id="fcol"></select><select id="fop"><option>&gt;=</option><option>&gt;</option><option>&lt;=</option><option>&lt;</option><option>=</option><option>!=</option></select><input type="text" id="fval" class="sm" placeholder="value"></span>
-    <span id="aggBox">Group by <select id="kcol"></select> aggregate <select id="agg"><option value="sum">sum</option><option value="count">count</option></select> <select id="vcol"></select></span>
-    <span id="projBox">Select columns <input type="text" id="proj" style="width:200px" placeholder="a,b,c"></span>
-    <label>Action <select id="act"><option>Count</option><option>Collect</option><option>WriteJSONLines</option></select></label>
-  </div>
-  <div class="bar">
-    <button class="primary" id="playAll">▶ Play all 8 phases</button>
-    <button id="pauseBtn" disabled>⏸ Pause</button>
-    <label>Speed <input type="range" id="speed" min="0.25" max="4" step="0.25" value="1"> <b id="speedV">1×</b></label>
-    <span class="note">or click any phase below. Cluster knobs (executors, failures, shuffle partitions, combine, AQE, memory) live inside the phase they affect.</span>
-  </div>
-</section>
-
-<section>
-  <h2><em>◎</em>Architecture overview <span class="note" style="font-weight:400">components and how they connect · colors match the phases below</span></h2>
-  <div class="bar"><button class="primary" id="ovTrace">▶ Trace a request through the system</button><button id="ovClear">Clear</button><span class="note" id="ovCap"></span></div>
-  <div id="ovView"></div>
-  <div class="chips" style="margin-top:6px"><span class="chip">solid = data flow</span><span class="chip">dashed = control / metadata</span><span class="chip" style="border-color:var(--bad)">dotted = events / async</span></div>
-  <div id="ovInfo"></div>
-</section>
-
-<section id="simSec">
-  <h2><em>▶</em>Live cluster simulation <span class="note" style="font-weight:400">watch inserts, updates and deletes travel between the nodes · edit the actions or inject failures</span></h2>
-  <div class="bar"><label>Scenario <select id="simScn"></select></label><label><span id="simNL">nodes</span> <select id="simN"></select></label><span id="simSet" class="bar" style="margin:0"></span>
-    <button class="primary" id="simPlay">▶ Play</button><button id="simStep">Step ›</button><button id="simReset">⏮</button><label>Speed <select id="simSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label></div>
-  <div class="note" id="simDesc" style="margin:0 0 6px"></div>
-  <svg id="simSvg" style="width:100%;border:1px solid var(--line);border-radius:10px;background:var(--bg)"></svg>
-  <div class="bar"><input type="range" id="simT" min="0" max="1000" value="0" step="10" style="flex:1"><span class="mono" id="simTv"></span></div>
-  <div id="simInsp" class="box" style="margin:8px 0"></div>
-  <div class="simgrid"><div><h3 style="margin-top:0">Actions <span class="note" style="font-weight:400">(time in ms, then op and arguments)</span></h3><textarea id="simAct" rows="7" spellcheck="false"></textarea>
-    <div class="bar"><select id="simOp"></select><span id="simArgs" class="bar" style="margin:0"></span><button id="simAdd">＋ add action</button></div></div>
-   <div><h3 style="margin-top:0">Event log <span class="note" style="font-weight:400">(click an event to see why)</span></h3><div id="simLog" class="simlog"></div></div></div>
-</section>
-
-<section id="phaseSec">
-  <h2><em>2</em>The job, phase by phase</h2>
-  <div class="nav" id="nav"></div>
-  <div class="blurb" id="blurb"></div>
-  <div class="bar" id="phCtl"></div>
-  <div class="bar"><button id="prev">‹ Prev</button><button class="primary" id="anim">▶ Animate this phase</button><button id="nextB">Next ›</button></div>
-  <div id="phView"></div>
-</section>
-
-<section>
-  <h2><em>3</em>Deep dives <span class="note" style="font-weight:400">(mini playgrounds fed by the same data)</span></h2>
-  <details class="dd" id="dd1"><summary>Parquet: column pruning &amp; predicate pushdown <small>Feature 16</small></summary><div id="dd1b"></div></details>
-  <details class="dd" id="dd2"><summary>HashPartitioner &amp; skew <small>Features 02, 04</small></summary><div id="dd2b"></div></details>
-  <details class="dd" id="dd3"><summary>Spill &amp; external merge sort <small>Feature 10</small></summary><div id="dd3b"></div></details>
-  <details class="dd" id="dd4"><summary>Join strategies &amp; AQE <small>Features 07, 17</small></summary><div id="dd4b"></div></details>
-  <details class="dd" id="dd5"><summary>Cache &amp; BlockManager <small>Feature 08</small></summary><div id="dd5b"></div></details>
-  <details class="dd" id="dd6"><summary>DataFrame → optimizer → physical plan <small>Features 13–15</small></summary><div id="dd6b"></div></details>
-  <details class="dd" id="dd7"><summary>coalesce vs repartition <small>Feature 09</small></summary><div id="dd7b"></div></details>
-</section>
-</main>
-
+</details>
+</div>
+<script src="../../assets/lab.js"></script>
 <script>
+const STORY={
+ system:'Apache Spark',
+ title:'Build <span>Spark</span> from scratch',
+ lead:'Start from a data problem that no single machine can finish in time. Watch the obvious fix break. Then rebuild the core of Spark one mechanism at a time, running a real job on your own data.',
+ problem:{
+  scene:[
+   'Your marketplace writes <b>2 TB of order logs per day</b> to object storage, one line per order. Finance wants a report on their desk by 6 AM: <i>revenue per city, for orders above a threshold</i>.',
+   'One machine cannot do it. 2 TB does not fit in its 64 GB of RAM, and a single disk at 500 MB/s needs over an hour just to read the file once (2 TB &divide; 500 MB/s &asymp; 67 min). You have 50 machines, and in a fleet that size one of them fails every few days.'],
+  musts:[
+   '<b>Scales out.</b> Twice the data needs twice the machines, not a rewrite.',
+   '<b>Survives failures.</b> A machine dying at minute 40 must not restart the whole job or corrupt the answer.',
+   '<b>Same answer as one machine.</b> Splitting, retries and the order tasks finish in must never change the result.',
+   '<b>Moves as little data as possible.</b> Disk reads and network copies are the real cost, so skip and shrink them.',
+   '<b>Explains itself.</b> When it is slow or fails, you can see which stage, which task and why.'],
+  naive:{title:'Your first instinct: a script and a thread pool',text:'Read the file, hand lines to threads, add amounts into a shared map per city. It works on a 1 GB sample, then:',
+   breaks:['One machine is capped by one disk and one network card: the 2 TB scan alone takes over an hour.',
+    'Spreading it over 50 machines by hand means writing the file splitting, code shipping, merging of partial results and retries yourself, again for every new report.',
+    'A machine dies at minute 40. Nothing records how its partial sums were computed, so you rerun everything.',
+    'Grouping by city needs every row of a city in one place: by hand that is an ad hoc all-to-all copy with no failure story.']},
+  quest:'Rebuild the core of Spark in 8 chapters by following one job from file to answer: <code>read &rarr; filter &rarr; map &rarr; reduceByKey &rarr; action</code>. Each chapter meets a problem, tries the naive fix, sees it fail, then runs the design Spark uses on the dataset below.'},
+ overview:{title:'The whole engine on one page',lead:'Before the details, see how one job travels: the driver plans and coordinates, executors do the work. Press <b>Trace a request</b> to follow the job, or tap a component to see what it receives and sends. Colors match the chapters.'},
+ chapters:[
+  {ask:'How do 50 machines read one 2 TB file without overlapping or losing a line?',
+   why:'Reading is the first bottleneck. Cut into 128 MB splits, a 2 TB file becomes about 16,000 partitions that can be read in parallel. But a byte cut almost never lands on a line break.',
+   v0:{name:'Cut the file into N equal byte ranges and parse each one',code:'size = file.length / N\nfor i in 0..N-1:\n  task(i) parses bytes [i*size, (i+1)*size)',breaks:'Nearly every cut lands inside a line, so one task sees the first half of a record and the next task sees the rest. At every boundary you get <b>corrupt rows or lost rows</b>. Raise <i>Source partitions</i> here and watch the red cuts fall inside lines.'},
+   design:'Cut by bytes for parallelism, but give each line to the partition where it <b>starts</b>: a reader skips the partial line at its start and reads past its end to finish its last line.',
+   predict:{q:'A line starts in partition 0 and ends 30 bytes into partition 1. Who decodes it?',opts:['Both: each partition decodes its own half','Partition 0: it reads past its end to finish the line, and partition 1 skips the fragment','Partition 1: a line belongs to the range where it ends'],ans:1,why:'Ownership goes by the first byte of the line. Partition 0 reads past its boundary (look for the <i>reads past boundary</i> tag), and partition 1 starts at the next newline, so every line is decoded exactly once. Hadoop’s <code>LineRecordReader</code>, which Spark uses for text files, follows essentially the same rule.'},
+   build:{intro:'Four small pieces, each testable alone:',
+    steps:['<b>Source descriptor.</b> Path, format and a list of splits <code>(start, end)</code>. Planning splits reads no data.',
+     '<b>Line reader per split.</b> If <code>start &gt; 0</code>, skip to just after the first newline (the previous split owns that line). Then read whole lines while a line <i>starts</i> before <code>end</code>, even if it ends after it.',
+     '<b>Decoder.</b> Turn each line into a row: CSV with its header, or one JSON object per line. A bad line becomes an error record, not a crash.',
+     '<b>Columnar files.</b> For Parquet the unit is a row group. Footer min/max statistics let a reader skip whole groups and every column the job does not need. Switch <i>Storage format</i> to Parquet to see it.'],
+    code:'splits = [(i*size, min((i+1)*size, len)) for i in 0..N-1]\nreadSplit(start, end):\n  pos = start\n  if start > 0: pos = indexOf("\\n", start - 1) + 1   // previous split owns it\n  while pos < end:\n    line = readLineAt(pos)          // may run past end\n    emit(decode(line)); pos += line.length',
+    rule:'<b>Every line is decoded exactly once</b>, whatever the number of splits.'}},
+  {ask:'The user chains filter, map and reduceByKey. When should the 2 TB actually be read?',
+   why:'If every call ran at once, each step would produce a full 2 TB intermediate before the next could start, and the engine would never see the whole pipeline to plan it.',
+   v0:{name:'Eager collections: every call computes its result immediately',code:'rows  = readAll(path)        // 2 TB in memory?\nbig   = rows.filter(f)       // another full copy\npairs = big.map(g)           // and another',breaks:'Every step <b>materializes a full copy</b>. 2 TB does not fit in memory, spilling each step to disk multiplies the I/O, and when a machine dies nothing records how a lost piece was computed.'},
+   design:'A transformation returns a new immutable RDD that only remembers its parent, its function and its partitioning: a recipe, called the <b>lineage</b>, not data.',
+   predict:{q:'After <code>read &rarr; filter &rarr; map &rarr; reduceByKey</code>, and before any action, how many source records have been read?',opts:['Zero: transformations only record lineage','One partition, to learn the schema','All of them, cached for later steps'],ans:0,why:'RDD transformations are lazy. The counters in the playground stay at 0 until an action runs. One real-world caveat: a DataFrame read with <code>inferSchema</code>, or JSON without a schema, scans data early to learn the columns. RDD transformations never do.'},
+   build:{steps:['<b>RDD node:</b> <code>{id, partitions, deps, fn}</code>, immutable once created.',
+     '<code>map</code>, <code>filter</code> and <code>flatMap</code> create a child with a <b>narrow</b> dependency: child partition <i>i</i> needs only parent partition <i>i</i>.',
+     '<code>reduceByKey</code> creates a child with a <b>shuffle</b> dependency and a partitioner: each child partition needs a slice of <i>every</i> parent partition.',
+     '<b>No I/O here.</b> Validate arguments and assign ids. Never open the file and never call the user function.'],
+    code:'class RDD { id; parts; deps; fn }\nmap(f)         = RDD(parts = this.parts, deps = [Narrow(this)], fn = f)\nfilter(p)      = RDD(parts = this.parts, deps = [Narrow(this)], fn = p)\nreduceByKey(r) = RDD(parts = R, deps = [Shuffle(this, Hash(R))], fn = r)\n// nothing runs until an action calls compute()',
+    rule:'<b>Building lineage never touches data</b>, and an RDD never changes, so any partition can be recomputed from its parents.'}},
+  {ask:'The action fires. Which steps can run together, and where must the job stop and wait?',
+   why:'Narrow steps can be chained inside one task with no data movement. A shuffle needs every map output to exist before any reducer starts, so it is a hard barrier.',
+   v0:{name:'One task per operator, run in topological order',code:'for op in topoSort(lineage):\n  for p in partitions(op):\n    out[op][p] = op.run(in[op][p])   // materialize every step',breaks:'Every operator writes its whole output before the next one starts. Filter and map each <b>materialize a copy</b> and wait for a scheduling round, although they could stream row by row inside one task.'},
+   design:'Walk backward from the final RDD: narrow dependencies stay in the current stage, and every shuffle dependency cuts off a new parent stage. Stages, not operators, are what gets scheduled.',
+   predict:{q:'How many stages does <code>read &rarr; filter &rarr; map &rarr; reduceByKey &rarr; count</code> produce?',opts:['4, one per operator','1, because Spark fuses everything','2: a ShuffleMapStage before the shuffle and a ResultStage after it'],ans:2,why:'Only the shuffle edge cuts. Read, filter and map pipeline into the ShuffleMapStage, and the reduce plus the count run in the ResultStage. Switch <i>Job</i> to <i>filter &amp; project</i> and the plan collapses to a single ResultStage.'},
+   build:{steps:['Start at the action’s final RDD and create the <b>ResultStage</b> for it.',
+     'Walk dependencies depth-first. <b>Narrow:</b> add the parent to the current stage and keep walking. <b>Shuffle:</b> stop and remember the dependency.',
+     'For each remembered shuffle, get or create a <b>ShuffleMapStage</b> for its parent, recursively, keyed by shuffle id so a shared shuffle is planned once.',
+     'Each stage gets one task per partition of its last RDD. A stage becomes runnable when all its parent stages are done.'],
+    code:'stageFor(rdd):\n  members, shuffleDeps = walkNarrow(rdd)      // stop at shuffle edges\n  parents = [getOrCreateMapStage(d) for d in shuffleDeps]\n  return Stage(members, parents, tasks = rdd.partitions)\nresultStage = stageFor(finalRdd)',
+    rule:'<b>No stage contains a shuffle edge</b>, and a stage runs only after all its parent stages have finished.'}},
+  {ask:'50 executors, 16,000 tasks, and a machine dies at minute 40. Who runs what, and what runs again?',
+   why:'Without one owner of the job state, two machines may run the same partition, or none will. Spark retries a failing task up to <code>spark.task.maxFailures</code> (4) times before it fails the job.',
+   v0:{name:'Every worker grabs partitions from a shared list',code:'while (p = sharedQueue.pop()):\n  run(p)           // who notices if I crash?',breaks:'A worker that dies mid-task loses its partition, or it gets done twice. If it dies <b>after</b> finishing a map task, the shuffle output on its disk vanishes and nobody knows the next stage now has holes.'},
+   design:'One driver owns all state. It turns each stage into a set of tasks, gives them to free executor slots, retries failed attempts, and opens a stage only after its parents have succeeded.',
+   predict:{q:'An executor dies <b>after</b> the map stage has finished. Some of the map outputs lived on its disk. What does the driver run again?',opts:['The whole job, from reading the file','Only the map tasks whose output was on the lost executor','Nothing: finished tasks are never rerun'],ans:1,why:'The map stage is resubmitted only for the partitions whose output disappeared; the rest are kept. Set <i>Failure injection</i> to <i>executor lost</i> and look for the hatched tasks. In real clusters, an external shuffle service or graceful decommissioning can keep those files alive even after the executor is gone.'},
+   build:{steps:['<b>Task set</b> per stage: one task per partition, each run as numbered attempts.',
+     '<b>Resource offers:</b> each executor has <code>cores / task.cpus</code> slots. Fill free slots with pending tasks, preferring one that already holds the data.',
+     '<b>Task state lives on the driver only:</b> queued &rarr; running &rarr; succeeded or failed. A failed attempt is queued again until <code>maxFailures</code>, then the job fails.',
+     '<b>Executor lost:</b> fail its running tasks, unregister the map outputs it held, and resubmit only those partitions of the parent stage.',
+     '<b>Stage barrier:</b> submit a stage once all its parents have complete outputs.'],
+    code:'onOffer(exec):    while exec.freeSlots and pending: launch(pending.pop(), exec)\nonFailed(task):   if ++task.attempt <= MAX_FAILURES: pending.push(task) else abortJob()\nonExecutorLost(e):\n  for t in running(e): onFailed(t)\n  for (stage, p) in mapOutputsOn(e): unregister(stage, p); resubmit(stage, p)\nonStageDone(s):   submit(children whose parents are all done)',
+    rule:'<b>Only the driver changes task state</b>, and a result from an old attempt can never overwrite a newer one.'}},
+  {ask:'Inside one task, how do filter and map process 128 MB without building a list at every step?',
+   why:'A task owns one partition. If each operator built a full list, a task would need several times its partition in memory, and an executor runs many tasks at once.',
+   v0:{name:'Run each operator over the whole partition',code:'rows   = readPartition(p)            // list\nkept   = [r for r in rows if pred(r)]   // list\nmapped = [f(r) for r in kept]         // list',breaks:'Three full lists live at once in every task. Memory becomes a multiple of the partition size and the executor runs <b>out of memory</b>, although each row only needed to pass through.'},
+   design:'Compose the narrow functions into one chain of iterators: each row is pulled from the source, filtered, mapped and handed on before the next row is read.',
+   predict:{q:'In one task, the filter drops 5 of 8 rows. How many times does the map function run?',opts:['3: rows the filter drops never reach map','8: map runs on every row and the result is filtered afterwards','16: every row passes through both functions'],ans:0,why:'Rows travel one at a time through the fused chain, and a dropped row stops at the Filter box (the token turns red). Compare the <i>Filter calls</i> and <i>Map calls</i> counters. Spark SQL goes further and compiles such a chain into a single loop (whole-stage code generation).'},
+   build:{steps:['Each RDD implements <code>compute(partition)</code>, which returns an <b>iterator</b>.',
+     'A narrow child wraps its parent’s iterator: <code>filter</code> skips, <code>map</code> transforms, <code>flatMap</code> expands.',
+     'The task pulls from the last iterator into its sink: a counter, a buffer, a file writer, or the shuffle writer.',
+     'Bound concurrency: an executor runs at most as many tasks as it has slots.'],
+    code:'compute(Source, p) = readSplit(p)                                  // iterator\ncompute(Filter, p) = (r for r in compute(parent, p) if pred(r))\ncompute(Map, p)    = (f(r) for r in compute(parent, p))\nrunTask(p):  for r in compute(lastRdd, p): sink.add(r)',
+    rule:'<b>A task reads only its own partition</b> and keeps one row in flight per operator, never a whole intermediate list.'}},
+  {ask:'Revenue per city: each city’s rows are spread over all 16,000 partitions. How do they meet?',
+   why:'Grouping needs every value of a key on one machine. That all-to-all copy is usually the most expensive step of a job: a disk write, a network transfer and a barrier between stages.',
+   v0:{name:'Send every pair to one central reducer',code:'for (city, amount) in allPartitions:\n  driver.totals[city] += amount',breaks:'One machine receives every record, so its <b>network card and memory</b> become the bottleneck: the same single-machine wall you started from.'},
+   design:'Each map task hashes the key to choose one of R reduce partitions and writes one block per destination. Each reduce task fetches its block from every map output, so equal keys always meet in the same task.',
+   predict:{q:'Map-side combine is on. A map task holds 8 (city, amount) pairs covering 3 distinct cities. How many records does it write to the shuffle?',opts:['8, one per pair','1, the task’s grand total','3, one partial sum per city'],ans:2,why:'<code>reduceByKey</code> combines on the map side, so a task writes one partial sum per key it saw. It writes more only when memory forces a spill: try a small <i>Memory budget</i>. Untick <i>map-side combine</i> and every pair is shuffled.'},
+   build:{steps:['<b>Partitioner:</b> <code>dest = floorMod(hash(key), R)</code>, identical on every machine. Never use a per-process random hash seed.',
+     '<b>Shuffle write:</b> per map task, combine values per key in memory, spill sorted runs to disk when over budget, then write one file with R blocks plus an index.',
+     '<b>Register</b> the committed output and its location with the driver (the map-output tracker).',
+     '<b>Shuffle read:</b> reduce task <i>r</i> asks where block <i>r</i> of every map output lives, fetches them all and merges values per key.',
+     '<b>Barrier:</b> reduce tasks start only when every map output is registered.'],
+    code:'mapTask(p):\n  buf = {}\n  for (k, v) in compute(parent, p): buf[k] = combine(buf[k], v)    // spill if full\n  writeBlocks(groupBy(buf, k -> floorMod(hash(k), R))); tracker.register(p)\nreduceTask(r):\n  for p in mapPartitions: for (k, v) in fetch(p, r): acc[k] = reduce(acc[k], v)\n  return acc',
+    rule:'<b>Equal keys always land in the same reduce partition</b>, and a reducer reads only committed map outputs.'}},
+  {ask:'Thousands of tasks finish in random order, some of them twice. How do you get one correct answer?',
+   why:'Retries and speculative copies mean one partition can produce output twice. A half-written output folder that the next job reads is worse than a failed job.',
+   v0:{name:'Every task appends straight to the final output',code:'task(p): for r in rows: output.append(r)\n// count: the driver adds partial counts as they arrive',breaks:'A retried task appends its rows <b>twice</b>, a failed job leaves <b>half-written</b> output that readers pick up, and appending in finish order makes <code>collect</code> return a different order on every run.'},
+   design:'Results are merged by partition index, not by arrival: count sums one number per partition, collect concatenates in partition order, and writes go to per-attempt temporary files that are published at job commit.',
+   predict:{q:'With <code>writeJSONLines</code>, when can a downstream reader first see the output?',opts:['After the job commits: files are moved into place, then <code>_SUCCESS</code> is written','As soon as the first task finishes','While tasks are still writing, line by line'],ans:0,why:'Each attempt writes under a temporary folder, and the driver publishes the files only at job commit. Pick <i>writeJSONLines</i> and play it. Caveat for real systems: the v2 commit algorithm and some object-store committers move files as each task commits, which is exactly why readers should wait for <code>_SUCCESS</code>.'},
+   build:{steps:['<b>Count:</b> each task returns a partial count; the driver stores it by partition index and sums once all have arrived.',
+     '<b>Collect:</b> keep partition <i>p</i>’s rows in slot <i>p</i> and concatenate in index order. Refuse results above a size limit: they all land in driver memory.',
+     '<b>Write:</b> each attempt writes under <code>_temporary/&lt;attempt&gt;/</code>. The driver lets exactly one attempt per partition commit.',
+     '<b>Job commit:</b> move committed files into the target folder, then write <code>_SUCCESS</code>. On failure, delete <code>_temporary</code>.'],
+    code:'onTaskResult(p, attempt, value):\n  if results[p] is set: return            // duplicate or stale attempt\n  results[p] = value\nwhen all results are set:\n  count   = sum(results)\n  collect = concat(results[0..n-1])       // partition order\n  write   = commitJob(); create("_SUCCESS")',
+    rule:'<b>Exactly one attempt per partition counts</b>, and output becomes visible all at once or not at all.'}},
+  {ask:'Last night the job took 3 hours instead of 20 minutes. How do you find out why, after it has finished?',
+   why:'Log lines from 50 machines disagree and vanish with the executors. You need one ordered record of what the scheduler decided, and a way to see the plan without running it.',
+   v0:{name:'Print logs and bump counters wherever something happens',code:'log.info("task done")       // on 50 machines\nui.counter++                 // from many threads',breaks:'Counters drift from what really happened (a retried task counted twice, a lost one never), logs disappear with their executors, and nothing tells you <b>which stage</b> was slow.'},
+   design:'The driver emits one ordered stream of lifecycle events. The UI, the event log and every metric are folded from that stream, and <code>explain</code> prints the plan from metadata only.',
+   predict:{q:'The summary tab says <i>retries 1</i>. Where does that number come from?',opts:['A counter each executor increments','It is folded from the ordered event stream on the driver','It is estimated from the plan before the job runs'],ans:1,why:'Every number in the summary is folded from the same events listed in the events tab, so the two can never disagree. Spark’s web UI and history server work the same way: they replay <code>SparkListener</code> events. Set <i>Failure injection</i> to <i>a task fails once</i>, then compare the events and summary tabs.'},
+   build:{steps:['<b>Event types:</b> job, stage and task start and end, executor added and lost, each with a sequence number and a time.',
+     '<b>One bus</b> on the driver: the scheduler posts, and listeners consume asynchronously (UI store, event-log file, metrics).',
+     '<b>Summaries are folds</b> over the stream, never counters maintained on the side.',
+     '<b>Explain</b> renders lineage and the stage plan from metadata: no row data, no closures, a deterministic order.'],
+    code:'post(e): e.seq = nextSeq++; bus.publish(e)\nsummary = events.reduce(fold, emptySummary)\nfold(s, TaskEnd(ok))     = s with ok + 1\nfold(s, TaskEnd(failed)) = s with failed + 1\nexplain(plan) = render(plan.stages)        // metadata only',
+    rule:'<b>Every reported number is derived from the event stream</b>, so replaying it gives exactly the same summary.'}}
+ ],
+ milestones:[
+  {t:'Partitioned reader',test:'For 1 to 8 splits of the same file, the decoded rows equal a plain single-threaded parse: no line lost, none duplicated.'},
+  {t:'Lazy lineage',test:'Build <code>filter &rarr; map &rarr; reduceByKey</code> on a source that throws when opened: nothing fails until an action is called.'},
+  {t:'Stage planner',test:'<code>filter &rarr; map &rarr; reduceByKey</code> plans exactly 2 stages, a narrow-only job plans 1, and explain prints identical text on every run.'},
+  {t:'Local runtime with count and collect',test:'Results equal a single-machine reference with 1, 2 and 4 worker slots, and collect always returns partition order.'},
+  {t:'Shuffle and reduceByKey',test:'Each key appears in exactly one reduce partition; sums match the reference with combine on and off, and with a memory budget small enough to force spills.'},
+  {t:'Retries and executor loss',test:'Inject a failing task and a lost executor: the answer still matches the reference, and only the lost map outputs are recomputed.'},
+  {t:'Atomic writes and events',test:'Kill the job mid-write: no visible output and no <code>_SUCCESS</code>. On success, the summary folded from events equals the counters you observed.'}],
+ capstone:{title:'Put it together: a live Spark application',lead:'A driver, a few executors and file storage, running jobs on a small table. Spark never edits a file: an INSERT writes a new file, UPDATE and DELETE rewrite a whole partition, and new files become visible only when the driver commits. Play a scenario, tap any event to see why it happened, then kill an executor and compare <code>cache()</code> on and off.'},
+ extras:[
+  {id:'dd1b',title:'Parquet: column pruning &amp; predicate pushdown',sub:'chapter 1'},
+  {id:'dd2b',title:'HashPartitioner &amp; skew',sub:'chapter 6'},
+  {id:'dd3b',title:'Spill &amp; external merge sort',sub:'chapter 6'},
+  {id:'dd4b',title:'Join strategies &amp; AQE',sub:'beyond the tour'},
+  {id:'dd5b',title:'Cache &amp; BlockManager',sub:'chapters 2 and 4'},
+  {id:'dd6b',title:'DataFrame &rarr; optimizer &rarr; physical plan',sub:'chapters 2 and 3'},
+  {id:'dd7b',title:'coalesce vs repartition',sub:'chapter 3'}]
+};
+</script>
+<script>
+Lab.mount(STORY);
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const J=x=>{try{return JSON.stringify(x)}catch{return String(x)}};
@@ -616,21 +619,6 @@ function build(){
 /* =========================================================
    PLAYER
    ========================================================= */
-let gen=0,paused=false,speed=1,cur=0,playingAll=false;
-function animate(draw,dur){
-  const g=++gen;let el=0,last=null;
-  return new Promise(res=>{
-    function frame(now){
-      if(g!==gen){res(false);return}
-      if(last===null)last=now;const dt=now-last;last=now;
-      if(!paused)el+=dt*speed;
-      const p=Math.min(1,el/dur);draw(p);
-      if(p<1)requestAnimationFrame(frame);else res(true);
-    }
-    requestAnimationFrame(frame);
-  });
-}
-const sleep=ms=>new Promise(r=>setTimeout(r,ms/speed));
 
 /* =========================================================
    DAG DRAWING (phases 2 & 3)
@@ -642,13 +630,13 @@ function dagSVG(nodes,o={}){
   nodes.forEach(n=>{n.x=10+n.d*(W+gx);n.y=10+lv[n.d].indexOf(n)*(H+gy)});
   const dm=Math.max(...nodes.map(n=>n.d)),mr=Math.max(...Object.values(lv).map(a=>a.length));
   const w=20+(dm+1)*(W+gx)-gx,h=20+mr*(H+gy)-gy,reveal=o.reveal??nodes.length;
-  let s=`<svg viewBox="0 0 ${w} ${h}" style="max-height:${Math.max(h,100)*1.3}px"><defs><marker id="ar" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0L9,4.5L0,9z" fill="#8a94a6"/></marker></defs>`;
+  let s=`<svg viewBox="0 0 ${w} ${h}" style="max-height:${Math.max(h,100)*1.3}px;min-width:${Math.min(w,1000)*0.66}px"><defs><marker id="ar" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0L9,4.5L0,9z" fill="#8a94a6"/></marker></defs>`;
   nodes.forEach(n=>{if(n.id>=reveal)return;n.deps.forEach(dp=>{
     const a=nodes[dp.parent],k=a.id+'>'+n.id;
     const cls=`edge ${dp.kind==='shuffle'?'shuf':''} ${o.edgeWalk&&o.edgeWalk.has(k)?'walk':''} ${o.edgeFound&&o.edgeFound.has(k)?'found':''}`;
     const x1=a.x+W,y1=a.y+H/2,x2=n.x,y2=n.y+H/2;
     s+=`<path class="${cls}" d="M${x1},${y1} C${x1+28},${y1} ${x2-28},${y2} ${x2},${y2}" marker-end="url(#ar)"/>`;
-    if(dp.kind==='shuffle')s+=`<text x="${(x1+x2)/2}" y="${(y1+y2)/2-8}" text-anchor="middle" style="fill:var(--bad);font-size:11px;font-weight:700;paint-order:stroke;stroke:var(--card);stroke-width:4px">⚡shuffle</text>`;
+    if(dp.kind==='shuffle')s+=`<text x="${(x1+x2)/2}" y="${(y1+y2)/2-8}" text-anchor="middle" style="fill:var(--bad);font-size:11px;font-weight:700;paint-order:stroke;stroke:var(--card);stroke-width:4px">shuffle</text>`;
   })});
   nodes.forEach(n=>{
     if(n.id>=reveal)return;
@@ -659,7 +647,7 @@ function dagSVG(nodes,o={}){
       <text class="s2" x="${n.x+9}" y="${n.y+54}">${n.parts} partitions</text>
       <text x="${n.x+9}" y="${n.y+67}" style="font-size:10.5px;font-weight:700">${st!=null?'Stage '+st:''}</text></g>`;
   });
-  return s+'</svg>';
+  return s+'</svg><div class="swipehint">&larr; swipe the diagram &rarr;</div>';
 }
 
 /* =========================================================
@@ -723,11 +711,11 @@ function replayPlan(upto){
       case'look':ui.cur=e.rdd;break;
       case'skip':ui.cap={t:`${nm(e.rdd)} already seen: not visited twice.`};break;
       case'keep':ui.walk.add(e.parent+'>'+e.child);ui.cap={t:`${nm(e.child)} ← ${nm(e.parent)} is <b>narrow</b>: same stage, keep walking.`};break;
-      case'cut':ui.found.add(e.parent+'>'+e.child);ui.cap={k:'cut',t:`⚡ ${nm(e.child)} ← ${nm(e.parent)} is a <b>shuffle</b>. Cut here: ${nm(e.parent)} and what is before it is a different stage.`};break;
+      case'cut':ui.found.add(e.parent+'>'+e.child);ui.cap={k:'cut',t:`${nm(e.child)} ← ${nm(e.parent)} is a <b>shuffle</b>. Cut here: ${nm(e.parent)} and what is before it is a different stage.`};break;
       case'make':ui.cur=null;ui.cards.push(e.stage);e.stage.members.forEach(m=>ui.stageOf.set(m,e.stage.id));
         ui.cap={k:'make',t:`Create <b>Stage ${e.stage.id}</b> (${e.stage.kind==='result'?'ResultStage':'ShuffleMapStage'}) with ${e.stage.members.slice().sort((a,b)=>a-b).map(i=>'#'+i).join(', ')}. TaskSetTemplate: ${e.stage.parts} partitions.`};break;
       case'reuse':ui.cur=null;ui.cap={k:'make',t:`Stage ${e.stage.id} reused.`};break;
-      case'done':ui.cur=null;ui.cap={k:'make',t:`✅ JobPlan ready: ${e.order.map(s=>'Stage '+s).join(' → ')}. 0 tasks launched, 0 closures called.`};break;
+      case'done':ui.cur=null;ui.cap={k:'make',t:`JobPlan ready: ${e.order.map(s=>'Stage '+s).join(' → ')}. 0 tasks launched, 0 closures called.`};break;
     }}
   return ui;
 }
@@ -741,9 +729,9 @@ function draw3(p){
 
 /* PHASE 4: SCHEDULE (Gantt) */
 function draw4(p){
-  const sim=S.sim,T=sim.makespan*p,mk=sim.makespan||1,X0=70,XW=800,rowH=36,H=sim.execs.length*rowH+40;
+  const sim=S.sim,T=sim.makespan*p,mk=sim.makespan||1,X0=40,XW=580,rowH=36,H=sim.execs.length*rowH+40;
   const xs=t=>X0+t/mk*XW;
-  let s=`<svg viewBox="0 0 900 ${H}" style="max-height:${H+20}px"><defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="6" fill="#d64545" opacity=".55"/></pattern></defs>`;
+  let s=`<svg viewBox="0 0 640 ${H}" style="max-height:${H+20}px;min-width:520px"><defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="6" fill="#d64545" opacity=".55"/></pattern></defs>`;
   sim.execs.forEach((e,i)=>{s+=`<text x="6" y="${20+i*rowH+18}" font-weight="700">${e}</text><line x1="${X0}" x2="${X0+XW}" y1="${20+i*rowH+rowH-2}" y2="${20+i*rowH+rowH-2}" stroke="var(--line)"/>`});
   for(let i=0;i<=5;i++){const t=mk*i/5;s+=`<text x="${xs(t)}" y="12" text-anchor="middle" style="fill:var(--mut);font-size:10px">${Math.round(t)}ms</text>`}
   sim.segs.forEach(g=>{
@@ -754,8 +742,8 @@ function draw4(p){
     if(g.lost&&fin)s+=`<rect x="${x}" y="${y}" width="${w}" height="${rowH-10}" rx="5" fill="url(#hatch)"/>`;
     if(w>38)s+=`<text x="${x+5}" y="${y+16}" style="font-size:10.5px;fill:${g.status==='failed'?'#fff':'var(--ink)'}">S${g.stage}.p${g.part}${g.attempt>1?' a'+g.attempt:''}${g.status==='failed'&&fin?' ✕':''}${g.lost&&fin?' ⟲':''}</text>`;
   });
-  sim.events.filter(e=>e.type==='executor-lost'&&e.t<=T).forEach(e=>{const i=sim.execs.indexOf(e.exec);s+=`<text x="${xs(e.t)}" y="${20+i*rowH+rowH-8}" style="fill:var(--bad)">☠ lost</text>`});
-  s+=`<line x1="${xs(T)}" x2="${xs(T)}" y1="16" y2="${H-4}" stroke="var(--acc)" stroke-width="2"/></svg>`;
+  sim.events.filter(e=>e.type==='executor-lost'&&e.t<=T).forEach(e=>{const i=sim.execs.indexOf(e.exec);s+=`<text x="${xs(e.t)}" y="${20+i*rowH+rowH-8}" style="fill:var(--bad)">✕ lost</text>`});
+  s+=`<line x1="${xs(T)}" x2="${xs(T)}" y1="16" y2="${H-4}" stroke="var(--acc)" stroke-width="2"/></svg><div class="swipehint">&larr; swipe the diagram &rarr;</div>`;
   const cur_=sim.events.filter(e=>e.t<=T);
   const f=foldEvents(sim.events,cur_.length);
   const stg=S.plan.stages.map(st=>`<span class="chip" style="background:${pc(st.id)}">Stage ${st.id}: ${st.kind==='result'?'ResultStage':'ShuffleMapStage'} · ${S.sim.events.find(e=>e.type==='stage-submitted'&&e.stage===st.id).tasks} tasks</span>`).join(' ');
@@ -797,17 +785,17 @@ function draw5(p){
 /* PHASE 6: SHUFFLE */
 function draw6(p){
   const c=S.comp;
-  if(!c.isAgg)return`<div class="box">The plan has <b>no shuffle</b> (only narrow dependencies), so this phase is skipped. Switch the job to “Group &amp; aggregate” to see it.</div>`;
+  if(!c.isAgg)return`<div class="box">The plan has <b>no shuffle</b> (only narrow dependencies), so there is nothing to shuffle. Switch <b>Job</b> (knob above) to “Group &amp; aggregate” to see it.</div>`;
   const P=c.mapTasks.length,R0=S.cfg.R0,R1=c.R1;
   const a=Math.min(1,p/0.35),b=Math.max(0,Math.min(1,(p-0.35)/0.35)),d=Math.max(0,Math.min(1,(p-0.7)/0.3));
-  const rowH=64,H=Math.max(P,R1)*rowH+10,mx=10,rx=700;
-  let s=`<svg viewBox="0 0 900 ${H}" style="max-height:${H+10}px">`;
+  const rowH=64,H=Math.max(P,R1)*rowH+10,mx=10,rx=400;
+  let s=`<svg viewBox="0 0 600 ${H}" style="max-height:${H+10}px;min-width:480px">`;
   const mid=i=>10+i*rowH+26,rid=g=>10+g*rowH+26,maxCnt=Math.max(1,...c.mapTasks.flatMap(t=>t.shards.map(x=>x.length)));
   const groupOf=dd=>c.groups.findIndex(g=>g.includes(dd));
   c.mapTasks.forEach(t=>t.shards.forEach((sh,dd)=>{
     if(!sh.length)return;const gi=groupOf(dd),show=b>0||(a>=1);
-    const op=(a>=(t.index+1)/P)?1:0;if(!op)return;
-    s+=`<path class="${b>0&&b<1?'flow':''}" d="M${mx+190},${mid(t.index)} C${mx+330},${mid(t.index)} ${rx-140},${rid(gi)} ${rx},${rid(gi)}" fill="none" stroke="${tc(dd)}" stroke-width="${1+3*sh.length/maxCnt}" opacity=".75"><title>map p${t.index} → reduce partition ${dd}: ${sh.length} records</title></path>`;
+    const op=(a>=(t.index+1)/P)?1:0;
+    s+=`<path style="opacity:${op}" class="${b>0&&b<1?'flow':''}" d="M${mx+190},${mid(t.index)} C${mx+270},${mid(t.index)} ${rx-80},${rid(gi)} ${rx},${rid(gi)}" fill="none" stroke="${tc(dd)}" stroke-width="${1+3*sh.length/maxCnt}" opacity=".75"><title>map p${t.index} → reduce partition ${dd}: ${sh.length} records</title></path>`;
   }));
   c.mapTasks.forEach(t=>{
     const on=a>=(t.index+1)/P;
@@ -823,7 +811,7 @@ function draw6(p){
       <text x="${rx+8}" y="${10+gi*rowH+32}" style="font-size:10.5px">partitions {${t.dests.join(',')}} · ${t.recsRead} records</text>
       <text x="${rx+8}" y="${10+gi*rowH+45}" style="font-size:10.5px">${d>0?`→ ${t.out.length} keys`:''}</text></g>`;
   });
-  s+='</svg>';
+  s+='</svg><div class="swipehint">&larr; swipe the diagram &rarr;</div>';
   const phase=p<0.35?'① map tasks hash each record: dest = floorMod(hashCode(key), R) and write one shard per destination':p<0.7?'② reduce tasks ask the tracker for committed blocks and fetch their shards':'③ reduce: group by key and call the reducer; one value per key';
   const matrix=`<table><tr><th>map ↓ / dest →</th>${Array.from({length:R0},(_,dd)=>`<th class="n" style="background:${pc(dd)}">dest ${dd}</th>`).join('')}<th class="n">written</th><th>block location</th></tr>`+
     c.mapTasks.map(t=>`<tr style="${a>=(t.index+1)/P?'':'opacity:.25'}"><td>map p${t.index}</td>${t.shards.map(sh=>`<td class="n">${sh.length}</td>`).join('')}<td class="n">${t.after}</td><td class="mono">${S.sim.loc[t.index]||'-'}${S.sim.lostInfo&&S.sim.lostInfo.parts.includes(t.index)?' <span class="tag r">recomputed</span>':''}</td></tr>`).join('')+
@@ -906,13 +894,22 @@ const PHASES=[
 /* phase controls */
 function ctlHTML(k){
   const sel=(key,opts,val)=>`<select data-opt="${key}">${opts.map(([v,l])=>`<option value="${v}" ${String(v)===String(val)?'selected':''}>${l}</option>`).join('')}</select>`;
+  const px=(id,opts,val)=>`<select data-proxy="${id}">${opts.map(([v,l])=>`<option value="${v}" ${String(v)===String(val)?'selected':''}>${l}</option>`).join('')}</select>`;
+  const tplK=`<label>Job ${px('#tpl',[['agg','group &amp; aggregate (shuffle)'],['narrow','filter &amp; project (narrow)']],$('#tpl').value)}</label>`;
+  if(k===0)return`<label>Source partitions ${px('#P',[1,2,3,4,5,6].map(x=>[x,x]),$('#P').value)}</label><label>Storage format ${px('#fmt',[['row','row file (CSV / JSONL / JSON)'],['parquet','Parquet (columnar)']],$('#fmt').value==='parquet'?'parquet':'row')}</label>`;
+  if(k===1||k===2||k===4)return tplK;
   if(k===3)return`<label>Executors ${sel('W',[1,2,3,4].map(x=>[x,x]),OPT.W)}</label><label>Failure injection ${sel('fail',[['none','none'],['task','a task fails once → retry'],['executor','executor lost (map outputs invalidated)']],OPT.fail)}</label>`;
-  if(k===5)return`<label>Shuffle partitions R ${sel('R0',[1,2,3,4,5,6].map(x=>[x,x]),OPT.R0)}</label><label><input type="checkbox" data-opt="combine" ${OPT.combine?'checked':''}> map-side combine</label><label><input type="checkbox" data-opt="aqe" ${OPT.aqe?'checked':''}> AQE coalesce</label><label>Memory budget ${sel('budget',[[0,'unlimited'],[2,'2 records'],[3,'3 records'],[5,'5 records']],OPT.budget)}</label>`;
-  if(k===6)return`<span class="note">Change <b>Action</b> in the job panel above, or the <b>Shuffle partitions</b> in phase 6.</span>`;
+  if(k===5)return($('#tpl').value==='narrow'?tplK:'')+`<label>Shuffle partitions R ${sel('R0',[1,2,3,4,5,6].map(x=>[x,x]),OPT.R0)}</label><label><input type="checkbox" data-opt="combine" ${OPT.combine?'checked':''}> map-side combine</label><label><input type="checkbox" data-opt="aqe" ${OPT.aqe?'checked':''}> AQE coalesce</label><label>Memory budget ${sel('budget',[[0,'unlimited'],[2,'2 records'],[3,'3 records'],[5,'5 records']],OPT.budget)}</label>`;
+  if(k===6)return`<label>Action ${px('#act',[['Count','count'],['Collect','collect'],['WriteJSONLines','writeJSONLines']],$('#act').value)}</label>${tplK}`;
+  if(k===7)return`<label>Failure injection ${sel('fail',[['none','none'],['task','a task fails once → retry'],['executor','executor lost (map outputs invalidated)']],OPT.fail)}</label>`;
   return'';
 }
 function setCtl(k){$('#phCtl').innerHTML=ctlHTML(k)}
 $('#phCtl').addEventListener('change',e=>{
+  const x=e.target.closest('[data-proxy]');
+  if(x){const id=x.dataset.proxy,tg=$(id);stopAll();
+    if(id==='#fmt'){tg.value=x.value==='parquet'?'parquet':'auto';refresh(true,false);return}
+    tg.value=x.value;if(id==='#P')$('#Pv').textContent=x.value;refresh(false);return}
   const t=e.target.closest('[data-opt]');if(!t)return;const key=t.dataset.opt;
   OPT[key]=t.type==='checkbox'?t.checked:(key==='fail'?t.value:+t.value);
   refresh(false);
@@ -921,39 +918,6 @@ $('#phCtl').addEventListener('change',e=>{
 /* =========================================================
    RENDER / WIRING
    ========================================================= */
-function renderNav(){
-  $('#nav').innerHTML=PHASES.map((ph,i)=>`<div class="nv ${i===cur?'act':''} ${i<cur?'done':''}" data-ph="${i}"><b>${i+1}. ${ph.t}</b><small>${ph.s} · ${ph.f}</small></div>`).join('');
-}
-function showPhase(k,p=1){
-  cur=k;renderNav();ovRender();
-  const ph=PHASES[k];$('#blurb').innerHTML=`${ph.b}<div class="ft">Reimplementation features: ${ph.f}</div>`;
-  setCtl(k);
-  paintView(p);
-  $('#prev').disabled=k===0;$('#nextB').disabled=k===PHASES.length-1;
-}
-function paintView(p=1){
-  if(!S||S.error){$('#phView').innerHTML=`<div class="box bad">${esc(S?S.error:'')}</div>`;return}
-  $('#phView').innerHTML=PHASES[cur].draw(p);
-}
-$('#nav').onclick=e=>{const n=e.target.closest('[data-ph]');if(!n)return;stopAll();showPhase(+n.dataset.ph)};
-$('#prev').onclick=()=>{stopAll();showPhase(Math.max(0,cur-1))};
-$('#nextB').onclick=()=>{stopAll();showPhase(Math.min(PHASES.length-1,cur+1))};
-$('#anim').onclick=()=>{stopAll();animate(p=>paintView(p),PHASES[cur].dur)};
-function stopAll(){gen++;playingAll=false;paused=false;$('#pauseBtn').disabled=true;$('#pauseBtn').textContent='⏸ Pause';$('#playAll').textContent='▶ Play all 8 phases'}
-$('#playAll').onclick=async()=>{
-  if(!S||S.error)return;
-  stopAll();playingAll=true;$('#pauseBtn').disabled=false;
-  const myGen=gen+1;
-  for(let k=0;k<PHASES.length;k++){
-    showPhase(k,0);
-    const ok=await animate(p=>paintView(p),PHASES[k].dur);
-    if(!ok)return;
-    await sleep(500);if(gen!==myGen&&!playingAll)return;
-  }
-  playingAll=false;$('#pauseBtn').disabled=true;
-};
-$('#pauseBtn').onclick=()=>{paused=!paused;$('#pauseBtn').textContent=paused?'▶ Resume':'⏸ Pause'};
-$('#speed').oninput=e=>{speed=+e.target.value;$('#speedV').textContent=speed+'×'};
 $('#phView').addEventListener('click',e=>{
   const a=e.target.closest('[data-act]');if(!a)return;
   if(a.dataset.act==='tab8'){tab8=a.dataset.t;paintView(1)}
@@ -989,12 +953,22 @@ function onData(auto){
   }
   syncJobUI();
 }
+function jobCode(){
+  const el=$('#jobLine');if(!el)return;const c=cfg(),r=S&&S.read;
+  const fm=c.fmt==='parquet'?'parquet':(r&&r.pf)||c.fmt,file='input.'+(fm==='parquet'?'parquet':fm==='jsonl'?'jsonl':fm==='json'?'json':'csv');
+  const L=[`rdd = read("${file}", partitions = ${c.P})`];
+  if(c.pred)L.push(`  .filter(row -> row.${c.pred.col} ${c.pred.op==='='?'==':c.pred.op} ${isNaN(Number(c.pred.val))?JSON.stringify(c.pred.val):c.pred.val})`);
+  if(c.template==='agg'){L.push(`  .map(row -> (row.${c.key}, ${c.agg==='sum'?'row.'+c.valCol:'1'}))`);L.push(`  .reduceByKey((a, b) -> a + b, partitions = ${c.R0})`)}
+  else L.push(`  .map(row -> select(${(r&&!r.error?neededCols({...c,pred:null},r.columns):c.proj).join(', ')}))`);
+  L.push(`result = rdd.${c.action==='Count'?'count()':c.action==='Collect'?'collect()':'writeJSONLines("output/")'}`);
+  el.textContent=L.join('\n');
+}
 function syncJobUI(){$('#aggBox').style.display=$('#tpl').value==='agg'?'':'none';$('#projBox').style.display=$('#tpl').value==='narrow'?'':'none'}
 let timer=null;
 function refresh(dataChanged,auto){
   if(dataChanged)onData(auto);
   syncJobUI();planBounds=null;
-  S=build();
+  S=build();jobCode();
   showPhase(cur);
   refreshDeep();
 }
@@ -1008,7 +982,7 @@ $('#file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileR
 /* =========================================================
    DEEP DIVES
    ========================================================= */
-const D={cache:null,dd6step:0};
+const D={cache:null,dd6step:0,d3gen:0};
 function pairsForDD(){
   if(!S||S.error)return[];
   const c=S.cfg,rows=S.read.allRows,cols=S.read.columns;
@@ -1078,10 +1052,10 @@ function dd3(){
       h+=`<div class="note" style="margin:8px 0 4px">② k-way merge with fan-in ${F}: ${runs.length} run(s) → ${passes} pass(es)${passes?' ('+log.join(', ')+')':''}</div><div class="chips">${merged.slice(0,shown).map(k=>`<span class="chip" style="border-color:var(--ok)">${esc(k)}</span>`).join('')}</div>`;
       if(p>=1)h+=`<div class="note">Spilled runs: <b>${runs.length}</b> · output equals in-memory sort ${J(merged)===J(expect)?'<span class="ok">✔</span>':'<span class="bad">✘</span>'}. Spill files are never visible as final output; they are deleted only after a verified merge.</div>`;
     }
-    el.querySelector('#d3out').innerHTML=h;
+    Lab.morph(el.querySelector('#d3out'),h);
   };
   el.querySelector('#d3b').oninput=()=>draw(1);el.querySelector('#d3f').oninput=()=>draw(1);
-  el.querySelector('#d3a').onclick=()=>animate(draw,5000);draw(1);
+  el.querySelector('#d3a').onclick=()=>{const g0=++D.d3gen;let t0=null;const f=now=>{if(g0!==D.d3gen)return;if(t0===null)t0=now;const p=Math.min(1,(now-t0)/5000);draw(p);if(p<1)requestAnimationFrame(f)};requestAnimationFrame(f)};draw(1);
 }
 
 /* DD4 */
@@ -1104,7 +1078,7 @@ function dd4(){
         ${bh?`<path class="flow" d="M130,115 C300,115 300,40 420,40" fill="none" stroke="var(--acc)" stroke-width="3"/><text x="260" y="95" style="fill:var(--acc)">broadcast index</text><path d="M130,35 L420,35" stroke="var(--ok)" stroke-width="3" fill="none"/><text x="200" y="28" style="fill:var(--ok)">stays local (no shuffle)</text>`
         :`<rect x="250" y="40" width="80" height="60" rx="8" fill="var(--p5)" stroke="var(--bad)"/><text x="262" y="75">Exchange</text><path class="flow" d="M130,35 C190,35 200,60 250,65" fill="none" stroke="var(--bad)" stroke-width="3"/><path class="flow" d="M130,115 C190,115 200,85 250,85" fill="none" stroke="var(--bad)" stroke-width="2"/><path class="flow" d="M330,70 L420,45" fill="none" stroke="var(--bad)" stroke-width="3"/>${s==='SortMergeJoin'?'<text x="262" y="92" style="font-size:10px">+ sort</text>':'<text x="262" y="92" style="font-size:10px">+ hash</text>'}`}
         <rect x="420" y="15" width="150" height="55" rx="8" fill="var(--p2)" stroke="var(--line)"/><text x="430" y="40">${s.replace('Join','')}</text><text x="430" y="57" style="fill:var(--mut)">joined output</text></svg>`};
-    g('#d4out').innerHTML=`<div class="grid" style="grid-template-columns:1fr 1fr"><div class="box"><b>Initial plan (estimates)</b><div class="big" style="font-size:20px;margin:4px 0">${init}</div><div class="note">${need[init]}</div>${diag(init)}<div class="chips"><span class="chip">shuffled records ≈ ${shuffled(init)}</span></div></div>
+    g('#d4out').innerHTML=`<div class="g2"><div class="box"><b>Initial plan (estimates)</b><div class="big" style="font-size:20px;margin:4px 0">${init}</div><div class="note">${need[init]}</div>${diag(init)}<div class="chips"><span class="chip">shuffled records ≈ ${shuffled(init)}</span></div></div>
       <div class="box"><b>After runtime stats (AQE)</b><div class="big" style="font-size:20px;margin:4px 0">${fin}${replanned?' <span class="tag g">replanned</span>':''}</div><div class="note">${replanned?`Completed map stage reports only ${a} rows (≤ ${t}). The not-yet-started join stage is replaced with a broadcast join: avoids shuffling ~${saved} large-side rows.`:'No safe adaptive improvement: keep the original strategy (AQE never mutates already running work).'}</div>${diag(fin)}</div></div>
       ${sk?`<div class="note"><b class="bad">Skew detected:</b> one shuffle partition is far above the median. For an eligible inner join AQE splits it into sub-partitions and replicates the matching build rows; otherwise it falls back safely.</div>`:''}
       <div class="note">Every strategy declares its distribution/ordering requirements; unmet requirements become Exchange operators (which are stage boundaries).</div>`;
@@ -1156,13 +1130,13 @@ function dd6(){
     t:[isAgg?`Aggregate [${c.key}#${id(c.key)}], [${c.key}#${id(c.key)}, ${aggS.replace(c.valCol,c.valCol+'#'+id(c.valCol))}]`:`Project [${sel.map(x=>x+'#'+id(x)).join(', ')}]`,...(pred?[`+- Filter (${c.pred.col}#${id(c.pred.col)} ${c.pred.op} ${c.pred.val})`]:[]),`   +- Relation [${cols.map(x=>x+'#'+id(x)).join(', ')}] ${S.read.label}`]},
    {n:'3 · Optimized logical plan',note:`Rule batches run to a fixed point. Applied: ColumnPruning (read only ${need.join(', ')})${pred?`, PushDownPredicate (${col?'into the Parquet scan':'filter stays above a row-file scan: nothing to skip'})`:''}, CollapseProject.`,
     t:[isAgg?`Aggregate [${c.key}], [${c.key}, ${aggS}]`:`Project [${sel.join(', ')}]`,...(pred&&!col?[`+- Filter (${pred})`]:[]),`   +- Relation [${need.join(', ')}] ${S.read.label}${pred&&col?`  PushedFilters: [${c.pred.col} ${c.pred.op} ${c.pred.val}]`:''}`]},
-   {n:'4 · Physical plan',note:`Physical operators declare required distribution. HashAggregate needs rows clustered by key, so an <b>Exchange</b> is inserted: that is the ShuffleDependency and the stage boundary from phase 3.`,
+   {n:'4 · Physical plan',note:`Physical operators declare required distribution. HashAggregate needs rows clustered by key, so an <b>Exchange</b> is inserted: that is the ShuffleDependency and the stage boundary from chapter 3.`,
     t:isAgg?[`HashAggregate(keys=[${c.key}], functions=[${aggS}])        ← ResultStage (reduce)`,`+- Exchange hashpartitioning(${c.key}, ${c.R0})          ← shuffle = stage cut`,`   +- HashAggregate(keys=[${c.key}], functions=[partial_${aggS}])   ← map-side combine`,...(pred&&!col?[`      +- Filter (${pred})`]:[]),`      +- Scan ${col?'parquet':S.read.pf} [${need.join(', ')}]${pred&&col?` PushedFilters:[${pred}] + residual Filter`:''}   ← source RDD`]
      :[`Project [${sel.join(', ')}]                    ← narrow Map`,...(pred?[`+- Filter (${pred})                       ← narrow Filter`]:[]),`   +- Scan ${col?'parquet':S.read.pf} [${need.join(', ')}]   ← source RDD`]}
   ];
   const st=Math.min(D.dd6step,plans.length-1);
   el.innerHTML=`<div class="bar">${plans.map((p,i)=>`<button data-s="${i}" class="${i===st?'on':''}">${p.n}</button>`).join('')}</div><pre>${esc(plans[st].t.join('\n'))}</pre><div class="note">${plans[st].note}</div>
-    <div class="note">A DataFrame is schema + logical plan with expression trees (no opaque closures), which is what makes rules like pruning and pushdown possible. The RDD engine underneath is exactly what phases 1–8 just ran.</div>`;
+    <div class="note">A DataFrame is schema + logical plan with expression trees (no opaque closures), which is what makes rules like pruning and pushdown possible. The RDD engine underneath is exactly what chapters 1–8 just ran.</div>`;
   el.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{D.dd6step=+b.dataset.s;dd6()});
 }
 
@@ -1189,62 +1163,6 @@ function dd7(){
    ARCHITECTURE OVERVIEW (components + relationships)
    ========================================================= */
 const OVS={"w": 1000, "h": 400, "groups": [{"x": 185, "y": 50, "w": 590, "h": 130, "label": "Driver"}, {"x": 790, "y": 50, "w": 200, "h": 340, "label": "Executors"}], "nodes": [{"id": "source", "x": 10, "y": 85, "w": 150, "h": 64, "label": "Source file", "sub": "CSV \u00b7 JSON \u00b7 Parquet", "desc": "Files are cut into partitions: byte ranges for row files, row groups for columnar files.", "phase": 0}, {"id": "lineage", "x": 205, "y": 85, "w": 150, "h": 64, "label": "RDD lineage", "sub": "lazy, immutable", "desc": "Each transformation creates a child RDD that remembers its parent and a closure. Nothing runs yet.", "phase": 1}, {"id": "planner", "x": 395, "y": 85, "w": 150, "h": 64, "label": "DAGScheduler", "sub": "stages at shuffles", "desc": "On an action, walks the lineage backward and cuts stages at shuffle dependencies.", "phase": 2}, {"id": "sched", "x": 585, "y": 85, "w": 170, "h": 64, "label": "Task scheduler", "sub": "tasks \u00b7 retries \u00b7 slots", "desc": "Turns each stage into one task per partition and runs them with a bounded number of slots, retrying failures.", "phase": 3}, {"id": "narrow", "x": 815, "y": 85, "w": 150, "h": 64, "label": "Narrow tasks", "sub": "filter \u2192 map", "desc": "A task reads one partition and streams rows through the fused narrow closures.", "phase": 4}, {"id": "shuffle", "x": 815, "y": 215, "w": 150, "h": 64, "label": "Shuffle", "sub": "hash \u2192 reduce", "desc": "Map tasks hash keys into shards; reduce tasks fetch their shards and combine values per key.", "phase": 5}, {"id": "action", "x": 585, "y": 300, "w": 170, "h": 64, "label": "Action result", "sub": "count \u00b7 collect \u00b7 write", "desc": "Merges task results deterministically, or writes outputs atomically.", "phase": 6}, {"id": "events", "x": 290, "y": 300, "w": 170, "h": 64, "label": "Events & explain", "sub": "job summary", "desc": "Every lifecycle change is an ordered event; the summary is folded from them.", "phase": 7}], "edges": [{"from": "source", "to": "lineage", "label": "partitions", "kind": "data"}, {"from": "lineage", "to": "planner", "label": "dependencies", "kind": "ctl"}, {"from": "planner", "to": "sched", "label": "stages \u2192 task sets", "kind": "ctl"}, {"from": "sched", "to": "narrow", "label": "launch tasks", "kind": "ctl"}, {"from": "source", "to": "narrow", "label": "read one partition", "kind": "data", "bend": -95}, {"from": "narrow", "to": "shuffle", "label": "map output shards", "kind": "data"}, {"from": "shuffle", "to": "action", "label": "reduced rows", "kind": "data"}, {"from": "narrow", "to": "action", "label": "narrow-only result", "kind": "data"}, {"from": "sched", "to": "events", "label": "lifecycle events", "kind": "async"}, {"from": "action", "to": "events", "label": "terminal status", "kind": "async"}], "flow": [{"n": "source", "t": "The file is cut into partitions."}, {"n": "lineage", "t": "Transformations build a lazy lineage; nothing is read yet."}, {"n": "planner", "t": "An action walks the lineage backward and cuts stages at shuffles."}, {"n": "sched", "t": "Each stage becomes a task set: one task per partition."}, {"n": "narrow", "t": "Tasks stream their partition through filter and map."}, {"n": "shuffle", "t": "A shuffle regroups records by key."}, {"n": "action", "t": "The action merges the task results."}, {"n": "events", "t": "Events summarize the whole job."}]};
-const OVN=Object.fromEntries(OVS.nodes.map(n=>[n.id,n]));
-const OV={sel:null,k:-1};
-function ovAnchor(n,tx,ty){const cx=n.x+n.w/2,cy=n.y+n.h/2,dx=tx-cx,dy=ty-cy;if(!dx&&!dy)return[cx,cy];const s=Math.min((n.w/2)/Math.abs(dx||1e-9),(n.h/2)/Math.abs(dy||1e-9));return[cx+dx*s,cy+dy*s]}
-function ovGeom(e){
-  const a=OVN[e.from],b=OVN[e.to],ca=[a.x+a.w/2,a.y+a.h/2],cb=[b.x+b.w/2,b.y+b.h/2];let c=null;
-  if(e.bend){const mx=(ca[0]+cb[0])/2,my=(ca[1]+cb[1])/2,dx=cb[0]-ca[0],dy=cb[1]-ca[1],L=Math.hypot(dx,dy)||1;c=[mx-dy/L*e.bend,my+dx/L*e.bend]}
-  const p0=ovAnchor(a,...(c||cb)),p1=ovAnchor(b,...(c||ca));
-  const mid=c?[0.25*p0[0]+0.5*c[0]+0.25*p1[0],0.25*p0[1]+0.5*c[1]+0.25*p1[1]]:[(p0[0]+p1[0])/2,(p0[1]+p1[1])/2];
-  return{p0,p1,c,mid};
-}
-function ovRender(){
-  const el=document.getElementById('ovView');if(!el)return;
-  const flow=OVS.flow,k=OV.k,act=new Set(),actE=new Set();
-  if(k>=0){for(let i=0;i<=Math.min(k,flow.length-1);i++)act.add(flow[i].n);for(let i=1;i<=k&&i<flow.length;i++){actE.add(flow[i-1].n+'>'+flow[i].n);actE.add(flow[i].n+'>'+flow[i-1].n)}}
-  const sel=OV.sel,rel=new Set();if(sel){rel.add(sel);OVS.edges.forEach(e=>{if(e.from===sel)rel.add(e.to);if(e.to===sel)rel.add(e.from)})}
-  const curPh=typeof cur==='number'?cur:-1;
-  let s=`<svg viewBox="0 0 ${OVS.w} ${OVS.h}" style="max-height:${OVS.h*1.1}px"><defs><marker id="ovar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="#8a94a6"/></marker><marker id="ovara" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="var(--acc)"/></marker></defs>`;
-  (OVS.groups||[]).forEach(g=>{s+=`<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${g.x+12}" y="${g.y+17}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${esc(g.label)}</text>`});
-  OVS.edges.forEach(e=>{
-    const g=ovGeom(e),on=actE.has(e.from+'>'+e.to),dim=sel&&!(e.from===sel||e.to===sel),hl=sel&&(e.from===sel||e.to===sel);
-    const d=g.c?`M${g.p0[0]},${g.p0[1]} Q${g.c[0]},${g.c[1]} ${g.p1[0]},${g.p1[1]}`:`M${g.p0[0]},${g.p0[1]} L${g.p1[0]},${g.p1[1]}`;
-    s+=`<g style="${dim?'opacity:.2':''}"><path d="${d}" class="ove ${e.kind||'data'} ${on||hl?'act':''}" marker-end="url(#${on||hl?'ovara':'ovar'})"/>${on?`<path d="${d}" class="ove flow act" style="stroke-width:5;opacity:.5"/>`:''}
-      <text x="${g.mid[0]}" y="${g.mid[1]-5}" text-anchor="middle" style="font-size:10.5px;fill:${hl||on?'var(--acc)':'var(--mut)'};paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(e.label)}</text></g>`;
-  });
-  OVS.nodes.forEach(n=>{
-    const ph=n.phase,cls=['ovn',sel===n.id?'sel':'',ph!==undefined&&ph===curPh?'cur':'',act.has(n.id)?'act':''].join(' '),dim=sel&&!rel.has(n.id);
-    s+=`<g class="${cls}" data-node="${n.id}" style="${dim?'opacity:.3':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${ph!==undefined?pc(ph):'var(--card)'}"/>
-      <text x="${n.x+10}" y="${n.y+22}" font-weight="700" style="font-size:12.5px">${esc(n.label)}</text><text x="${n.x+10}" y="${n.y+40}" style="font-size:10.5px;fill:var(--mut)">${esc(n.sub||'')}</text>
-      ${ph!==undefined?`<text x="${n.x+n.w-8}" y="${n.y+n.h-8}" text-anchor="end" style="font-size:10px;font-weight:700;fill:var(--mut)">phase ${ph+1}</text>`:''}</g>`;
-  });
-  s+='</svg>';
-  el.innerHTML=s;
-  const cap=document.getElementById('ovCap');
-  if(cap)cap.innerHTML=k>=0?`<b>Step ${Math.min(k,flow.length-1)+1}/${flow.length}:</b> ${esc(flow[Math.min(k,flow.length-1)].t)}`:(sel?'':'Click a component to see how it connects to the others.');
-  ovInfo();
-}
-function ovInfo(){
-  const el=document.getElementById('ovInfo');if(!el)return;const sel=OV.sel&&OVN[OV.sel];
-  // phase-to-phase dependencies derived from the edges
-  const pairs=new Map();OVS.edges.forEach(e=>{const a=OVN[e.from].phase,b=OVN[e.to].phase;if(a!==undefined&&b!==undefined&&a!==b){const key=a+'>'+b;if(!pairs.has(key))pairs.set(key,[]);pairs.get(key).push(e.label)}});
-  const dep=[...pairs.entries()].sort((x,y)=>x[0].split('>')[0]-y[0].split('>')[0]).map(([k,l])=>{const[a,b]=k.split('>').map(Number);return`<span class="chip" style="background:${pc(a)}">${a+1}. ${esc(PHASES[a].t)}</span> <span class="mono">→ ${esc(short(l.join(' / '),34))} →</span> <span class="chip" style="background:${pc(b)}">${b+1}. ${esc(PHASES[b].t)}</span>`}).join('<br>');
-  let card='';
-  if(sel){
-    const ins=OVS.edges.filter(e=>e.to===sel.id),outs=OVS.edges.filter(e=>e.from===sel.id);
-    card=`<div class="box" style="margin-top:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="font-size:15px">${esc(sel.label)}</b><span class="note" style="margin:0">${esc(sel.sub||'')}</span>${sel.phase!==undefined?`<button class="primary" data-go="${sel.phase}">Go to phase ${sel.phase+1}: ${esc(PHASES[sel.phase].t)} ›</button>`:''}</div>
-      <div style="margin:6px 0">${esc(sel.desc||'')}</div>
-      <div class="g2"><div><b style="font-size:12px">Receives</b>${ins.map(e=>`<div class="row"><span style="color:var(--mut)">${esc(OVN[e.from].label)}</span> ─ ${esc(e.label)} ▸</div>`).join('')||'<div class="note">nothing: it is where requests enter.</div>'}</div>
-      <div><b style="font-size:12px">Sends</b>${outs.map(e=>`<div class="row">▸ ${esc(e.label)} ─ <span style="color:var(--mut)">${esc(OVN[e.to].label)}</span></div>`).join('')||'<div class="note">nothing: it is an endpoint.</div>'}</div></div></div>`;
-  }
-  el.innerHTML=card+`<details class="dd" style="margin-top:8px"><summary>How the phases depend on each other</summary><div style="line-height:2.1;margin-top:6px">${dep||'<span class="note">no cross-phase edges</span>'}</div></details>`;
-}
-function jumpPhase(k){stopAll();showPhase(k);const t=document.getElementById('phaseSec');if(t&&t.scrollIntoView)t.scrollIntoView({behavior:'smooth',block:'start'})}
-document.getElementById('ovView').addEventListener('click',e=>{const n=e.target.closest('[data-node]');if(n){OV.k=-1;OV.sel=OV.sel===n.dataset.node?null:n.dataset.node;ovRender()}});
-document.getElementById('ovInfo').addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g)jumpPhase(+g.dataset.go)});
-document.getElementById('ovTrace').onclick=()=>{stopAll();OV.sel=null;OV.k=0;animate(p=>{OV.k=Math.min(OVS.flow.length-1,Math.floor(p*OVS.flow.length));ovRender()},OVS.flow.length*1300)};
-document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.sel=null;ovRender()};
 
 /* =========================================================
    INIT
@@ -1252,7 +1170,7 @@ document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.sel=null;ov
 $('#src').value=SAMPLES.orders.text();$('#fmt').value='csv';
 $('#tpl').value='agg';
 onData(true);
-S=build();showPhase(0);refreshDeep();
+S=build();jobCode();showPhase(0);refreshDeep();
 
 /* ================= v2: live simulation, accordion, packets ================= */
 const DETAIL=[
@@ -1329,7 +1247,7 @@ const SIMM={
  settings:[{id:'cache',label:'cache()',opts:['off','on'],def:'on'}],
  menu:[{op:'I',label:'INSERT row (append file)',args:[{n:'key',d:'u1',w:60},{n:'value',d:'alice',w:70}]},{op:'U',label:'UPDATE (rewrite partition)',args:[{n:'key',d:'u1',w:60},{n:'value',d:'alice2',w:70}]},{op:'D',label:'DELETE (filter + rewrite)',args:[{n:'key',d:'u1',w:60}]},{op:'R',label:'SELECT key (1 task)',args:[{n:'key',d:'u1',w:60}]},{op:'A',label:'SCAN all (count)',args:[]},{op:'K',label:'kill executor',args:[{n:'#',d:'1',w:40}]},{op:'H',label:'restart executor',args:[{n:'#',d:'1',w:40}]}],
  scenarios:[
-  {name:'insert → update → delete (files are immutable)',desc:'Spark never edits a file. INSERT writes a new small file; UPDATE and DELETE read the whole partition, transform it, and write a replacement file. Output is staged first and only becomes visible when the driver commits, so readers always see a consistent snapshot. Key uniqueness is not enforced.',acts:['0 I u1 alice','1800 I u2 bob','3600 U u1 alice2','5600 R u1','7400 D u2','9200 A']},
+  {name:'insert, update, delete',desc:'Spark never edits a file. INSERT writes a new small file; UPDATE and DELETE read the whole partition, transform it, and write a replacement file. Output is staged first and only becomes visible when the driver commits, so readers always see a consistent snapshot. Key uniqueness is not enforced.',acts:['0 I u1 alice','1800 I u2 bob','3600 U u1 alice2','5600 R u1','7400 D u2','9200 A']},
   {name:'executor lost mid-job',desc:'Kill an executor while a scan is running. Its in-flight task fails, the driver reschedules it on another executor, and the lost data is recomputed from the immutable source files (lineage). Cached partitions on the dead executor are gone. Try cache off/on.',acts:['0 I u1 a','1500 I u2 b','3000 I u3 c','4500 I u4 d','6000 A','7900 K 1','11500 A']},
  ],
  topo(n){
@@ -1417,148 +1335,9 @@ const SIMM={
  detail(id,st){if(id==='sto')return st.files.flatMap((fs,p)=>fs.length?fs.map(f=>`p${p} ${f.name}: ${f.rows.map(r=>r.k+'='+r.v).join(', ')}`):[`p${p}: (empty)`]).concat(st.stg.map((s,p)=>s?`p${p} STAGED (uncommitted): ${s.length} file(s)`:null).filter(Boolean));return SIMM.lines(id,st)}
 };
 
-/* =========================================================
-   LIVE CLUSTER SIMULATION (shared framework)
-   events on a timeline; packets travel between nodes; state is replayed up to time T
-   ========================================================= */
-function sHash(s){let h=2166136261;s=String(s);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h>>>0}
-const sEsc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const sShort=(s,n)=>{s=String(s);return s.length>n?s.slice(0,n-1)+'…':s};
-const E=(t,d,from,to,msg,kind,fx,cause)=>({t,d,from,to,msg,kind,fx:fx||[],cause:cause||''});
-const SIM={n:0,set:{},run:null,T:0,play:false,sel:null,selNode:null,speed:1,last:null};
-const SIMCOL={write:'#2f6fed',ack:'#1a9b5a',read:'#e25a1c',data:'#e25a1c',repl:'#9b4fd0',ctl:'#6b7280',fail:'#d64545',info:'#c9a400',sched:'#0f9d8a',watch:'#8a6fd0',ctrl:'#6b7280',trunc:'#d64545'};
-function simParse(text){return text.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#')).map(l=>{const p=l.split(/\s+/);return{t:Number(p[0])||0,op:(p[1]||'').toUpperCase(),args:p.slice(2),raw:l}}).sort((a,b)=>a.t-b.t)}
-function simRun(){
-  const acts=simParse(document.getElementById('simAct').value);
-  try{SIM.run=SIMM.run(acts,SIM.n,SIM.set);SIM.run.events.sort((a,b)=>a.t-b.t||a.d-b.d)}catch(e){SIM.run={events:[],end:0,err:e.message};console.error(e)}
-  SIM.end=Math.max(1000,(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0))+600);
-  const sl=document.getElementById('simT');sl.max=SIM.end;if(SIM.T>SIM.end)SIM.T=SIM.end;
-}
-function simStateAt(T){const st=SIMM.init(SIM.n,SIM.set);for(const e of SIM.run.events){if(e.t+e.d<=T)e.fx.forEach(f=>SIMM.apply(st,f))}return st}
-function simDraw(){
-  const svg=document.getElementById('simSvg');if(!svg||!SIM.run)return;
-  const T=SIM.T,topo=SIMM.topo(SIM.n),st=simStateAt(T),byId=Object.fromEntries(topo.nodes.map(n=>[n.id,n]));
-  const W=topo.w||900,H=topo.h||430;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
-  const active=SIM.run.events.filter(e=>e.t<=T&&T<e.t+e.d),recent=SIM.run.events.filter(e=>e.t+e.d<=T&&T-(e.t+e.d)<450);
-  const hot=new Set([...active.flatMap(e=>[e.from,e.to]),...recent.map(e=>e.to)]);
-  let s='<defs><marker id="simar" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0L9,4.5L0,9z" fill="#8a94a6"/></marker></defs>';
-  (topo.zones||[]).forEach(z=>{s+=`<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${z.x+12}" y="${z.y+17}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${sEsc(z.label)}</text>`});
-  topo.edges.forEach(([a,b])=>{const A=byId[a],B=byId[b];if(!A||!B)return;s+=`<line x1="${A.x+A.w/2}" y1="${A.y+A.h/2}" x2="${B.x+B.w/2}" y2="${B.y+B.h/2}" stroke="var(--line)" stroke-width="1.5"/>`});
-  topo.nodes.forEach(n=>{
-    const status=(st.status&&st.status[n.id])||'up',down=status==='down',isHot=hot.has(n.id),sel=SIM.selNode===n.id;
-    const lines=SIMM.lines(n.id,st)||[];
-    s+=`<g class="simn" data-id="${n.id}" style="cursor:pointer;${down?'opacity:.55':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${down?'var(--p5)':n.c||'var(--card)'}" stroke="${sel?'var(--acc)':isHot?'var(--acc2)':'var(--line)'}" stroke-width="${sel||isHot?3.5:1.8}"/>
-      <text x="${n.x+9}" y="${n.y+17}" font-weight="700" style="font-size:12.5px">${sEsc(n.label)}${down?' ✕':''}</text>${n.badge&&(n.label.length*7.6+String(typeof n.badge==='function'?n.badge(st):n.badge).length*5.8<n.w)?`<text x="${n.x+n.w-8}" y="${n.y+17}" text-anchor="end" style="font-size:10px;fill:var(--mut)">${sEsc(typeof n.badge==='function'?n.badge(st):n.badge)}</text>`:''}
-      ${lines.slice(0,Math.floor((n.h-24)/13)).map((l,i)=>`<text x="${n.x+9}" y="${n.y+32+i*13}" style="font-size:10.5px;${/^!/.test(l)?'fill:var(--bad)':''}">${sEsc(sShort(String(l).replace(/^!/,''),Math.floor((n.w-14)/6.3)))}</text>`).join('')}</g>`;
-  });
-  active.forEach(e=>{const A=byId[e.from],B=byId[e.to];if(!A||!B)return;const f=Math.min(1,(T-e.t)/Math.max(1,e.d)),ax=A.x+A.w/2,ay=A.y+A.h/2,bx=B.x+B.w/2,by=B.y+B.h/2;
-    if(e.from===e.to){s+=`<text x="${A.x+A.w/2}" y="${A.y-6}" text-anchor="middle" style="font-size:10.5px;fill:${SIMCOL[e.kind]||'#6b7280'};font-weight:700">${sEsc(sShort(e.msg,30))}</text>`;return}
-    const col=SIMCOL[e.kind]||'#6b7280';s+=`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${col}" stroke-width="2.5" opacity=".35"/><circle cx="${ax+(bx-ax)*f}" cy="${ay+(by-ay)*f}" r="7" fill="${col}" stroke="#fff" stroke-width="1.5"/><text x="${ax+(bx-ax)*f}" y="${ay+(by-ay)*f-11}" text-anchor="middle" style="font-size:10px;fill:${col};font-weight:700;paint-order:stroke;stroke:var(--card);stroke-width:3px">${sEsc(sShort(e.msg,26))}</text>`});
-  svg.innerHTML=s;
-  document.getElementById('simTv').textContent=(T/1000).toFixed(2)+' s / '+(SIM.end/1000).toFixed(1)+' s';
-  document.getElementById('simT').value=T;
-  // log
-  const evs=SIM.run.events,upTo=evs.filter(e=>e.t<=T),lastI=upTo.length-1;
-  document.getElementById('simLog').innerHTML=evs.map((e,i)=>`<div class="simev ${i===lastI?'cur':''} ${e.t>T?'fut':''}" data-i="${i}"><span class="simtag" style="background:${SIMCOL[e.kind]||'#6b7280'}">${sEsc(e.kind)}</span> <span class="mono">${(e.t/1000).toFixed(2)}s</span> ${sEsc(e.from)}${e.from===e.to?'':' → '+sEsc(e.to)}: ${sEsc(e.msg)}</div>`).join('')||'<div class="note">No actions yet.</div>';
-  const cur=document.querySelector('#simLog .cur');if(cur&&SIM.play)cur.scrollIntoView({block:'nearest'});
-  // inspector
-  const insp=document.getElementById('simInsp');
-  if(SIM.selNode){const det=SIMM.detail?SIMM.detail(SIM.selNode,st):SIMM.lines(SIM.selNode,st);insp.innerHTML=`<b>${sEsc(byId[SIM.selNode].label)}</b> at ${(T/1000).toFixed(2)}s<pre>${sEsc((det||[]).join('\n')||'(empty)')}</pre>`}
-  else if(SIM.sel!=null&&evs[SIM.sel]){const e=evs[SIM.sel];insp.innerHTML=`<b>${sEsc(e.msg)}</b><div class="note">${sEsc(e.from)} → ${sEsc(e.to)} · ${(e.t/1000).toFixed(2)}s (+${e.d} ms) · ${sEsc(e.kind)}</div>${e.cause?`<div class="caption" style="margin-top:6px"><b>Why:</b> ${sEsc(e.cause)}</div>`:''}<div class="note">state changes: ${e.fx.length?sEsc(e.fx.map(f=>SIMM.fxText?SIMM.fxText(f):f.op).join('; ')):'none (message only)'}</div>`}
-  else insp.innerHTML='<div class="note">Click a node to inspect its data, or click an event in the log to see why it happened.</div>';
-}
-function simTick(now){
-  if(!SIM.play){SIM.last=null;return}
-  if(SIM.last==null)SIM.last=now;const dt=now-SIM.last;SIM.last=now;SIM.T=Math.min(SIM.end,SIM.T+dt*SIM.speed);simDraw();
-  if(SIM.T>=SIM.end){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}
-  requestAnimationFrame(simTick);
-}
-function simBuildControls(){
-  const m=SIMM,nr=m.nodeRange;
-  const sc=document.getElementById('simScn');sc.innerHTML=m.scenarios.map((s,i)=>`<option value="${i}">${sEsc(s.name)}</option>`).join('');
-  const nn=document.getElementById('simN');nn.innerHTML=Array.from({length:nr[1]-nr[0]+1},(_,i)=>`<option value="${nr[0]+i}" ${nr[0]+i===nr[2]?'selected':''}>${nr[0]+i}</option>`).join('');document.getElementById('simNL').textContent=m.nodeLabel;
-  document.getElementById('simSet').innerHTML=(m.settings||[]).map(s=>`<label>${sEsc(s.label)} <select data-set="${s.id}">${s.opts.map(o=>`<option ${o===s.def?'selected':''}>${sEsc(o)}</option>`).join('')}</select></label>`).join('');
-  SIM.set=Object.fromEntries((m.settings||[]).map(s=>[s.id,s.def]));
-  document.getElementById('simOp').innerHTML=m.menu.map((o,i)=>`<option value="${i}">${sEsc(o.label)}</option>`).join('');
-  simArgs();
-}
-function simArgs(){const o=SIMM.menu[+document.getElementById('simOp').value];document.getElementById('simArgs').innerHTML=o.args.map((a,i)=>`<input type="text" data-a="${i}" value="${sEsc(a.d)}" placeholder="${sEsc(a.n)}" style="width:${a.w||80}px">`).join('')}
-function simLoadScenario(i){const s=SIMM.scenarios[i];document.getElementById('simAct').value=s.acts.join('\n');document.getElementById('simDesc').textContent=s.desc;SIM.T=0;SIM.sel=null;SIM.selNode=null;simRun();simDraw()}
-function simInit(){
-  if(!document.getElementById('simSvg'))return;
-  SIM.n=SIMM.nodeRange[2];simBuildControls();simLoadScenario(0);
-  document.getElementById('simScn').onchange=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simLoadScenario(+e.target.value)};
-  document.getElementById('simN').onchange=e=>{SIM.n=+e.target.value;SIM.T=0;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simRun();simDraw()};
-  document.getElementById('simSet').onchange=e=>{const t=e.target.closest('[data-set]');if(t){SIM.set[t.dataset.set]=t.value;simRun();simDraw()}};
-  document.getElementById('simOp').onchange=simArgs;
-  document.getElementById('simAdd').onclick=()=>{const o=SIMM.menu[+document.getElementById('simOp').value],vals=[...document.querySelectorAll('#simArgs input')].map(i=>i.value.trim()||'-');
-    const ta=document.getElementById('simAct'),t=Math.round(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0)+300);ta.value=(ta.value.trim()?ta.value.trim()+'\n':'')+`${t} ${o.op} ${vals.join(' ')}`.trim();SIM.T=Math.max(0,t-200);simRun();simDraw()};
-  document.getElementById('simAct').onchange=()=>{simRun();simDraw()};
-  document.getElementById('simPlay').onclick=()=>{if(SIM.play){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}if(SIM.T>=SIM.end)SIM.T=0;SIM.play=true;SIM.last=null;document.getElementById('simPlay').textContent='⏸ Pause';requestAnimationFrame(simTick)};
-  document.getElementById('simReset').onclick=()=>{SIM.play=false;SIM.T=0;document.getElementById('simPlay').textContent='▶ Play';simDraw()};
-  document.getElementById('simStep').onclick=()=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const nx=SIM.run.events.find(e=>e.t+e.d>SIM.T+1);SIM.T=nx?nx.t+nx.d:SIM.end;SIM.sel=nx?SIM.run.events.indexOf(nx):null;SIM.selNode=null;simDraw()};
-  document.getElementById('simSpeed').onchange=e=>{SIM.speed=+e.target.value};
-  document.getElementById('simT').oninput=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';SIM.T=+e.target.value;simDraw()};
-  document.getElementById('simLog').onclick=e=>{const d=e.target.closest('.simev');if(!d)return;const i=+d.dataset.i;SIM.sel=i;SIM.selNode=null;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const ev=SIM.run.events[i];SIM.T=ev.t+ev.d;simDraw()};
-  document.getElementById('simSvg').onclick=e=>{const g=e.target.closest('.simn');if(g){SIM.selNode=SIM.selNode===g.dataset.id?null:g.dataset.id;SIM.sel=null;simDraw()}};
-}
+Lab.sim(SIMM);})();
 
-window.simInit=simInit;window.__sim={SIM,simDraw,simRun};})();
-/* ===== overview: packets travelling along the connections ===== */
-(function(){
-const _ovr=ovRender;
-function pt(g,f){if(g.c){const u=1-f;return[u*u*g.p0[0]+2*u*f*g.c[0]+f*f*g.p1[0],u*u*g.p0[1]+2*u*f*g.c[1]+f*f*g.p1[1]]}return[g.p0[0]+(g.p1[0]-g.p0[0])*f,g.p0[1]+(g.p1[1]-g.p0[1])*f]}
-function findEdge(a,b){let e=OVS.edges.find(x=>x.from===a&&x.to===b);if(e)return{e,rev:false};e=OVS.edges.find(x=>x.from===b&&x.to===a);return e?{e,rev:true}:null}
-ovRender=function(){
-  _ovr();
-  if(OV.k<0||OV.kf==null)return;const svg=document.querySelector('#ovView svg');if(!svg)return;
-  const flow=OVS.flow,i=Math.min(flow.length-1,Math.floor(OV.kf)),f=OV.kf-Math.floor(OV.kf);let s='';
-  if(i>=1){const ed=findEdge(flow[i-1].n,flow[i].n);
-    if(ed){const g=ovGeom(ed.e),ff=Math.min(1,f*1.15),q=ed.rev?1-ff:ff;
-      for(let tr=3;tr>=1;tr--){const qq=ed.rev?Math.min(1,q+tr*.06):Math.max(0,q-tr*.06),p2=pt(g,qq);s+=`<circle cx="${p2[0]}" cy="${p2[1]}" r="${7-tr*1.4}" fill="var(--acc2)" opacity="${.5-tr*.12}"/>`}
-      const p=pt(g,q);s+=`<circle cx="${p[0]}" cy="${p[1]}" r="8" fill="var(--acc2)" stroke="#fff" stroke-width="2"/><text x="${p[0]}" y="${p[1]-13}" text-anchor="middle" style="font-size:11px;font-weight:700;fill:var(--acc2);paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(short(flow[i].t,44))}</text>`}}
-  svg.insertAdjacentHTML('beforeend',s);
-};
-const tr=document.getElementById('ovTrace');
-tr.onclick=()=>{stopAll();OV.sel=null;OV.k=0;OV.kf=0;animate(p=>{OV.kf=Math.min(OVS.flow.length-.001,p*OVS.flow.length);OV.k=Math.floor(OV.kf);ovRender()},OVS.flow.length*1500)};
-document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.kf=null;OV.sel=null;ovRender()};
-document.getElementById('ovView').addEventListener('click',e=>{if(e.target.closest('[data-node]'))OV.kf=null},true);
-})();
-
-/* ===== accordion: one drop-down per phase + detail (how / pros / cons / failure modes / watch) ===== */
-(function(){
-const g=id=>document.getElementById(id),esc2=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const sec=g('phaseSec'),nav=g('nav'),barNav=g('prev').parentElement;
-const stage=document.createElement('div');stage.id='stage';
-const det=document.createElement('div');det.id='phDetail';
-stage.append(g('blurb'),g('phCtl'),barNav,g('phView'),det);
-nav.style.display='none';
-const acc=document.createElement('div');acc.id='acc';nav.after(acc);
-acc.innerHTML=PHASES.map((ph,i)=>`<details class="acc" data-i="${i}" style="--pc:var(--p${i%8})"><summary><span class="accn">${i+1}</span><span class="acct"><b>${esc2(ph.t)}</b><small>${esc2(ph.s)}${ph.f?' · '+esc2(ph.f):''}</small></span><span class="accg">${typeof DETAIL!=='undefined'&&DETAIL[i]?'pros · cons · failures':''}</span></summary><div class="accb"></div></details>`).join('');
-const items=[...acc.children];
-function renderDetail(k){
-  const d=typeof DETAIL!=='undefined'&&DETAIL[k];if(!d){det.innerHTML='';return}
-  const li=a=>'<ul>'+a.map(x=>`<li>${esc2(x)}</li>`).join('')+'</ul>';
-  det.innerHTML=`<h3 style="margin-top:16px">Deep dive: ${esc2(PHASES[k].t)}</h3>
-  <details class="dd" open><summary>How it works</summary><div class="ddb">${esc2(d.how)}</div></details>
-  <details class="dd" open><summary>Pros and cons</summary><div class="ddb pc"><div class="pro"><b>✓ Pros</b>${li(d.pros)}</div><div class="con"><b>✗ Cons</b>${li(d.cons)}</div></div></details>
-  <details class="dd"><summary>Failure modes (${d.fails.length})</summary><div class="ddb"><table class="fm"><tr><th>Failure mode</th><th>What you see</th><th>Mitigation</th></tr>${d.fails.map(f=>`<tr><td><b>${esc2(f.m)}</b></td><td>${esc2(f.s)}</td><td>${esc2(f.x)}</td></tr>`).join('')}</table></div></details>
-  <details class="dd"><summary>What to watch</summary><div class="ddb">${li(d.watch)}</div></details>`;
-}
-function place(k){
-  items.forEach((d,i)=>{d.open=i===k});
-  items[k].querySelector('.accb').appendChild(stage);
-}
-const _sp=showPhase;
-showPhase=function(k,p=1){place(k);_sp(k,p);renderDetail(k)};
-acc.addEventListener('click',e=>{const s=e.target.closest('summary');if(!s||!s.parentElement.classList.contains('acc'))return;e.preventDefault();
-  const d=s.parentElement,i=+d.dataset.i;
-  if(d.open){d.open=false;stopAll();return}
-  stopAll();showPhase(i);setTimeout(()=>d.scrollIntoView({behavior:'smooth',block:'start'}),30)});
-window.__accReady=true;
-})();
-
-showPhase(typeof cur==="number"&&cur>=0?cur:0);simInit();
+Lab.start({phases:PHASES,detail:DETAIL,ovs:OVS,ctl:ctlHTML,state:()=>S});
 </script>
 </body>
 </html>

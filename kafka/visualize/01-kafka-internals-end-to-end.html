@@ -4,62 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kafka Internals End-to-End</title>
+<link rel="stylesheet" href="../../assets/lab.css">
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2230;--mut:#667085;--line:#d9dee7;--acc:#231f20;--acc2:#2f6fed;--ok:#1a9b5a;--bad:#d64545;
---p0:#dbe9ff;--p1:#ffe6cf;--p2:#d9f4e3;--p3:#f1defa;--p4:#fff3b8;--p5:#ffd9de;--p6:#d6f2f2;--p7:#e6e6e6;
---t0:#2f6fed;--t1:#e25a1c;--t2:#1a9b5a;--t3:#9b4fd0;--t4:#c9a400;--t5:#d6456b;--t6:#12a1a1;--t7:#6b7280}
-@media(prefers-color-scheme:dark){:root{--bg:#10141c;--card:#181e29;--ink:#e8ecf3;--mut:#93a0b5;--line:#2b3445;--acc:#e8ecf3;--acc2:#6c9bff;--ok:#43c783;--bad:#ff6b6b;
---p0:#1f3556;--p1:#53361c;--p2:#1d4630;--p3:#44274f;--p4:#524a17;--p5:#552630;--p6:#17454a;--p7:#3a3f48}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
-header,main{max-width:1180px;margin:auto;padding:0 16px}
-header{padding-top:24px}
-h1{margin:0 0 4px;font-size:25px}h1 span{color:var(--t1)}
-header p{margin:0;color:var(--mut)}
-section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-top:16px}
-section>h2{margin:0 0 6px;font-size:17px}
-section>h2 em{font-style:normal;background:var(--t1);color:#fff;border-radius:6px;padding:1px 8px;font-size:12px;margin-right:8px;vertical-align:2px}
-h3{font-size:14px;margin:14px 0 6px}
-button,select,input[type=text],textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 10px}
-button{cursor:pointer}button:hover{border-color:var(--t1)}
-button.primary{background:var(--t1);color:#fff;border-color:var(--t1);font-weight:600}
-button.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
-button:disabled{opacity:.45;cursor:default}
-.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
-label{color:var(--mut);font-size:13px}
-.mono,code,pre,textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
-textarea{width:100%;resize:vertical}
-pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;margin:0;max-height:300px}
-.note{font-size:13px;color:var(--mut);margin:6px 0 0}
-.ok{color:var(--ok)}.bad{color:var(--bad)}
-.box{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--bg);min-width:0}
-.chips{display:flex;flex-wrap:wrap;gap:4px}
-.chip{font-family:ui-monospace,monospace;font-size:11.5px;border:1px solid var(--line);border-radius:5px;padding:1px 7px;background:var(--card)}
-.tag{display:inline-block;font-size:10.5px;padding:0 6px;border-radius:5px;background:var(--acc2);color:#fff;margin-left:4px;font-weight:400}
-.tag.r{background:var(--bad)}.tag.g{background:var(--ok)}.tag.o{background:var(--t1)}.tag.m{background:var(--t7)}
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+:root{--acc:#231f20;--acc2:#2f6fed}
+@media(prefers-color-scheme:dark){:root{--acc:#e8ecf3;--acc2:#6c9bff}}
 @media(max-width:820px){.g2{grid-template-columns:1fr}}
-table{border-collapse:collapse;width:100%;font-size:12.5px}td,th{border:1px solid var(--line);padding:3px 7px;text-align:left;vertical-align:top}
-td.n,th.n{text-align:right}
-svg{display:block;width:100%}
-svg text{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;fill:var(--ink)}
-.jobgrid{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:10px}
-.jobgrid>span,.jobgrid>label{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
-.nv{flex:1;min-width:112px;border:1.5px solid var(--line);border-radius:10px;padding:6px 8px;cursor:pointer;background:var(--bg);font-size:12px;line-height:1.3}
-.nv b{display:block;font-size:12.5px}.nv small{color:var(--mut)}
-.nv.act{border-color:var(--t1);background:color-mix(in srgb,var(--t1) 12%,var(--card))}
-.nv.done b::after{content:" ✓";color:var(--ok)}
-.blurb{padding:10px 12px;border-left:5px solid var(--t1);background:var(--bg);border-radius:8px;margin:6px 0 10px;font-size:14px}
-.blurb .ft{color:var(--mut);font-size:12px;margin-top:3px}
-.caption{margin:8px 0;padding:9px 12px;border-radius:8px;background:var(--bg);border-left:5px solid var(--t1);font-size:14.5px;min-height:44px}
-.caption.bad{border-left-color:var(--bad)}.caption.good{border-left-color:var(--ok)}
-.row{display:block;padding:2px 6px;margin:2px 0;border-radius:5px;border:1px solid var(--line);background:var(--bg);font-family:ui-monospace,monospace;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.col{border:1.5px solid var(--line);border-radius:8px;padding:8px;min-width:0}
-.col h4{margin:0 0 6px;font-size:12.5px}
-.big{font-size:28px;font-weight:700}
-.bar2{height:14px;border-radius:4px;display:inline-block;vertical-align:middle}
-.lrow{display:flex;align-items:center;gap:6px;margin:4px 0}.lrow>b{min-width:70px;font-size:12px;color:var(--mut)}
 .rc{display:inline-block;min-width:30px;text-align:center;font-family:ui-monospace,monospace;font-size:10.5px;border:1.5px solid var(--line);border-radius:4px;padding:1px 3px;margin:1px;background:var(--card);vertical-align:top}
 .rc.gone{opacity:.3;text-decoration:line-through}.rc.del{border-color:var(--bad)}.rc.hl{border-color:var(--t1);background:color-mix(in srgb,var(--t1) 20%,var(--card))}
 .rc.dup{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 18%,var(--card))}.rc.ok{border-color:var(--ok)}.rc.ab{opacity:.45;border-style:dashed}.rc.mk{border-color:var(--t3);background:color-mix(in srgb,var(--t3) 20%,var(--card))}
@@ -68,51 +17,27 @@ svg text{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;fill:var(--in
 .seg h5{margin:0 0 3px;font-size:10.5px;color:var(--mut);font-weight:600}
 .le{display:inline-block;min-width:34px;text-align:center;font-family:ui-monospace,monospace;font-size:10.5px;border:1px solid var(--line);border-radius:4px;padding:1px 4px;margin:1px}
 .le.c{border:2px solid var(--ok);font-weight:700}
-.ovn{cursor:pointer}.ovn rect{stroke:var(--line);stroke-width:1.5;transition:opacity .2s}
-.ovn.sel rect{stroke:var(--t1);stroke-width:3.5}.ovn.cur rect{stroke:var(--ink);stroke-width:3}
-.ovn.act rect{stroke:var(--t1);stroke-width:4}
-.ove{fill:none;stroke:#8a94a6;stroke-width:1.8}.ove.ctl{stroke-dasharray:6 4}.ove.async{stroke-dasharray:2 4;stroke:var(--bad)}.ove.act{stroke:var(--t1);stroke-width:3.5}
-@keyframes flow{to{stroke-dashoffset:-20}}.flow{stroke-dasharray:6 4;animation:flow .6s linear infinite}
-.ove.flow{animation:flow .6s linear infinite}
-details.dd{border:1px solid var(--line);border-radius:10px;padding:8px 14px;margin-top:10px;background:var(--bg)}
-details.dd summary{cursor:pointer;font-weight:600}
-.simgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:900px){.simgrid{grid-template-columns:1fr}}.simgrid>div{min-width:0}
-.simlog{max-height:210px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:4px}.simev{font-size:12px;padding:2px 6px;border-radius:5px;cursor:pointer;border:1px solid transparent}.simev:hover{border-color:var(--line)}.simev.cur{background:color-mix(in srgb,var(--acc) 16%,var(--card));border-color:var(--acc)}.simev.fut{opacity:.45}
-.simtag{display:inline-block;color:#fff;font-size:10px;border-radius:4px;padding:0 5px}
-#acc{display:flex;flex-direction:column;gap:8px;margin-top:10px}
-details.acc{border:1px solid var(--line);border-radius:12px;background:var(--bg);overflow:hidden}
-details.acc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 14px;background:color-mix(in srgb,var(--pc) 55%,var(--card))}
-details.acc>summary::-webkit-details-marker{display:none}
-details.acc>summary::after{content:'▾';margin-left:auto;color:var(--mut);transition:transform .15s}
-details.acc:not([open])>summary::after{transform:rotate(-90deg)}
-details.acc[open]{border-color:var(--acc2);box-shadow:0 0 0 1px var(--acc2)}
-.accn{flex:none;width:26px;height:26px;border-radius:50%;background:var(--card);border:2px solid var(--acc2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
-.acct{display:flex;flex-direction:column;min-width:0}.acct small{color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.accg{font-size:11px;color:var(--mut);margin-left:auto;padding-right:6px;white-space:nowrap}@media(max-width:700px){.accg{display:none}}
-.accb{padding:12px 14px;background:var(--card)}
-.ddb{padding:8px 4px 4px;line-height:1.6}.ddb ul{margin:4px 0 0;padding-left:18px}.ddb li{margin:3px 0}
-.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:700px){.pc{grid-template-columns:1fr}}
-.pc .pro,.pc .con{border-radius:8px;padding:8px 12px;background:var(--bg);border-left:4px solid var(--ok)}.pc .con{border-left-color:var(--bad)}
-table.fm{width:100%;border-collapse:collapse;font-size:13px}table.fm th,table.fm td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}table.fm th{background:var(--bg);font-size:12px}
-@media(max-width:700px){table.fm{display:block;overflow-x:auto}}
-
+/* Kafka: --acc is near-black, so give the shared shell a readable brand colour */
+:root{--brand:#cf4b14}
+@media(prefers-color-scheme:dark){:root{--brand:#ff7a3d;--on-brand:#1a1206}}
+/* phone-friendly views: text tables wrap, numbers do not; step rows wrap instead of being cut */
+.view table{white-space:normal}
+.view td.n,.view th.n{white-space:nowrap}
+.view .row{white-space:normal;overflow:visible;text-overflow:clip}
+.tlw{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
+.tlw>svg{min-width:560px}
+.view table.pt{font-size:12px}.view table.pt td,.view table.pt th{padding:3px 5px}
+.rbtns{display:flex;flex-wrap:wrap;gap:6px}
 </style>
 </head>
 <body>
-<header>
-  <h1><span>Kafka</span> Internals · End-to-End</h1>
-  <p>Your records are produced into a real in-browser mini-Kafka: partition logs, key routing, batching, consumer groups, retention and tiers, replication with ISR and high watermark, idempotence, compaction, transactions, reassignment and a metadata quorum.</p>
-</header>
-<main>
-
-<section>
-  <h2><em>1</em>Your events &amp; topic</h2>
-  <div class="bar">
-    <input type="file" id="file" accept=".csv,.json,.jsonl,.ndjson">
-    <button data-sample="orders">Orders CSV</button><button data-sample="clicks">Clickstream JSONL</button><button data-sample="sensors">Sensors CSV</button>
-    <label>Format <select id="fmt"><option value="auto">auto-detect</option><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="json">JSON array</option></select></label>
-  </div>
-  <textarea id="src" rows="4" spellcheck="false"></textarea>
+<div id="dataSlot" hidden>
+<div class="sample-row"><span class="lbl">Every chapter below runs on a stream of events:</span>
+  <button data-sample="orders">Orders (CSV)</button><button data-sample="clicks">Clickstream (JSONL)</button><button data-sample="sensors">Sensors (CSV)</button>
+  <span class="note" id="statLine" style="margin:0"></span></div>
+<details class="mydata"><summary>Use your own events and pick the key</summary>
+  <div class="bar"><input type="file" id="file" accept=".csv,.json,.jsonl,.ndjson"><label>Format <select id="fmt"><option value="auto">auto-detect</option><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="json">JSON array</option></select></label></div>
+  <textarea id="src" rows="5" spellcheck="false"></textarea>
   <div class="note" id="srcInfo"></div>
   <div class="jobgrid">
     <span>Record key <select id="kcol"></select></span>
@@ -121,46 +46,140 @@ table.fm{width:100%;border-collapse:collapse;font-size:13px}table.fm th,table.fm
     <label>Segment size <select id="seg"><option value="3">3 records</option><option value="5" selected>5 records</option><option value="8">8 records</option></select></label>
     <span class="note" style="margin:0">3 brokers · replication factor 3 · virtual clock (1 record = 10 ms)</span>
   </div>
-  <div class="bar">
-    <button class="primary" id="playAll">▶ Play all 11 phases</button>
-    <button id="pauseBtn" disabled>⏸ Pause</button>
-    <label>Speed <input type="range" id="speed" min="0.25" max="4" step="0.25" value="1"> <b id="speedV">1×</b></label>
-    <span class="note" id="statLine"></span>
-  </div>
-</section>
-
-<section>
-  <h2><em>◎</em>Architecture overview <span class="note" style="font-weight:400">components and how they connect · colors match the phases below</span></h2>
-  <div class="bar"><button class="primary" id="ovTrace">▶ Trace a record through the system</button><button id="ovClear">Clear</button><span class="note" id="ovCap"></span></div>
-  <div id="ovView"></div>
-  <div class="chips" style="margin-top:6px"><span class="chip">solid = data flow</span><span class="chip">dashed = control / metadata</span><span class="chip" style="border-color:var(--bad)">dotted = events / async</span></div>
-  <div id="ovInfo"></div>
-</section>
-
-<section id="simSec">
-  <h2><em>▶</em>Live cluster simulation <span class="note" style="font-weight:400">watch inserts, updates and deletes travel between the nodes · edit the actions or inject failures</span></h2>
-  <div class="bar"><label>Scenario <select id="simScn"></select></label><label><span id="simNL">nodes</span> <select id="simN"></select></label><span id="simSet" class="bar" style="margin:0"></span>
-    <button class="primary" id="simPlay">▶ Play</button><button id="simStep">Step ›</button><button id="simReset">⏮</button><label>Speed <select id="simSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label></div>
-  <div class="note" id="simDesc" style="margin:0 0 6px"></div>
-  <svg id="simSvg" style="width:100%;border:1px solid var(--line);border-radius:10px;background:var(--bg)"></svg>
-  <div class="bar"><input type="range" id="simT" min="0" max="1000" value="0" step="10" style="flex:1"><span class="mono" id="simTv"></span></div>
-  <div id="simInsp" class="box" style="margin:8px 0"></div>
-  <div class="simgrid"><div><h3 style="margin-top:0">Actions <span class="note" style="font-weight:400">(time in ms, then op and arguments)</span></h3><textarea id="simAct" rows="7" spellcheck="false"></textarea>
-    <div class="bar"><select id="simOp"></select><span id="simArgs" class="bar" style="margin:0"></span><button id="simAdd">＋ add action</button></div></div>
-   <div><h3 style="margin-top:0">Event log <span class="note" style="font-weight:400">(click an event to see why)</span></h3><div id="simLog" class="simlog"></div></div></div>
-</section>
-
-<section id="phaseSec">
-  <h2><em>2</em>Inside the broker, phase by phase</h2>
-  <div class="nav" id="nav"></div>
-  <div class="blurb" id="blurb"></div>
-  <div class="bar" id="phCtl"></div>
-  <div class="bar"><button id="prev">‹ Prev</button><button class="primary" id="anim">▶ Animate this phase</button><button id="nextB">Next ›</button></div>
-  <div id="phView"></div>
-</section>
-</main>
-
+</details>
+</div>
+<script src="../../assets/lab.js"></script>
 <script>
+const STORY={
+ system:'Kafka',
+ title:'Build <span>Kafka</span> from scratch',
+ lead:'Start from a real production problem. Watch the obvious fix break. Then see the design Kafka uses, running on your own events.',
+ problem:{
+  scene:[
+   'You run the <b>event backbone</b> of a marketplace. The orders service emits <code>created → paid → shipped</code> events, <b>50,000 per second</b> at peak, and twelve teams consume them: search indexing, emails, fraud, warehouse, analytics.',
+   'Product says: <i>"Every team must get every order event, in order, even when a machine dies. And the new fraud team wants to replay last week."</i> Your job is to design the system in the middle.'],
+  musts:[
+   '<b>Never lose an acknowledged event</b>, even if a broker dies a millisecond after saying OK.',
+   '<b>Per-order ordering:</b> no team ever sees <code>paid</code> before <code>created</code>.',
+   '<b>Many independent readers:</b> each team reads at its own pace, and a new team can replay history.',
+   '<b>Scales out:</b> more traffic means more machines, and a slow reader never slows down the writers.',
+   '<b>No duplicates from retries</b>, and disk usage that stays bounded.'],
+  naive:{title:'Your first instinct: an events table in PostgreSQL',text:'Producers <code>INSERT</code> each event, every team polls <code>WHERE id &gt; :last_seen</code>, and a nightly job deletes old rows. It works on day one, then:',
+   breaks:['Every insert updates indexes and the WAL on <b>one primary</b>: write throughput hits a ceiling you can only raise by buying a bigger machine.','Twelve teams polling the same table compete with the order path for the same CPU and disk; one slow analytics scan hurts checkout.','Ids are handed out at insert time but transactions commit later and out of order, so a reader at <code>id 1005</code> can <b>silently skip</b> row 1003 that commits a moment later.','Bulk deletes cause bloat and vacuum storms, and a team that wants last week back finds it gone.']},
+  quest:'Rebuild the core of Kafka in 11 chapters. Each one starts from a problem, tries the naive fix, watches it fail, then runs the real design on your events.'},
+ overview:{title:'The whole system on one page',lead:'Before the details, see how one event travels. Press <b>Trace a request</b> to follow a record from the producer to a consumer, or tap a component to see what it receives and sends. Colors match the chapters.'},
+ chapters:[
+  {ask:'Where do we store 50,000 events per second so any reader can resume from any point?',
+   why:'Readers need a stable position to resume from after a crash, reads from an old position must not scan everything before it, and a crash mid-write must not corrupt what was already stored.',
+   v0:{name:'Append JSON lines to one big file',code:'file.append(json(event) + "\\n")\nread(n) = scan lines from the start until line n',breaks:'Reading position <i>n</i> scans <b>everything before it</b>, deleting old data means rewriting the whole file, and a crash mid-write leaves a <b>half line</b> that readers misparse or choke on.'},
+   design:'Never modify, only append: an offset becomes a permanent address, and immutable files make reads, deletes and crash recovery simple.',
+   predict:{q:'The broker is killed halfway through appending a record, so the active segment ends with half a record. What does the restart do?',opts:['Keeps the half record and lets consumers skip the broken bytes','Refuses to start until an operator repairs the file by hand','Scans the active segment, keeps every complete record and truncates the torn tail'],ans:2,why:'Closed segments are immutable, so only the active tail can be bad. Recovery validates each frame (length, then checksum) and truncates at the first invalid one; the next append continues right after the last valid record. Try <i>corrupted record</i> too: everything after the bad frame is cut, even valid-looking records.'},
+   build:{intro:'Simplified here: segments roll every few records and every 2nd record is indexed. Kafka rolls by bytes or time (<code>log.segment.bytes</code>, <code>log.roll.ms</code>) and adds an index entry about every 4 KB.',
+    steps:['<b>Record frame:</b> <code>[length][checksum][offset, key, value, timestamp]</code>, so a reader can tell a complete record from garbage.','<b>Append:</b> write to the active segment and assign <code>offset = logEndOffset++</code>; roll to a new file <code>{baseOffset}.log</code> when it is full.','<b>Sparse index:</b> every N bytes store <code>(offset, filePosition)</code>. Fetch = binary-search the segment by base offset, then the index, then scan a few records.','<b>Recovery:</b> on restart scan only the active segment, validate each frame, truncate at the first bad one, rebuild its index.'],
+    code:'append(rec): frame = len(rec) + crc(rec) + rec\n  active.write(frame); index.maybeAdd(offset, pos); offset++\n  if active.size > SEGMENT_BYTES: roll()\nfetch(off): seg = floorSegment(off); pos = seg.index.floor(off)\n  scan seg from pos until record.offset == off\nrecover(): for frame in active: if !valid(frame): truncate(here); break',
+    rule:'An offset, once acknowledged, always means the same record; recovery may only cut the <b>unvalidated tail</b> of the active segment.'}},
+  {ask:'One log cannot take 50,000 events/s. How do we split it and keep each order in order?',
+   why:'A single log is one leader on one disk and one reader at a time. But <code>created</code>, <code>paid</code> and <code>shipped</code> for the same order must never be read out of order.',
+   v0:{name:'Spread records round-robin over N logs',code:'p = counter++ % numPartitions\nlogs[p].append(record)',breaks:'Order 900\'s <code>created</code> lands in partition 0 and its <code>paid</code> in partition 1. The reader of partition 1 is faster, so the warehouse ships an order it has not seen created.'},
+   design:'Nobody needs one global order, only order per order id, so give up the total order and keep it <b>per key</b>.',
+   predict:{q:'Your topic grows from 3 to 4 partitions. What happens to the keys that already have records?',opts:['Many keys now hash to a different partition; their old records stay where they are, so per-key order across the change breaks','Kafka moves the existing records too, so every key still lives in one partition','Only brand-new keys are affected; existing keys keep their old partition'],ans:0,why:'The partitioner is just <code>hash(key) % N</code>. Change N and most keys map elsewhere, while existing records never move. The caption below counts how many of your keys would move. Size the partition count up front.'},
+   build:{intro:'Kafka hashes the key bytes with murmur2; this playground uses FNV. Same idea: any stable hash that every client computes identically.',
+    steps:['Producers send records with a <b>key</b> (for example the order id or customer id).','The client-side partitioner computes <code>hash(keyBytes) % numPartitions</code>; brokers do no routing.','Records <b>without a key</b> may go anywhere (Kafka fills one partition\'s batch, then switches) and carry no order guarantee.','Measure skew: one hot key keeps one partition hot no matter how many brokers you add.'],
+    code:'partition(record):\n  if record.key == null: return stickyPartition()\n  return positive(murmur2(record.key)) % numPartitions\n// order is guaranteed per partition only',
+    rule:'Equal keys map to <b>one partition</b> for as long as the partition count does not change.'}},
+  {ask:'Sending every event as its own request is too slow. How do we send fewer, bigger requests?',
+   why:'With 1 ms round trips, one request per record caps a connection near 1,000 records/s, and the broker drowns in tiny requests. Buffering helps, until a slow broker makes the buffer grow without limit.',
+   v0:{name:'Send each record and wait for its ack',code:'for record in events:\n  await broker.produce([record])',breaks:'Throughput is bounded by round-trip time, not bandwidth. The obvious fix, an unbounded in-memory queue, turns one slow broker into an <b>OutOfMemoryError</b> in every producer.'},
+   design:'Spread the per-request cost over many records, and make the buffer <b>finite</b> so overload turns into back-pressure instead of a crash.',
+   predict:{q:'On this stream (a record every 10 ms) you raise <code>linger.ms</code> from 0 to 100 and <code>batch.size</code> to 8192. What happens?',opts:['Both the request count and the average latency go down','Far fewer requests, but each record waits longer, so average latency goes up','Nothing changes: linger only matters when the buffer is full'],ans:1,why:'Linger trades latency for batch size: records wait for the batch to fill or the timer to fire. Compare the <i>no batching</i> and <i>large batch</i> rows. (Under heavy load the trade can flip: fewer requests means less queueing.)'},
+   build:{intro:'Simplified here: one request per batch and a toy LZ77 codec. Real Kafka sends one ProduceRequest per broker carrying batches for many partitions, with gzip, snappy, lz4 or zstd.',
+    steps:['<b>Accumulator:</b> one open batch per partition; <code>send()</code> only appends to it and returns a future.','<b>Close a batch</b> when it reaches <code>batch.size</code> or when <code>linger.ms</code> has passed since its first record.','A <b>sender thread</b> ships closed batches, optionally compressed as a whole, and completes the futures when acks arrive.','<b>Bound memory:</b> count buffered bytes; when full, block <code>send()</code> up to <code>max.block.ms</code>, then fail.'],
+    code:'send(rec): waitUntil(buffered + size(rec) <= BUFFER_MEMORY)   // or fail\n  b = open[partition(rec)]; b.add(rec); buffered += size(rec)\n  if b.bytes >= BATCH_SIZE: close(b)\nsenderLoop: close batches older than LINGER_MS\n  for b in closed: req = compress(b); await broker.produce(req)\n  buffered -= b.bytes; complete(b.futures)',
+    rule:'Buffered bytes never exceed <code>buffer.memory</code>: a slow broker <b>slows the producer down</b>, it never crashes it.'}},
+  {ask:'Twelve teams read the same events at their own pace. How does each remember where it stopped?',
+   why:'Each team must see every event, be able to crash and resume, and spread its work over several machines without two of them processing the same partition.',
+   v0:{name:'A work queue that deletes a message once it is acked',code:'msg = queue.take()\nprocess(msg); queue.ack(msg)   // broker deletes it',breaks:'The search indexer acks, the event is gone, and the email service <b>never sees it</b>. Replaying last week after a bug fix is impossible.'},
+   design:'Do not delete on read: the log stays, and a reader\'s whole state is <b>one number per partition</b>, so any number of groups read the same data independently.',
+   predict:{q:'A member processes records, then commits its offset every 4 records. It crashes between processing and the next commit. After the restart?',opts:['The records after the last commit are skipped','The records after the last commit are processed again (duplicates)','Kafka notices and delivers each record exactly once'],ans:1,why:'A restart resumes at the committed offset, so everything processed after it is redone: <b>at-least-once</b>. Commit <i>before</i> processing and you get skips instead (at-most-once). Move <i>Crash at</i> to change how many.'},
+   build:{intro:'Simplified here: auto-commit fires every 5 records; Kafka\'s <code>enable.auto.commit</code> commits on a timer (every 5 s by default).',
+    steps:['Members <b>join</b> the group; the coordinator bumps the <b>generation</b> and an assignor splits partitions among them.','Each member <code>poll()</code>s its partitions from its current position.','<b>Commit</b> <code>(group, partition) → offset</code> into an internal compacted topic (<code>__consumer_offsets</code>).','On join, leave or a missed heartbeat: <b>rebalance</b>. Cooperative mode revokes only the partitions that move.','Reject commits that carry an <b>older generation</b>.'],
+    code:'loop:\n  records = poll(myPartitions, position)\n  process(records)                     // side effects\n  commit(group, generation, position)  // after: at-least-once\non rebalance(gen): revoke(moved); assign(new); generation = gen\ncoordinator.commit(gen, ...): if gen < current: reject ILLEGAL_GENERATION',
+    rule:'Within a group each partition has <b>one owner per generation</b>, and a commit from an older generation is rejected.'}},
+  {ask:'Disks fill up within days. What do we delete, and what if a team has not read it yet?',
+   why:'50,000 events/s at 1 KB each is about <b>4 TB per day</b> per replica. Something must go, and a stuck consumer must not be able to stop that.',
+   v0:{name:'Delete a record once every group has read it',code:'deleteBelow(min(committedOffset of every group))',breaks:'One abandoned or stuck consumer group <b>pins the disk forever</b> and the broker fills up. Deleting single records also means rewriting files.'},
+   design:'Make deletion cheap and independent of readers: drop <b>whole old files</b> on a clock, and tell a reader that fell behind instead of waiting for it.',
+   predict:{q:'Retention deletes segments older than 30 s. A group is stuck at an old committed offset it never read past. What happens?',opts:['The segments are deleted anyway; the group\'s next fetch gets OFFSET_OUT_OF_RANGE','Kafka keeps the segments: data a group has not read is never deleted','The broker quietly moves the group\'s committed offset to the log start'],ans:0,why:'Consumer offsets never pin data. The broker answers with an error and the valid range; the consumer client then applies <code>auto.offset.reset</code> (earliest or latest). Tiered storage does not change this: <code>retention.ms</code> still bounds the whole log, local plus remote. It makes a long retention <i>affordable</i>: turn it on and scrub to the middle to see old segments served from the remote tier.'},
+   build:{steps:['Track the <b>log start offset</b> (first retained record) next to the log end offset.','A background task deletes the oldest <b>closed</b> segment while it is older than <code>retention.ms</code> or the log exceeds <code>retention.bytes</code>; never the active one.','A fetch below the log start returns <b>OFFSET_OUT_OF_RANGE</b> with the available range.','<b>Tiered:</b> upload a closed segment, verify it, publish it in a remote manifest, and only then let the local copy expire (<code>local.retention.ms</code>).'],
+    code:'every minute:\n  while segments.length > 1 && (age(oldest) > RETENTION_MS || bytes > RETENTION_BYTES):\n    if tiered && !remote.has(oldest): upload(oldest); verify; manifest.add(oldest)\n    deleteLocal(oldest); logStart = segments[0].baseOffset\nfetch(off): if off < logStart: error(OFFSET_OUT_OF_RANGE, [logStart, logEnd))',
+    rule:'The log start offset only moves forward, and an offset below it <b>fails loudly</b>; it never returns other data.'}},
+  {ask:'A broker dies right after saying OK. Are the acknowledged events gone?',
+   why:'With one copy, yes. With copies, two questions remain: when may the leader say OK, and which copy may take over?',
+   v0:{name:'Leader acks after its own write, copies in the background',code:'leader.append(batch)\nreply(OK)                  // acks=1\nfollowers copy later',breaks:'The leader can crash <b>after</b> the OK but before any follower copied the record. A follower takes over without it: an <b>acknowledged event is lost</b>.'},
+   design:'Say OK only once every replica that is <b>keeping up</b> has the record, and let only those replicas take over.',
+   predict:{q:'acks=all, min.insync.replicas=2. The leader dies partway through the stream. How many acknowledged records are lost?',opts:['Only the ones the slow follower had not fetched yet','Every record since the last flush to disk','None: an ack meant every in-sync replica already had the record'],ans:2,why:'The new leader is chosen from the ISR, and every ISR member holds everything below the high watermark. Now switch <i>acks</i> to 1 and play again: records acked before any follower copied them vanish.'},
+   build:{intro:'Simplified here: the ISR is decided by how far a follower lags. Kafka uses time (<code>replica.lag.time.max.ms</code>) and the controller (chapter 11) picks the new leader.',
+    steps:['Followers send <b>Fetch</b>(their log end offset) to the leader, like consumers.','The leader tracks each follower\'s log end and the <b>ISR</b>; a follower that falls too far behind leaves it.','<b>High watermark</b> = min log end over the ISR. Consumers read only below it.','<code>acks=all</code>: reply once HW &gt; offset; reject if ISR size &lt; <code>min.insync.replicas</code>.','On leader failure elect an <b>ISR member</b>, bump the leader epoch; the old leader truncates its divergent tail when it returns.'],
+    code:'leader.onFetch(f, fetchOffset): leo[f] = fetchOffset\n  isr = { r : leo[leader] - leo[r] small enough }\n  hw = min(leo[r] for r in isr)\nproduce(acks=all): if |isr| < MIN_ISR: reject NOT_ENOUGH_REPLICAS\n  append; wait until hw > offset; reply OK\nfailover: newLeader = isr member; epoch++',
+    rule:'Only an in-sync replica can become leader, so <b>every record below the high watermark survives</b> a failover.'}},
+  {ask:'The ack got lost and the producer retried. Did we just write the payment twice?',
+   why:'A timeout is ambiguous: the write may or may not have landed. Retrying is needed for durability, but a blind retry duplicates.',
+   v0:{name:'Retry on timeout',code:'try: produce(batch)\ncatch Timeout: produce(batch)   // same records again',breaks:'If the first attempt did land, the log now holds the batch <b>twice</b>: a customer is emailed or charged twice.'},
+   design:'Make the retry recognisable: if every batch carries who sent it and its <b>position in that sender\'s stream</b>, the leader can tell a retry from new data.',
+   predict:{q:'Batch #2 is appended but its ack is lost, so the producer retries it with the same sequence. With idempotence on, what does the leader do?',opts:['Recognises producer ID + sequence, appends nothing and returns the original offsets','Appends it again: the leader cannot tell a retry from a new batch','Rejects it as out of order, and the producer must drop the batch'],ans:0,why:'The leader remembers the last sequences per producer and partition, inside the replicated log, so it still recognises the retry after a failover. Untick <i>idempotent producer</i> to see the duplicate appear.'},
+   build:{intro:'Honest note: the playground restarts the producer with a bumped <b>epoch</b> and fences the old one. That fencing comes from a <code>transactional.id</code> (chapter 9); a plain idempotent producer gets a <b>new producer ID</b> on restart, so its dedupe does not span restarts.',
+    steps:['<code>InitProducerId</code> gives the producer a <b>PID</b> (and epoch).','The producer numbers records per partition; each batch carries <code>(PID, epoch, firstSeq)</code>.','The leader keeps the last few batch sequences per <code>(PID, partition)</code>: <b>next</b> = append, <b>seen</b> = return the old offsets, <b>gap</b> = reject.','Rebuild this state from the batch headers in the log, so a new leader after failover has it too.'],
+    code:'onProduce(pid, epoch, seq, batch):\n  s = state[pid, partition]\n  if epoch < s.epoch: reject PRODUCER_FENCED\n  if seq <= s.lastSeq: return s.offsetsOf(seq)     // duplicate\n  if seq != s.lastSeq + 1: reject OUT_OF_ORDER_SEQUENCE\n  offsets = append(batch); s.lastSeq = seq + batch.count - 1',
+    rule:'For one producer ID and partition, each sequence number is <b>appended at most once, and in order</b>.'}},
+  {ask:'We need the latest address of every customer forever, but not every old version. How?',
+   why:'A changelog of 40 million customers grows forever if kept whole. Deleting by age instead drops customers who simply have not changed lately.',
+   v0:{name:'Use time-based retention on the changelog',code:'retention.ms = 7 days',breaks:'A customer who has not changed in 8 days <b>disappears</b>, so a new service rebuilding its table from the topic never learns they exist.'},
+   design:'For a changelog only the <b>latest value per key</b> matters, so garbage-collect older versions in the background and turn deletes into records.',
+   predict:{q:'A consumer read half the partition, paused, and resumes after the cleaner dropped a tombstone it had not reached yet. What does its table end up with?',opts:['The correct state: compaction never changes what a replay produces','An error: it must restart from offset 0','The deleted key is still there, because it never saw the delete'],ans:2,why:'It already holds the old value and the tombstone that should remove it is gone. Raise <i>delete.retention</i> until the tombstone survives the cleaner and the state becomes correct. (Needs the <i>updates + deletes</i> workload.)'},
+   build:{steps:['Only <b>closed</b> segments are cleaned; the active segment is never touched.','Pass 1: build a map <code>key → latest offset</code> over the dirty segments.','Pass 2: copy each record whose offset is the latest for its key, <b>keeping its original offset</b>; drop tombstones older than <code>delete.retention.ms</code>.','Swap the cleaned segments in atomically. A fetch of a removed offset returns the next surviving record.'],
+    code:'latest = {}\nfor r in closedSegments: latest[r.key] = r.offset\nout = [r for r in closedSegments\n       if latest[r.key] == r.offset\n       and !(r.value == null and age(r) > DELETE_RETENTION)]\nswapAtomically(closedSegments, out)   // offsets unchanged',
+    rule:'Replaying the compacted log gives the <b>same final value per key</b> as replaying the full history.'}},
+  {ask:'A job reads orders, writes invoices, then commits its offset. A crash in between: duplicate invoices?',
+   why:'The output write and the offset commit are two separate writes. A crash between them means redoing work (duplicates) or skipping it.',
+   v0:{name:'Write the outputs, then commit the input offset',code:'for o in transform(records): produce(o)\ncommitOffset(lastInput + 1)',breaks:'Crash after the outputs but before the commit: the restart reprocesses the input and writes every invoice <b>again</b>.'},
+   design:'Treat the consumer offset as <b>just another output</b>, so one atomic commit covers both the results and the progress.',
+   predict:{q:'Transactions on. The job crashes after writing all 3 outputs, before committing. What does a read_committed reader see after the restart?',opts:['Each output twice: once from the crashed attempt, once from the redo','Each output exactly once: the open transaction is aborted and the work redone','Nothing: the outputs of a crashed job are lost'],ans:1,why:'The crashed attempt is aborted, its records stay in the log but are hidden behind an ABORT marker, and the redo commits once. Now untick <i>transactional</i> and crash after step 3 (the last output) to get 3 duplicates.'},
+   build:{intro:'This covers Kafka to Kafka only. A database or email sink outside Kafka still needs its own idempotency.',
+    steps:['<code>initTransactions()</code>: the coordinator maps <code>transactional.id</code> to a PID and bumps the epoch, fencing any zombie with the same id.','<code>beginTransaction()</code>, produce the outputs; each new partition is registered with the coordinator.','<code>sendOffsetsToTransaction()</code> adds the consumed offsets to the same transaction.','<b>Commit:</b> the coordinator logs PREPARE, writes COMMIT markers to every partition, then logs COMPLETE.','Consumers with <code>read_committed</code> stop at the last stable offset and skip aborted records.'],
+    code:'initTransactions()            // fences older epochs\nloop:\n  recs = poll(); beginTransaction()\n  for o in transform(recs): produce(o)\n  sendOffsetsToTransaction(positions, group)\n  commitTransaction()         // markers on every partition\n  on error: abortTransaction()',
+    rule:'Outputs and the input offset become visible <b>together or not at all</b>.'}},
+  {ask:'Two new brokers sit idle while the old ones fill up. How do we move data without downtime?',
+   why:'Partitions are pinned to the brokers they were created on. Moving one means copying gigabytes while producers keep writing and consumers keep reading.',
+   v0:{name:'Stop the partition, copy the files, restart',code:'stop(partition)\nrsync(oldBroker:/data/p0 -> newBroker)\nupdateConfig(p0 -> newBroker); start(partition)',breaks:'<b>Downtime</b> for that partition, writes during the copy are lost if you do not stop, and clients still pointed at the old broker write to the wrong place.'},
+   design:'A move is just replication: add the new broker as <b>one more follower</b>, and switch over only once it has caught up.',
+   predict:{q:'One partition is the hottest because of a hot key. You add brokers and reassign. What happens to that partition\'s load?',opts:['It moves as a whole: broker load evens out, but that partition stays exactly as hot','It is split across the new brokers, so the hot key cools down','Reassignment skips hot partitions until their traffic drops'],ans:0,why:'Reassignment moves whole replicas. Its bytes are identical before and after; only a different key or more partitions (chapter 2) splits a hot key. Pick <i>hot key</i> in the data panel to exaggerate it.'},
+   build:{steps:['Plan: for each partition, the target replica list.','Add the target replicas as <b>followers</b>; they fetch from the leader, throttled so clients keep their bandwidth.','Wait until each new replica <b>joins the ISR</b> (it holds the committed prefix).','<b>Publish</b> the new placement in the metadata log (epoch bump), move leadership if needed, then remove the old replicas.'],
+    code:'reassign(p, target):\n  replicas[p] = old ∪ target           // new ones fetch, throttled\n  wait until target ⊆ isr[p]\n  metadata.commit(p, replicas = target, epoch + 1)\n  stopAndDelete(old - target)',
+    rule:'At every moment exactly <b>one placement is authoritative</b>, and a new replica serves only after it holds the committed prefix.'}},
+  {ask:'Who decides which broker leads each partition, and what if that decider dies?',
+   why:'Every failover from chapter 6 needs one authority. Two deciders that disagree means two leaders for one partition, and diverging data.',
+   v0:{name:'One controller process',code:'controller.electLeader(p)\ncontroller.broadcast(metadata)',breaks:'It dies: nobody elects new partition leaders, so partitions whose leader also died stay <b>offline</b>. Add a hot standby and a network split can leave <b>two active controllers</b>.'},
+   design:'The decider needs what the data needed, a replicated log, but one that only advances with a <b>majority</b>, so there can never be two authorities.',
+   predict:{q:'Scenario 4: the active controller is cut off in the minority and a client sends it a MoveReplica. What happens?',opts:['It commits: that controller is still active for its epoch','Both sides commit, and the newest timestamp wins when the network heals','It is appended but never commits; the majority elects a new controller, and the entry is truncated on heal'],ans:2,why:'Committing needs a majority, which the cut-off side does not have. The majority side elects a new active controller with a higher epoch and keeps committing; on heal the old one steps down and drops its uncommitted entry.'},
+   build:{intro:'Simplified here: classic Raft where the leader pushes AppendEntries. In KRaft followers <b>fetch</b> from the leader instead, but the vote and commit rules are the same.',
+    steps:['Persist <code>(epoch, votedFor, log)</code> before answering anyone.','A follower that hears nothing until its election timeout becomes a candidate: <code>epoch++</code>, ask for votes.','Grant a vote only to a candidate whose log is <b>at least as up to date</b> as yours.','The leader replicates entries; one is <b>committed</b> once a majority stores it (in the current epoch).','Brokers apply only committed metadata, and reject requests carrying an older controller epoch.'],
+    code:'onTimeout(): epoch++; vote(self); requestVotes(lastIndex, lastEpoch)\nvote(c): grant if c.epoch >= epoch and c.log at least as new as mine\nleader: replicate(entries); match[f] = ack index\ncommit = max i where majority(match >= i) and log[i].epoch == epoch\nbrokers: apply(log[..commit]) in order',
+    rule:'A committed metadata change exists on a majority, so <b>every future active controller has it</b>.'}}
+ ],
+ milestones:[
+  {t:'Single-partition log',test:'<code>kill -9</code> in the middle of an append: the restart keeps every complete record and the next offset continues right after them.'},
+  {t:'Partitioned topic with key hashing',test:'The same key maps to the same partition on every client; per-key order holds with 4 concurrent producers.'},
+  {t:'Batching producer with a bounded buffer',test:'10,000 records go out in fewer than 100 requests with linger on; with a broker paused, producer memory stays at or below <code>buffer.memory</code>.'},
+  {t:'Consumer groups and committed offsets',test:'Kill a consumer mid-batch: after the restart no record is skipped, and a commit from an old generation is rejected.'},
+  {t:'Retention by segment',test:'Disk usage stays bounded under constant load; a consumer behind the log start gets OFFSET_OUT_OF_RANGE, never wrong data.'},
+  {t:'Replication with ISR and high watermark',test:'Kill the leader under <code>acks=all</code>, <code>min.insync.replicas=2</code>: zero acknowledged records lost.'},
+  {t:'Idempotence, compaction and transactions',test:'Inject lost acks and crashes: a <code>read_committed</code> consumer sees every output once; a compacted replay equals the full-history state.'},
+  {t:'Controller quorum',test:'Kill or isolate controllers in a loop: never two active controllers in one epoch, and committed metadata is identical everywhere.'}],
+ capstone:{title:'Put it together: a live cluster',lead:'Producer, three brokers, a controller and a consumer, running at once. Play a scenario, scrub the timeline, tap a broker to see its log, then kill a broker and compare <code>acks=all</code> with <code>acks=1</code>.'}
+};
+</script>
+<script>
+Lab.mount(STORY);
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const J=x=>{try{return JSON.stringify(x)}catch{return String(x)}};
@@ -191,9 +210,9 @@ function sampleSensors(){const r=lcg(7),L=['device,ts,temp'];for(let i=0;i<30;i+
 const SAMPLES={orders:{t:sampleOrders,f:'csv'},clicks:{t:sampleClicks,f:'jsonl'},sensors:{t:sampleSensors,f:'csv'}};
 
 /* ================= config + records ================= */
-const OPT={lp:0,fetchOff:0,crash:'none',rate:1,batch:2048,linger:20,comp:'none',mem:4096,policy:'block',slow:1,members:2,commit:'after',crashPct:60,rebal:'cooperative',rev:'join',
-  rpol:'time',rlim:30,tier:false,localRet:12,cOff:5,racks:'all',minIsr:2,slowF:200,failPct:60,idem:true,ccrash:3,txn:true,ctgt:2,cdel:25,cdelRet:15,cOffset:0,
-  bk:4,thr:3,roll:true,mcrash:0,raftN:3,raftScen:'crash',rp:0};
+const OPT={lp:0,fetchOff:0,crash:'torn',rate:1,batch:2048,linger:20,comp:'none',mem:4096,policy:'block',slow:1,members:2,commit:'after',crashPct:60,rebal:'cooperative',rev:'join',
+  rpol:'time',rlim:30,tier:false,localRet:12,cOff:5,racks:'all',minIsr:2,slowF:200,failPct:60,idem:true,ccrash:4,txn:true,ctgt:2,cdel:25,cdelRet:15,cOffset:0,
+  bk:4,thr:3,roll:true,mcrash:0,raftN:3,raftScen:'partition',rp:0};
 function cfg(){return{text:$('#src').value,fmt:$('#fmt').value,kcol:$('#kcol').value,mix:$('#mix').value,P:+$('#pn').value,seg:+$('#seg').value}}
 function mkRecords(c,rows){
   const rnd=lcg(rows.length*7+1),ev=rows.map((r,i)=>({r,at:i*3,kind:'put'}));
@@ -224,12 +243,7 @@ function build(){
 }
 
 /* ================= player ================= */
-let gen=0,paused=false,speed=1,cur=0,playingAll=false,rsAnim=false;
-function animate(draw,dur){
-  const g=++gen;let el=0,last=null;
-  return new Promise(res=>{function frame(now){if(g!==gen){res(false);return}if(last===null)last=now;const dt=now-last;last=now;if(!paused)el+=dt*speed;const p=Math.min(1,el/dur);draw(p);if(p<1)requestAnimationFrame(frame);else res(true)}requestAnimationFrame(frame)});
-}
-const sleep=ms=>new Promise(r=>setTimeout(r,ms/speed));
+let rsAnim=false;
 const rcell=(r,cls='')=>`<span class="rc ${cls}" title="${esc(r.key)} → ${esc(r.value===null?'null (tombstone)':short(r.value,60))}">${r.off}${r.value===null?'✕':''}</span>`;
 const lbl=k=>esc(short(k,10));
 
@@ -324,14 +338,14 @@ function produceSim(recs,o){
 function draw3(p){
   const cur=produceSim(S.recs,OPT),presets=[['no batching',{batch:1,linger:0}],['small batch',{batch:512,linger:5}],['medium batch',{batch:2048,linger:20}],['large batch',{batch:8192,linger:100}]].map(([n,o])=>[n,produceSim(S.recs,{...OPT,...o})]);
   const T=p*cur.tEnd,W=640,xs=t=>10+t/Math.max(1,cur.tEnd)*W;
-  let tl=`<svg viewBox="0 0 680 110" style="max-height:120px"><line x1="10" x2="650" y1="60" y2="60" stroke="var(--line)"/>`;
+  let tl=`<div class="tlw"><svg viewBox="0 0 680 110" style="max-height:120px"><line x1="10" x2="650" y1="60" y2="60" stroke="var(--line)"/>`;
   cur.batches.forEach(b=>{if(b.st>T&&p<1)return;const e=p>=1?b.end:Math.min(b.end,T);tl+=`<rect x="${xs(b.st)}" y="${40}" width="${Math.max(2,xs(e)-xs(b.st))}" height="${Math.min(40,8+b.n*5)}" rx="3" fill="${tc(b.pk)}" opacity=".85"><title>partition ${b.pk}: ${b.n} records, ${b.raw}→${b.w} bytes</title></rect>`});
-  let path='';cur.bufSeries.forEach(s=>{if(s.t<=T||p>=1)path+=`${xs(s.t)},${35-Math.min(30,s.b/Math.max(1,OPT.mem)*30)} `});tl+=`<polyline fill="none" stroke="var(--bad)" stroke-width="1.5" points="${path}"/><text x="10" y="12" style="fill:var(--mut);font-size:10px">buffered bytes (red) vs buffer.memory ${OPT.mem}; batches sent (bars = one request each)</text><line x1="${xs(T)}" x2="${xs(T)}" y1="14" y2="100" stroke="var(--t1)" stroke-width="2"/></svg>`;
-  const row=(n,r,hl)=>`<tr style="${hl?'background:var(--p0)':''}"><td><b>${n}</b></td><td class="n">${r.reqs}</td><td class="n">${r.reqs?Math.round(r.raw/r.reqs):0}</td><td class="n">${r.wire}</td><td class="n">${r.avgLat.toFixed(0)}</td><td class="n">${r.p95.toFixed(0)}</td><td class="n">${r.thr.toFixed(0)}</td></tr>`;
+  let path='';cur.bufSeries.forEach(s=>{if(s.t<=T||p>=1)path+=`${xs(s.t)},${35-Math.min(30,s.b/Math.max(1,OPT.mem)*30)} `});tl+=`<polyline fill="none" stroke="var(--bad)" stroke-width="1.5" points="${path}"/><text x="10" y="12" style="fill:var(--mut);font-size:10px">buffered bytes (red) vs buffer.memory ${OPT.mem}; batches sent (bars = one request each)</text><line x1="${xs(T)}" x2="${xs(T)}" y1="14" y2="100" stroke="var(--t1)" stroke-width="2"/></svg></div>`;
+  const row=(n,r,hl)=>`<tr style="${hl?'background:var(--p0)':''}"><td><b>${n}</b></td><td class="n">${r.reqs}</td><td class="n">${r.avgLat.toFixed(0)} ms</td><td class="n">${r.p95.toFixed(0)} ms</td><td class="n">${r.reqs?Math.round(r.raw/r.reqs):0}</td><td class="n">${r.wire}</td><td class="n">${r.thr.toFixed(0)}</td></tr>`;
   const comp=_lzc.size?[..._lzc.values()].every(x=>x.ok):true;
   return`<div class="caption">With these settings the producer sent <b>${cur.reqs}</b> requests for ${cur.delivered} records (${Math.round(cur.raw/Math.max(1,cur.reqs))} B each); wire bytes <b>${cur.wire}</b>${OPT.comp==='lz'?` (compressed from ${cur.raw})`:''}. ${cur.blocked?`<span class="bad">Producer blocked ${cur.blocked.toFixed(0)} ms waiting for buffer space.</span>`:''} ${cur.rejected?`<span class="bad">${cur.rejected} record(s) rejected (buffer full).</span>`:''}</div>${tl}
-  <table><tr><th>config</th><th class="n">requests</th><th class="n">B / request</th><th class="n">wire bytes</th><th class="n">avg latency ms</th><th class="n">p95 ms</th><th class="n">records/s</th></tr>${presets.map(([n,r])=>row(n,r,false)).join('')}${row('<i>current</i>',cur,true)}</table>
-  <div class="note">Batching trades latency (records wait for the batch to fill or linger to expire) for far fewer requests and bytes. Compression shrinks whole batches (round-trip verified ${comp?'<b class="ok">✔</b>':'<b class="bad">✘</b>'}) at CPU cost. With a bounded buffer, a slow broker makes the producer <b>block or reject</b> instead of growing memory without limit: raise “broker slowness” to see it.</div>`;
+  <table class="pt"><tr><th>config</th><th class="n">requests</th><th class="n">avg latency</th><th class="n">p95</th><th class="n">B/req</th><th class="n">wire B</th><th class="n">rec/s</th></tr>${presets.map(([n,r])=>row(n,r,false)).join('')}${row('<i>current</i>',cur,true)}</table>
+  <div class="note">Batching trades latency (records wait for the batch to fill or linger to expire) for far fewer requests (this model counts payload bytes only, so batching alone barely changes them; real requests also save per-request headers). Compression works on whole batches, so bigger batches compress better (round-trip verified ${comp?'<b class="ok">✔</b>':'<b class="bad">✘</b>'}) at CPU cost. With a bounded buffer, a slow broker makes the producer <b>block or reject</b> instead of growing memory without limit: raise “broker slowness” to see it.</div>`;
 }
 
 /* =========================================================
@@ -366,13 +380,13 @@ function draw4(p){
   const c=consumeSim(),rb=rebalSim(),P=S.cfg.P;
   const fx=c.effects,show=Math.min(c.N,Math.ceil(clamp(p/0.5,0,1)*c.N));
   const cells=c.seq.slice(0,show).map((x,i)=>{const e=fx[i];const cls=e===0?'dup':e>1?'dup':'ok';return`<span class="rc ${e===0?'del':e>1?'dup':'ok'}" title="p${x.p} offset ${x.off}: processed ${e}×">${x.p}:${x.off}</span>`}).join('');
-  const T=p*7,W=600,xs=t=>60+t/7*W;let tl=`<svg viewBox="0 0 680 ${30+P*24}" style="max-height:${40+P*24}px">`;
+  const T=p*7,W=600,xs=t=>60+t/7*W;let tl=`<div class="tlw"><svg viewBox="0 0 680 ${30+P*24}" style="max-height:${40+P*24}px">`;
   for(let q=0;q<P;q++){const y=20+q*24,own=rb.old.findIndex(a=>a.includes(q)),nown=rb.neu.findIndex(a=>a.includes(q)),ps=rb.paused[q];
     tl+=`<text x="4" y="${y+12}" font-weight="700">p${q}</text><rect x="${xs(0)}" y="${y}" width="${xs(7)-xs(0)}" height="16" rx="3" fill="${pc(own)}" stroke="var(--line)"/>`;
     if(ps)tl+=`<rect x="${xs(ps[0])}" y="${y}" width="${xs(ps[1])-xs(ps[0])}" height="16" fill="var(--bad)" opacity=".55"/>`;
     tl+=`<rect x="${xs(ps?ps[1]:2)}" y="${y}" width="${xs(7)-xs(ps?ps[1]:2)}" height="16" rx="3" fill="${pc(nown)}" opacity=".9"/>`;
     tl+=`<text x="${xs(0)+4}" y="${y+12}" style="font-size:10px">m${own}</text><text x="${xs(6.2)}" y="${y+12}" style="font-size:10px">m${nown}</text>`}
-  tl+=`<line x1="${xs(T)}" x2="${xs(T)}" y1="8" y2="${30+P*24}" stroke="var(--t1)" stroke-width="2"/><text x="${xs(2)}" y="10" style="font-size:10px">${OPT.rev==='join'?'member joins':'member leaves'}</text></svg>`;
+  tl+=`<line x1="${xs(T)}" x2="${xs(T)}" y1="8" y2="${30+P*24}" stroke="var(--t1)" stroke-width="2"/><text x="${xs(2)}" y="10" style="font-size:10px">${OPT.rev==='join'?'member joins':'member leaves'}</text></svg></div>`;
   const pausedCnt=Object.values(rb.paused).filter(Boolean).length,down=Object.values(rb.paused).filter(Boolean).reduce((a,x)=>a+(x[1]-x[0]),0);
   return`<div class="g2"><div><h3 style="margin-top:0">Group of ${c.n} member(s), ${P} partitions (range assignment)</h3>${c.asg.map((ps,m)=>`<div class="lrow"><b style="color:${tc(m)}">member ${m}</b><span class="mono">partitions [${ps.join(', ')||'-'}]</span></div>`).join('')}
    <h3>Crash of member 0 + commit policy: <span class="mono">${OPT.commit==='after'?'process → commit':OPT.commit==='before'?'commit → process':'auto-commit every 5'}</span></h3>
@@ -406,8 +420,8 @@ function draw5(p){
   const segHtml=segs.map(s=>`<div class="seg ${cls[s.state]}"><h5>${hex(s.base,8)}.log · ${s.state}</h5>${L.segs[s.i].recs.map(r=>`<span class="rc ${s.state==='deleted'?'gone':''} ${r.off===c?'hl':''}">${r.off}</span>`).join('')}</div>`).join('');
   const out=c<logStart&&c<n;
   return`<div class="caption ${out?'bad':''}">t = ${t.toFixed(0)} s · policy <b>${o.rpol==='time'?'delete segments older than '+o.rlim+' s':'keep at most '+o.rlim*60+' B'}</b>${o.tier?` · tiered: local copy kept ${o.localRet} s, remote kept until the policy deletes it`:''}</div>${segHtml}
-  <div class="chips" style="margin:8px 0"><span class="chip">log start offset ${logStart}</span><span class="chip">${o.tier?'local start '+localStart:''}</span><span class="chip">log end ${n}</span><span class="chip">consumer committed ${c}</span><span class="chip ${lag>0?'':'ok'}">lag ${lag}</span></div>
-  <div class="caption ${out?'bad':'good'}">Fetch at committed offset <b>${c}</b> → <b>${loc}</b>${out?`: the broker returns an explicit error with the available range [${logStart}, ${n}); it never silently resets the consumer.`:''}${loc.startsWith('REMOTE')?': the segment is located in the remote manifest, read at higher latency, and returns the same offsets.':''}</div>
+  <div class="chips" style="margin:8px 0"><span class="chip">log start offset ${logStart}</span>${o.tier?'<span class="chip">local start '+localStart+'</span>':''}<span class="chip">log end ${n}</span><span class="chip">consumer committed ${c}</span><span class="chip ${lag>0?'':'ok'}">lag ${lag}</span></div>
+  <div class="caption ${out?'bad':'good'}">Fetch at committed offset <b>${c}</b> → <b>${loc}</b>${out?`: the broker returns an explicit error with the available range [${logStart}, ${n}); the broker never moves the consumer's offset itself; the client's auto.offset.reset decides what happens next.`:''}${loc.startsWith('REMOTE')?': the segment is located in the remote manifest, read at higher latency, and returns the same offsets.':''}</div>
   <div class="note">Retention deletes whole closed segments regardless of whether anyone has read them: consumer offsets never pin data. ${o.tier?'Tiered storage uploads a verified closed segment and publishes a manifest <i>before</i> the local copy may expire, so local disks keep a short hot window while older history stays readable.':'Turn on tiered storage to keep older history readable from a remote tier.'} Move the committed offset to see lag cross the retention boundary.</div>`;
 }
 
@@ -438,10 +452,10 @@ function replSim(L,o){
 function draw6(p){
   const L=S.logs[S.lp],o=OPT;if(!L.recs.length)return'<div class="box">Empty partition.</div>';
   const sim=replSim(L,o),tEnd=sim.R[sim.n-1].t+400,T=p*tEnd,W=640,xs=t=>10+t/tEnd*W,ys=v=>110-v/Math.max(1,sim.n)*95;
-  let ch=`<svg viewBox="0 0 680 125" style="max-height:135px">`;
+  let ch=`<div class="tlw"><svg viewBox="0 0 680 125" style="max-height:135px">`;
   const series=(f,col,dash)=>{let pts='';for(let t=0;t<=Math.min(T,tEnd);t+=10)pts+=`${xs(t)},${ys(f(t))} `;return`<polyline fill="none" stroke="${col}" stroke-width="2" ${dash?'stroke-dasharray="4 3"':''} points="${pts}"/>`};
   ch+=series(t=>sim.leoF(0,t),'var(--t1)')+series(t=>sim.leoF(1,t),'var(--t2)')+series(t=>sim.leoF(2,t),'var(--t3)')+series(t=>sim.hw(t),'var(--ink)',true);
-  ch+=`<line x1="${xs(sim.tf)}" x2="${xs(sim.tf)}" y1="4" y2="115" stroke="var(--bad)" stroke-width="2"/><text x="${xs(sim.tf)+3}" y="12" style="fill:var(--bad)">leader fails</text><line x1="${xs(T)}" x2="${xs(T)}" y1="4" y2="115" stroke="var(--ink)" opacity=".4"/><text x="10" y="122" style="fill:var(--mut);font-size:10px">log end offset: leader (orange), follower 1 (green), follower 2 (purple, slow) · dashed = high watermark</text></svg>`;
+  ch+=`<line x1="${xs(sim.tf)}" x2="${xs(sim.tf)}" y1="4" y2="115" stroke="var(--bad)" stroke-width="2"/><text x="${xs(sim.tf)+3}" y="12" style="fill:var(--bad)">leader fails</text><line x1="${xs(T)}" x2="${xs(T)}" y1="4" y2="115" stroke="var(--ink)" opacity=".4"/><text x="10" y="122" style="fill:var(--mut);font-size:10px">log end offset: leader (orange), follower 1 (green), follower 2 (purple, slow) · dashed = high watermark</text></svg></div>`;
   const isr=sim.isr(T),hw=sim.hw(T),acked=sim.acks.filter(a=>a.status==='acked'&&a.ackT<=T).length,rej=sim.acks.filter(a=>a.status==='rejected'&&a.t<=T).length;
   const after=T>=sim.tf;
   const nodes=[0,1,2].map(f=>`<div class="box" style="border:2px solid ${f===0?'var(--t1)':'var(--line)'};text-align:center;${after&&f===0?'opacity:.4':''}"><b>broker ${f}</b><div class="note">${f===0?'leader':'follower'}${after&&f===0?' · DEAD':''}${isr.includes(f)?'':' · <span class="bad">out of ISR</span>'}</div><div class="mono">LEO ${sim.leoF(f,T)}</div></div>`).join('');
@@ -667,7 +681,7 @@ let RS=null,rsLive=false;
 function rsInit(scen){RS=new Raft(OPT.raftN,S.recs.length*13+7);RS.scen=scen;RS.dur=RAFT_SCEN[scen].d;RS.script=RAFT_SCEN[scen].s.map(x=>({...x}))}
 function draw11(p){
   if(!RS||RS.n!==OPT.raftN||RS.scen!==OPT.raftScen)rsInit(OPT.raftScen);
-  if(rsAnim){const T=p*RS.dur;if(T<RS.t)rsInit(RS.scen);RS.advanceTo(T)}
+  if(rsAnim||(p<1&&!rsLive)){const T=p*RS.dur;if(T<RS.t)rsInit(RS.scen);RS.advanceTo(T)}
   const n=RS.n,pos=i=>{const a=(i/n)*2*Math.PI-Math.PI/2;return[190+105*Math.cos(a),120+78*Math.sin(a)]};
   const roleCol={follower:'var(--card)',candidate:'var(--p4)',leader:'var(--p2)'};let s='<svg viewBox="0 0 380 250" style="max-height:270px">';
   RS.nodes.forEach(x=>{const[px,py]=pos(x.id);s+=`<circle cx="${px}" cy="${py}" r="25" fill="${x.up?roleCol[x.role]:'var(--p7)'}" stroke="${x.role==='leader'&&x.up?'var(--ok)':x.grp?'var(--bad)':'var(--line)'}" stroke-width="${x.role==='leader'?4:2}" ${x.grp?'stroke-dasharray="5 3"':''}/><text x="${px}" y="${py-2}" text-anchor="middle" font-weight="700">${cn(x.id)}</text><text x="${px}" y="${py+11}" text-anchor="middle" style="font-size:10px">${x.up?'epoch '+x.term:'✕ down'}</text><text x="${px}" y="${py+40}" text-anchor="middle" style="font-size:10px;fill:var(--mut)">${x.up?(x.role==='leader'?'ACTIVE controller':x.role)+(x.grp?' · cut off':''):''}</text>`});
@@ -684,7 +698,7 @@ function draw11(p){
   <div class="note">The controller quorum keeps topics, partition placement and leader/ISR changes in a separate <b>replicated metadata log</b>. A command is authoritative only after a majority stored it; a minority-side controller cannot publish new placement, and stale controller epochs are rejected by brokers. Data replication (phase 6) protects records; this protects the authority that decides leaders.</div>`;
 }
 let rsAnim2=false;
-function raftCtlAct(a){if(!RS)rsInit(OPT.raftScen);rsAnim=false;if(a==='reset')rsInit(OPT.raftScen);else if(a==='live'){rsLive=!rsLive;if(rsLive)rsLoop()}else if(a==='propose')RS.act({a:'propose'});else if(a==='killl')RS.act({a:'kill',node:'leader'});else if(a==='revive')RS.act({a:'revive',node:'killed'});else if(a==='isolate')RS.act({a:'isolate'});else if(a==='heal')RS.act({a:'heal'});paintView(1)}
+function raftCtlAct(a){if(!RS)rsInit(OPT.raftScen);rsAnim=false;if(a==='reset')rsInit(OPT.raftScen);else if(a==='live'){rsLive=!rsLive;if(rsLive)rsLoop();showPhase(cur)}else if(a==='propose')RS.act({a:'propose'});else if(a==='killl')RS.act({a:'kill',node:'leader'});else if(a==='revive')RS.act({a:'revive',node:'killed'});else if(a==='isolate')RS.act({a:'isolate'});else if(a==='heal')RS.act({a:'heal'});paintView(1)}
 function rsLoop(){let last=null;const f=now=>{if(!rsLive||cur!==10)return;if(last===null)last=now;const dt=now-last;last=now;if(!paused)RS.advanceTo(RS.t+dt*speed);paintView(1);requestAnimationFrame(f)};requestAnimationFrame(f)}
 
 /* =========================================================
@@ -707,20 +721,22 @@ function ctlHTML(k){
   if(!S||S.error)return'';
   const sel=(key,opts,val)=>`<select data-opt="${key}">${opts.map(([v,l])=>`<option value="${v}" ${String(v)===String(val)?'selected':''}>${esc(l)}</option>`).join('')}</select>`;
   const rng=(key,min,max,step,val,suf='')=>`<input type="range" data-opt="${key}" min="${min}" max="${max}" step="${step}" value="${val}" style="width:120px"> ${val}${suf}`;
+  const px=(id,lab)=>{const el=$('#'+id);return`<label>${lab} <select data-proxy="${id}">${[...el.options].map(o=>`<option value="${esc(o.value)}" ${o.value===el.value?'selected':''}>${esc(o.textContent)}</option>`).join('')}</select></label>`};
   const parts=[...Array(S.cfg.P).keys()].map(i=>[i,'partition '+i]);
-  if(k===0)return`<label>Partition ${sel('lp',parts,OPT.lp)}</label><label>Fetch offset ${rng('fetchOff',0,Math.max(0,S.logs[S.lp].recs.length-1),1,OPT.fetchOff)}</label><label>Crash ${sel('crash',[['none','none'],['torn','torn tail (mid-append)'],['corrupt','corrupted record']],OPT.crash)}</label>`;
-  if(k===1)return`<span class="note">Change “Partitions” and “Workload: hot key” in the panel above.</span>`;
+  if(k===0)return`<label>Crash ${sel('crash',[['none','none'],['torn','torn tail (mid-append)'],['corrupt','corrupted record']],OPT.crash)}</label><label>Fetch offset ${rng('fetchOff',0,Math.max(0,S.logs[S.lp].recs.length-1),1,OPT.fetchOff)}</label><label>Partition ${sel('lp',parts,OPT.lp)}</label>${px('seg','Segment size')}`;
+  if(k===1)return`${px('pn','Partitions')}${px('mix','Workload')}${px('kcol','Record key')}`;
   if(k===2)return`<label>batch.size ${sel('batch',[512,2048,8192].map(x=>[x,x+' B']),OPT.batch)}</label><label>linger ${sel('linger',[0,5,20,100].map(x=>[x,x+' ms']),OPT.linger)}</label><label>compression ${sel('comp',[['none','none'],['lz','LZ77']],OPT.comp)}</label><label>buffer.memory ${sel('mem',[400,1024,4096,16384].map(x=>[x,x+' B']),OPT.mem)}</label><label>on full ${sel('policy',[['block','block'],['reject','reject']],OPT.policy)}</label><label>broker slowness ${rng('slow',1,10,1,OPT.slow,'×')}</label>`;
   if(k===3)return`<label>Members ${sel('members',[1,2,3,4].map(x=>[x,x]),OPT.members)}</label><label>Commit ${sel('commit',[['after','after processing'],['before','before processing'],['auto','auto every 5']],OPT.commit)}</label><label>Crash at ${rng('crashPct',10,100,10,OPT.crashPct,'%')}</label><label>Rebalance ${sel('rebal',[['eager','eager'],['cooperative','cooperative']],OPT.rebal)}</label><label>Event ${sel('rev',[['join','member joins'],['leave','member leaves']],OPT.rev)}</label>`;
-  if(k===4)return`<label>Partition ${sel('lp',parts,OPT.lp)}</label><label>Policy ${sel('rpol',[['time','time (s)'],['bytes','bytes (×60 B)']],OPT.rpol)}</label><label>limit ${rng('rlim',5,60,1,OPT.rlim)}</label><label><input type="checkbox" data-opt="tier" ${OPT.tier?'checked':''}> tiered storage</label><label>local keeps ${rng('localRet',2,30,1,OPT.localRet,' s')}</label><label>consumer committed ${rng('cOff',0,Math.max(0,S.logs[S.lp].recs.length),1,OPT.cOff)}</label>`;
-  if(k===5)return`<label>Partition ${sel('lp',parts,OPT.lp)}</label><label>acks ${sel('racks',[['0','0'],['1','1'],['all','all']],OPT.racks)}</label><label>min.insync ${sel('minIsr',[1,2,3].map(x=>[x,x]),OPT.minIsr)}</label><label>follower 2 fetch every ${sel('slowF',[40,200,400,1000].map(x=>[x,x+' ms']),OPT.slowF)}</label><label>leader fails at ${rng('failPct',20,95,5,OPT.failPct,'%')}</label>`;
-  if(k===6)return`<label>Partition ${sel('lp',parts,OPT.lp)}</label><label><input type="checkbox" data-opt="idem" ${OPT.idem?'checked':''}> idempotent producer</label>`;
-  if(k===7)return`<label>Partition ${sel('lp',parts,OPT.lp)}</label><label>delete.retention ${rng('cdelRet',1,60,1,OPT.cdelRet)}</label><label>time since writes ${rng('cdel',0,80,1,OPT.cdel,' s')}</label><label><input type="checkbox" data-opt="roll" ${OPT.roll?'checked':''}> roll active segment first</label><label>consumer read up to offset ${rng('cOffset',0,Math.max(0,S.logs[S.lp].recs.length),1,OPT.cOffset)}</label>`;
+  if(k===4)return`<label>Policy ${sel('rpol',[['time','time (s)'],['bytes','bytes (×60 B)']],OPT.rpol)}</label><label>limit ${rng('rlim',5,60,1,OPT.rlim)}</label><label>consumer committed ${rng('cOff',0,Math.max(0,S.logs[S.lp].recs.length),1,OPT.cOff)}</label><label><input type="checkbox" data-opt="tier" ${OPT.tier?'checked':''}> tiered storage</label><label>local keeps ${rng('localRet',2,30,1,OPT.localRet,' s')}</label><label>Partition ${sel('lp',parts,OPT.lp)}</label>`;
+  if(k===5)return`<label>acks ${sel('racks',[['0','0'],['1','1'],['all','all']],OPT.racks)}</label><label>min.insync ${sel('minIsr',[1,2,3].map(x=>[x,x]),OPT.minIsr)}</label><label>leader fails at ${rng('failPct',20,95,5,OPT.failPct,'%')}</label><label>follower 2 fetch every ${sel('slowF',[40,200,400,1000].map(x=>[x,x+' ms']),OPT.slowF)}</label><label>Partition ${sel('lp',parts,OPT.lp)}</label>`;
+  if(k===6)return`<label><input type="checkbox" data-opt="idem" ${OPT.idem?'checked':''}> idempotent producer</label><label>Partition ${sel('lp',parts,OPT.lp)}</label>`;
+  if(k===7)return`<label>delete.retention ${rng('cdelRet',1,60,1,OPT.cdelRet)}</label><label>time since writes ${rng('cdel',0,80,1,OPT.cdel,' s')}</label><label>consumer read up to offset ${rng('cOffset',0,Math.max(0,S.logs[S.lp].recs.length),1,OPT.cOffset)}</label><label><input type="checkbox" data-opt="roll" ${OPT.roll?'checked':''}> roll active segment first</label><label>Partition ${sel('lp',parts,OPT.lp)}</label>`;
   if(k===8)return`<label><input type="checkbox" data-opt="txn" ${OPT.txn?'checked':''}> transactional</label><label>Crash after step ${sel('ccrash',[...Array(OPT.txn?8:5).keys()].map(i=>[i,i===(OPT.txn?7:4)?'no crash':i===0?'before anything':'step '+i]),OPT.ccrash)}</label>`;
-  if(k===9)return`<label>Brokers ${sel('bk',[3,4,5].map(x=>[x,x]),OPT.bk)}</label><label>Copy throttle ${rng('thr',1,10,1,OPT.thr,' B/ms')}</label><label>Crash at step ${sel('mcrash',[[0,'none'],...MSTEPS.map((_,i)=>[i+1,i+1])],OPT.mcrash)}</label>`;
-  if(k===10)return`<label>Controllers ${sel('raftN',[3,5].map(x=>[x,x]),OPT.raftN)}</label><label>Scenario ${sel('raftScen',[['elect','1 · election'],['replicate','2 · replicate & commit'],['crash','3 · active controller crash'],['partition','4 · minority partition']],OPT.raftScen)}</label><button data-act="r-propose">Propose metadata change</button><button data-act="r-killl">Kill active</button><button data-act="r-revive">Restart killed</button><button data-act="r-isolate">Isolate active</button><button data-act="r-heal">Heal</button><button data-act="r-live">▶/⏸ Run live</button><button data-act="r-reset">Reset</button>`;
+  if(k===9)return`<label>Brokers ${sel('bk',[3,4,5].map(x=>[x,x]),OPT.bk)}</label><label>Copy throttle ${rng('thr',1,10,1,OPT.thr,' B/ms')}</label><label>Crash at step ${sel('mcrash',[[0,'none'],...MSTEPS.map((_,i)=>[i+1,i+1])],OPT.mcrash)}</label>${px('mix','Workload')}`;
+  if(k===10)return`<label>Scenario ${sel('raftScen',[['elect','1 · election'],['replicate','2 · replicate & commit'],['crash','3 · active controller crash'],['partition','4 · minority partition']],OPT.raftScen)}</label><label>Controllers ${sel('raftN',[3,5].map(x=>[x,x]),OPT.raftN)}</label><span class="rbtns"><button data-act="r-live">${rsLive?'⏸ Pause live':'▶ Run live'}</button><button data-act="r-propose">Propose change</button><button data-act="r-killl">Kill active</button><button data-act="r-revive">Restart killed</button><button data-act="r-isolate">Isolate active</button><button data-act="r-heal">Heal</button><button data-act="r-reset">Reset</button></span>`;
   return'';
 }
+$('#phCtl').addEventListener('change',e=>{const t=e.target.closest('[data-proxy]');if(!t)return;const s=$('#'+t.dataset.proxy);if(!s||s.value===t.value)return;s.value=t.value;s.dispatchEvent(new Event('change'))});
 const STROPT=['rpol','tier','racks','policy','comp','commit','rebal','rev','crash','raftScen'];
 const BOOLOPT=['tier','idem','txn','roll'];
 $('#phCtl').addEventListener('change',e=>{
@@ -734,21 +750,6 @@ $('#phCtl').addEventListener('change',e=>{
 $('#phCtl').addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(b&&b.dataset.act.startsWith('r-'))raftCtlAct(b.dataset.act.slice(2))});
 
 /* ================= render / wiring ================= */
-function renderNav(){$('#nav').innerHTML=PHASES.map((ph,i)=>`<div class="nv ${i===cur?'act':''} ${i<cur?'done':''}" data-ph="${i}"><b>${i+1}. ${ph.t}</b><small>${ph.s} · ${ph.f}</small></div>`).join('')}
-function showPhase(k,p=1){cur=k;renderNav();ovRender();const ph=PHASES[k];$('#blurb').innerHTML=`${ph.b}<div class="ft">Reimplementation features: ${ph.f}</div>`;$('#phCtl').innerHTML=ctlHTML(k);paintView(p);$('#prev').disabled=k===0;$('#nextB').disabled=k===PHASES.length-1}
-function paintView(p=1){
-  if(!S||S.error){$('#phView').innerHTML=`<div class="box bad">${esc(S?S.error:'')}</div>`;return}
-  try{$('#phView').innerHTML=PHASES[cur].draw(p)}catch(e){$('#phView').innerHTML=`<div class="box bad">Render error: ${esc(e.message)}</div>`;console.error(e)}
-}
-function stopAll(){gen++;rsLive=false;rsAnim=false;playingAll=false;paused=false;$('#pauseBtn').disabled=true;$('#pauseBtn').textContent='⏸ Pause'}
-$('#nav').onclick=e=>{const n=e.target.closest('[data-ph]');if(!n)return;stopAll();showPhase(+n.dataset.ph)};
-$('#prev').onclick=()=>{stopAll();showPhase(Math.max(0,cur-1))};
-$('#nextB').onclick=()=>{stopAll();showPhase(Math.min(PHASES.length-1,cur+1))};
-function runPhase(k){if(k===10){rsInit(OPT.raftScen);rsAnim=true}return animate(p=>paintView(p),PHASES[k].dur).then(ok=>{if(k===10)rsAnim=false;return ok})}
-$('#anim').onclick=()=>{stopAll();runPhase(cur)};
-$('#playAll').onclick=async()=>{if(!S||S.error)return;stopAll();playingAll=true;$('#pauseBtn').disabled=false;for(let k=0;k<PHASES.length;k++){showPhase(k,0);const ok=await runPhase(k);if(!ok)return;await sleep(500);if(!playingAll)return}playingAll=false;$('#pauseBtn').disabled=true};
-$('#pauseBtn').onclick=()=>{paused=!paused;$('#pauseBtn').textContent=paused?'▶ Resume':'⏸ Pause'};
-$('#speed').oninput=e=>{speed=+e.target.value;$('#speedV').textContent=speed+'×'};
 function fillSel(sel,opts,keep,pref){const old=keep?$(sel).value:null;$(sel).innerHTML=opts.map(o=>`<option>${esc(o)}</option>`).join('');$(sel).value=opts.includes(old)?old:(opts.includes(pref)?pref:opts[0])}
 function onData(auto){
   const text=$('#src').value;let ds;try{const pf=$('#fmt').value==='auto'?detect(text):$('#fmt').value;ds={...parseWhole(text,pf),pf}}catch(e){ds={rows:[],columns:[],err:e.message}}
@@ -772,62 +773,7 @@ $('#file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileR
    ARCHITECTURE OVERVIEW (components + relationships)
    ========================================================= */
 const OVS={"w": 1000, "h": 420, "groups": [{"x": 300, "y": 40, "w": 440, "h": 340, "label": "Brokers: replicated partition logs"}], "nodes": [{"id": "producer", "x": 10, "y": 60, "w": 160, "h": 64, "label": "Producer", "sub": "batch \u00b7 compress \u00b7 retry", "desc": "Accumulates records into batches by size and time, optionally compresses them, and is bounded by a memory budget (backpressure).", "phase": 2}, {"id": "partitioner", "x": 10, "y": 150, "w": 160, "h": 56, "label": "Partitioner", "sub": "hash(key) \u2192 partition", "desc": "A stable hash sends equal keys to the same partition: order exists inside a partition only.", "phase": 1}, {"id": "idem", "x": 10, "y": 240, "w": 160, "h": 56, "label": "Idempotence", "sub": "PID \u00b7 epoch \u00b7 sequence", "desc": "Lets the leader recognise a retried batch after a lost ack, reject sequence gaps and fence zombie producers.", "phase": 6}, {"id": "txn", "x": 10, "y": 330, "w": 160, "h": 56, "label": "Transactions", "sub": "markers \u00b7 LSO", "desc": "Writes outputs across partitions and the consumed offset atomically; commit/abort markers and the last stable offset hide open work from read_committed consumers.", "phase": 8}, {"id": "leader", "x": 320, "y": 90, "w": 160, "h": 70, "label": "Partition log", "sub": "segments \u00b7 sparse index", "desc": "The leader appends each record, assigns the next offset, and keeps immutable segments plus a sparse offset index.", "phase": 0}, {"id": "follower", "x": 540, "y": 90, "w": 180, "h": 70, "label": "Replicas", "sub": "ISR \u00b7 high watermark", "desc": "Followers pull the leader log. The high watermark (smallest ISR log end) is the committed prefix consumers may read.", "phase": 5}, {"id": "compaction", "x": 320, "y": 200, "w": 160, "h": 60, "label": "Compaction", "sub": "latest per key", "desc": "Rewrites closed segments keeping the latest value per key and tombstones for a grace period, without renumbering offsets.", "phase": 7}, {"id": "retention", "x": 540, "y": 200, "w": 180, "h": 60, "label": "Retention", "sub": "delete \u00b7 lag \u00b7 tiers", "desc": "Deletes whole closed segments by time or size, independent of consumers; tiered storage keeps verified older segments remotely.", "phase": 4}, {"id": "reassign", "x": 320, "y": 300, "w": 160, "h": 60, "label": "Reassignment", "sub": "move replicas \u00b7 skew", "desc": "Copies a replica to another broker, lets it catch up, then switches placement. Balances brokers but cannot split a hot partition.", "phase": 9}, {"id": "controller", "x": 540, "y": 300, "w": 180, "h": 60, "label": "Controller quorum", "sub": "metadata log", "desc": "A small quorum replicates topic, placement and leader metadata and elects one active controller per epoch.", "phase": 10}, {"id": "consumers", "x": 800, "y": 90, "w": 170, "h": 64, "label": "Consumer groups", "sub": "offsets \u00b7 rebalance", "desc": "Pull records at their own pace, commit offsets, and share partitions through a group coordinator with rebalances and generation fencing.", "phase": 3}, {"id": "remote", "x": 800, "y": 220, "w": 170, "h": 56, "label": "Remote tier", "sub": "cold segments", "desc": "A remote-style store for verified closed segments, read at higher latency when a consumer needs old history.", "phase": 4}], "edges": [{"from": "producer", "to": "partitioner", "label": "key", "kind": "data"}, {"from": "partitioner", "to": "leader", "label": "partition", "kind": "data"}, {"from": "idem", "to": "leader", "label": "PID + seq", "kind": "ctl"}, {"from": "txn", "to": "leader", "label": "markers", "kind": "ctl"}, {"from": "leader", "to": "follower", "label": "pull", "kind": "data"}, {"from": "follower", "to": "leader", "label": "acks", "kind": "ctl", "bend": 28}, {"from": "leader", "to": "consumers", "label": "fetch \u2264 HW", "kind": "data", "bend": -95}, {"from": "compaction", "to": "leader", "label": "rewrite", "kind": "ctl"}, {"from": "retention", "to": "leader", "label": "delete", "kind": "ctl"}, {"from": "retention", "to": "remote", "label": "upload", "kind": "data"}, {"from": "controller", "to": "leader", "label": "leaders", "kind": "ctl"}, {"from": "controller", "to": "reassign", "label": "placement", "kind": "ctl"}, {"from": "reassign", "to": "follower", "label": "copy", "kind": "ctl"}], "flow": [{"n": "producer", "t": "The producer batches records (and may compress them)."}, {"n": "partitioner", "t": "Each record's key is hashed to one partition."}, {"n": "idem", "t": "Idempotent producer: PID + sequence let the leader drop retries."}, {"n": "leader", "t": "The leader appends the record and assigns the next offset."}, {"n": "follower", "t": "Followers pull it; the ISR defines the high watermark."}, {"n": "consumers", "t": "Consumers fetch up to the high watermark and commit offsets."}, {"n": "retention", "t": "Old closed segments are deleted or moved to the remote tier."}, {"n": "remote", "t": "Cold history stays readable from the remote tier."}]};
-const OVN=Object.fromEntries(OVS.nodes.map(n=>[n.id,n]));
-const OV={sel:null,k:-1};
-function ovAnchor(n,tx,ty){const cx=n.x+n.w/2,cy=n.y+n.h/2,dx=tx-cx,dy=ty-cy;if(!dx&&!dy)return[cx,cy];const s=Math.min((n.w/2)/Math.abs(dx||1e-9),(n.h/2)/Math.abs(dy||1e-9));return[cx+dx*s,cy+dy*s]}
-function ovGeom(e){
-  const a=OVN[e.from],b=OVN[e.to],ca=[a.x+a.w/2,a.y+a.h/2],cb=[b.x+b.w/2,b.y+b.h/2];let c=null;
-  if(e.bend){const mx=(ca[0]+cb[0])/2,my=(ca[1]+cb[1])/2,dx=cb[0]-ca[0],dy=cb[1]-ca[1],L=Math.hypot(dx,dy)||1;c=[mx-dy/L*e.bend,my+dx/L*e.bend]}
-  const p0=ovAnchor(a,...(c||cb)),p1=ovAnchor(b,...(c||ca));
-  const mid=c?[0.25*p0[0]+0.5*c[0]+0.25*p1[0],0.25*p0[1]+0.5*c[1]+0.25*p1[1]]:[(p0[0]+p1[0])/2,(p0[1]+p1[1])/2];
-  return{p0,p1,c,mid};
-}
-function ovRender(){
-  const el=document.getElementById('ovView');if(!el)return;
-  const flow=OVS.flow,k=OV.k,act=new Set(),actE=new Set();
-  if(k>=0){for(let i=0;i<=Math.min(k,flow.length-1);i++)act.add(flow[i].n);for(let i=1;i<=k&&i<flow.length;i++){actE.add(flow[i-1].n+'>'+flow[i].n);actE.add(flow[i].n+'>'+flow[i-1].n)}}
-  const sel=OV.sel,rel=new Set();if(sel){rel.add(sel);OVS.edges.forEach(e=>{if(e.from===sel)rel.add(e.to);if(e.to===sel)rel.add(e.from)})}
-  const curPh=typeof cur==='number'?cur:-1;
-  let s=`<svg viewBox="0 0 ${OVS.w} ${OVS.h}" style="max-height:${OVS.h*1.1}px"><defs><marker id="ovar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="#8a94a6"/></marker><marker id="ovara" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="var(--acc)"/></marker></defs>`;
-  (OVS.groups||[]).forEach(g=>{s+=`<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${g.x+12}" y="${g.y+g.h-10}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${esc(g.label)}</text>`});
-  OVS.edges.forEach(e=>{
-    const g=ovGeom(e),on=actE.has(e.from+'>'+e.to),dim=sel&&!(e.from===sel||e.to===sel),hl=sel&&(e.from===sel||e.to===sel);
-    const d=g.c?`M${g.p0[0]},${g.p0[1]} Q${g.c[0]},${g.c[1]} ${g.p1[0]},${g.p1[1]}`:`M${g.p0[0]},${g.p0[1]} L${g.p1[0]},${g.p1[1]}`;
-    s+=`<g style="${dim?'opacity:.2':''}"><path d="${d}" class="ove ${e.kind||'data'} ${on||hl?'act':''}" marker-end="url(#${on||hl?'ovara':'ovar'})"/>${on?`<path d="${d}" class="ove flow act" style="stroke-width:5;opacity:.5"/>`:''}
-      <text x="${g.mid[0]}" y="${g.mid[1]-5}" text-anchor="middle" style="font-size:10.5px;fill:${hl||on?'var(--acc)':'var(--mut)'};paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(e.label)}</text></g>`;
-  });
-  OVS.nodes.forEach(n=>{
-    const ph=n.phase,cls=['ovn',sel===n.id?'sel':'',ph!==undefined&&ph===curPh?'cur':'',act.has(n.id)?'act':''].join(' '),dim=sel&&!rel.has(n.id);
-    s+=`<g class="${cls}" data-node="${n.id}" style="${dim?'opacity:.3':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${ph!==undefined?pc(ph):'var(--card)'}"/>
-      <text x="${n.x+10}" y="${n.y+22}" font-weight="700" style="font-size:12.5px">${esc(n.label)}</text><text x="${n.x+10}" y="${n.y+40}" style="font-size:10.5px;fill:var(--mut)">${esc(n.sub||'')}</text>
-      ${ph!==undefined?`<text x="${n.x+n.w-8}" y="${n.y+n.h-8}" text-anchor="end" style="font-size:10px;font-weight:700;fill:var(--mut)">phase ${ph+1}</text>`:''}</g>`;
-  });
-  s+='</svg>';
-  el.innerHTML=s;
-  const cap=document.getElementById('ovCap');
-  if(cap)cap.innerHTML=k>=0?`<b>Step ${Math.min(k,flow.length-1)+1}/${flow.length}:</b> ${esc(flow[Math.min(k,flow.length-1)].t)}`:(sel?'':'Click a component to see how it connects to the others.');
-  ovInfo();
-}
-function ovInfo(){
-  const el=document.getElementById('ovInfo');if(!el)return;const sel=OV.sel&&OVN[OV.sel];
-  // phase-to-phase dependencies derived from the edges
-  const pairs=new Map();OVS.edges.forEach(e=>{const a=OVN[e.from].phase,b=OVN[e.to].phase;if(a!==undefined&&b!==undefined&&a!==b){const key=a+'>'+b;if(!pairs.has(key))pairs.set(key,[]);pairs.get(key).push(e.label)}});
-  const dep=[...pairs.entries()].sort((x,y)=>x[0].split('>')[0]-y[0].split('>')[0]).map(([k,l])=>{const[a,b]=k.split('>').map(Number);return`<span class="chip" style="background:${pc(a)}">${a+1}. ${esc(PHASES[a].t)}</span> <span class="mono">→ ${esc(short(l.join(' / '),34))} →</span> <span class="chip" style="background:${pc(b)}">${b+1}. ${esc(PHASES[b].t)}</span>`}).join('<br>');
-  let card='';
-  if(sel){
-    const ins=OVS.edges.filter(e=>e.to===sel.id),outs=OVS.edges.filter(e=>e.from===sel.id);
-    card=`<div class="box" style="margin-top:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="font-size:15px">${esc(sel.label)}</b><span class="note" style="margin:0">${esc(sel.sub||'')}</span>${sel.phase!==undefined?`<button class="primary" data-go="${sel.phase}">Go to phase ${sel.phase+1}: ${esc(PHASES[sel.phase].t)} ›</button>`:''}</div>
-      <div style="margin:6px 0">${esc(sel.desc||'')}</div>
-      <div class="g2"><div><b style="font-size:12px">Receives</b>${ins.map(e=>`<div class="row"><span style="color:var(--mut)">${esc(OVN[e.from].label)}</span> ─ ${esc(e.label)} ▸</div>`).join('')||'<div class="note">nothing: it is where requests enter.</div>'}</div>
-      <div><b style="font-size:12px">Sends</b>${outs.map(e=>`<div class="row">▸ ${esc(e.label)} ─ <span style="color:var(--mut)">${esc(OVN[e.to].label)}</span></div>`).join('')||'<div class="note">nothing: it is an endpoint.</div>'}</div></div></div>`;
-  }
-  el.innerHTML=card+`<details class="dd" style="margin-top:8px"><summary>How the phases depend on each other</summary><div style="line-height:2.1;margin-top:6px">${dep||'<span class="note">no cross-phase edges</span>'}</div></details>`;
-}
-function jumpPhase(k){stopAll();showPhase(k);const t=document.getElementById('phaseSec');if(t&&t.scrollIntoView)t.scrollIntoView({behavior:'smooth',block:'start'})}
-document.getElementById('ovView').addEventListener('click',e=>{const n=e.target.closest('[data-node]');if(n){OV.k=-1;OV.sel=OV.sel===n.dataset.node?null:n.dataset.node;ovRender()}});
-document.getElementById('ovInfo').addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g)jumpPhase(+g.dataset.go)});
-document.getElementById('ovTrace').onclick=()=>{stopAll();OV.sel=null;OV.k=0;animate(p=>{OV.k=Math.min(OVS.flow.length-1,Math.floor(p*OVS.flow.length));ovRender()},OVS.flow.length*1300)};
-document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.sel=null;ovRender()};
+OVS.groupLabelBottom=true;
 
 
 /* ================= init ================= */
@@ -1001,148 +947,10 @@ const SIMM={
  detail(id,st){if(id[0]==='b'){const o=[];for(let p=0;p<3;p++){if(!KB_REPL(p,st.n).includes(+id.slice(1)))continue;o.push(`partition ${p}${st.lead[p]===+id.slice(1)?' (leader, epoch '+st.ep[p]+')':' (follower)'}`);st.logs[id][p].forEach(r=>o.push(`  offset ${r.off}: ${r.key} = ${r.val===null?'null (tombstone)':r.val}`))}return o}return SIMM.lines(id,st)}
 };
 
-/* =========================================================
-   LIVE CLUSTER SIMULATION (shared framework)
-   events on a timeline; packets travel between nodes; state is replayed up to time T
-   ========================================================= */
-function sHash(s){let h=2166136261;s=String(s);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h>>>0}
-const sEsc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const sShort=(s,n)=>{s=String(s);return s.length>n?s.slice(0,n-1)+'…':s};
-const E=(t,d,from,to,msg,kind,fx,cause)=>({t,d,from,to,msg,kind,fx:fx||[],cause:cause||''});
-const SIM={n:0,set:{},run:null,T:0,play:false,sel:null,selNode:null,speed:1,last:null};
-const SIMCOL={write:'#2f6fed',ack:'#1a9b5a',read:'#e25a1c',data:'#e25a1c',repl:'#9b4fd0',ctl:'#6b7280',fail:'#d64545',info:'#c9a400',sched:'#0f9d8a',watch:'#8a6fd0',ctrl:'#6b7280',trunc:'#d64545'};
-function simParse(text){return text.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#')).map(l=>{const p=l.split(/\s+/);return{t:Number(p[0])||0,op:(p[1]||'').toUpperCase(),args:p.slice(2),raw:l}}).sort((a,b)=>a.t-b.t)}
-function simRun(){
-  const acts=simParse(document.getElementById('simAct').value);
-  try{SIM.run=SIMM.run(acts,SIM.n,SIM.set);SIM.run.events.sort((a,b)=>a.t-b.t||a.d-b.d)}catch(e){SIM.run={events:[],end:0,err:e.message};console.error(e)}
-  SIM.end=Math.max(1000,(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0))+600);
-  const sl=document.getElementById('simT');sl.max=SIM.end;if(SIM.T>SIM.end)SIM.T=SIM.end;
-}
-function simStateAt(T){const st=SIMM.init(SIM.n,SIM.set);for(const e of SIM.run.events){if(e.t+e.d<=T)e.fx.forEach(f=>SIMM.apply(st,f))}return st}
-function simDraw(){
-  const svg=document.getElementById('simSvg');if(!svg||!SIM.run)return;
-  const T=SIM.T,topo=SIMM.topo(SIM.n),st=simStateAt(T),byId=Object.fromEntries(topo.nodes.map(n=>[n.id,n]));
-  const W=topo.w||900,H=topo.h||430;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
-  const active=SIM.run.events.filter(e=>e.t<=T&&T<e.t+e.d),recent=SIM.run.events.filter(e=>e.t+e.d<=T&&T-(e.t+e.d)<450);
-  const hot=new Set([...active.flatMap(e=>[e.from,e.to]),...recent.map(e=>e.to)]);
-  let s='<defs><marker id="simar" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0L9,4.5L0,9z" fill="#8a94a6"/></marker></defs>';
-  (topo.zones||[]).forEach(z=>{s+=`<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${z.x+12}" y="${z.y+17}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${sEsc(z.label)}</text>`});
-  topo.edges.forEach(([a,b])=>{const A=byId[a],B=byId[b];if(!A||!B)return;s+=`<line x1="${A.x+A.w/2}" y1="${A.y+A.h/2}" x2="${B.x+B.w/2}" y2="${B.y+B.h/2}" stroke="var(--line)" stroke-width="1.5"/>`});
-  topo.nodes.forEach(n=>{
-    const status=(st.status&&st.status[n.id])||'up',down=status==='down',isHot=hot.has(n.id),sel=SIM.selNode===n.id;
-    const lines=SIMM.lines(n.id,st)||[];
-    s+=`<g class="simn" data-id="${n.id}" style="cursor:pointer;${down?'opacity:.55':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${down?'var(--p5)':n.c||'var(--card)'}" stroke="${sel?'var(--acc)':isHot?'var(--acc2)':'var(--line)'}" stroke-width="${sel||isHot?3.5:1.8}"/>
-      <text x="${n.x+9}" y="${n.y+17}" font-weight="700" style="font-size:12.5px">${sEsc(n.label)}${down?' ✕':''}</text>${n.badge&&(n.label.length*7.6+String(typeof n.badge==='function'?n.badge(st):n.badge).length*5.8<n.w)?`<text x="${n.x+n.w-8}" y="${n.y+17}" text-anchor="end" style="font-size:10px;fill:var(--mut)">${sEsc(typeof n.badge==='function'?n.badge(st):n.badge)}</text>`:''}
-      ${lines.slice(0,Math.floor((n.h-24)/13)).map((l,i)=>`<text x="${n.x+9}" y="${n.y+32+i*13}" style="font-size:10.5px;${/^!/.test(l)?'fill:var(--bad)':''}">${sEsc(sShort(String(l).replace(/^!/,''),Math.floor((n.w-14)/6.3)))}</text>`).join('')}</g>`;
-  });
-  active.forEach(e=>{const A=byId[e.from],B=byId[e.to];if(!A||!B)return;const f=Math.min(1,(T-e.t)/Math.max(1,e.d)),ax=A.x+A.w/2,ay=A.y+A.h/2,bx=B.x+B.w/2,by=B.y+B.h/2;
-    if(e.from===e.to){s+=`<text x="${A.x+A.w/2}" y="${A.y-6}" text-anchor="middle" style="font-size:10.5px;fill:${SIMCOL[e.kind]||'#6b7280'};font-weight:700">${sEsc(sShort(e.msg,30))}</text>`;return}
-    const col=SIMCOL[e.kind]||'#6b7280';s+=`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${col}" stroke-width="2.5" opacity=".35"/><circle cx="${ax+(bx-ax)*f}" cy="${ay+(by-ay)*f}" r="7" fill="${col}" stroke="#fff" stroke-width="1.5"/><text x="${ax+(bx-ax)*f}" y="${ay+(by-ay)*f-11}" text-anchor="middle" style="font-size:10px;fill:${col};font-weight:700;paint-order:stroke;stroke:var(--card);stroke-width:3px">${sEsc(sShort(e.msg,26))}</text>`});
-  svg.innerHTML=s;
-  document.getElementById('simTv').textContent=(T/1000).toFixed(2)+' s / '+(SIM.end/1000).toFixed(1)+' s';
-  document.getElementById('simT').value=T;
-  // log
-  const evs=SIM.run.events,upTo=evs.filter(e=>e.t<=T),lastI=upTo.length-1;
-  document.getElementById('simLog').innerHTML=evs.map((e,i)=>`<div class="simev ${i===lastI?'cur':''} ${e.t>T?'fut':''}" data-i="${i}"><span class="simtag" style="background:${SIMCOL[e.kind]||'#6b7280'}">${sEsc(e.kind)}</span> <span class="mono">${(e.t/1000).toFixed(2)}s</span> ${sEsc(e.from)}${e.from===e.to?'':' → '+sEsc(e.to)}: ${sEsc(e.msg)}</div>`).join('')||'<div class="note">No actions yet.</div>';
-  const cur=document.querySelector('#simLog .cur');if(cur&&SIM.play)cur.scrollIntoView({block:'nearest'});
-  // inspector
-  const insp=document.getElementById('simInsp');
-  if(SIM.selNode){const det=SIMM.detail?SIMM.detail(SIM.selNode,st):SIMM.lines(SIM.selNode,st);insp.innerHTML=`<b>${sEsc(byId[SIM.selNode].label)}</b> at ${(T/1000).toFixed(2)}s<pre>${sEsc((det||[]).join('\n')||'(empty)')}</pre>`}
-  else if(SIM.sel!=null&&evs[SIM.sel]){const e=evs[SIM.sel];insp.innerHTML=`<b>${sEsc(e.msg)}</b><div class="note">${sEsc(e.from)} → ${sEsc(e.to)} · ${(e.t/1000).toFixed(2)}s (+${e.d} ms) · ${sEsc(e.kind)}</div>${e.cause?`<div class="caption" style="margin-top:6px"><b>Why:</b> ${sEsc(e.cause)}</div>`:''}<div class="note">state changes: ${e.fx.length?sEsc(e.fx.map(f=>SIMM.fxText?SIMM.fxText(f):f.op).join('; ')):'none (message only)'}</div>`}
-  else insp.innerHTML='<div class="note">Click a node to inspect its data, or click an event in the log to see why it happened.</div>';
-}
-function simTick(now){
-  if(!SIM.play){SIM.last=null;return}
-  if(SIM.last==null)SIM.last=now;const dt=now-SIM.last;SIM.last=now;SIM.T=Math.min(SIM.end,SIM.T+dt*SIM.speed);simDraw();
-  if(SIM.T>=SIM.end){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}
-  requestAnimationFrame(simTick);
-}
-function simBuildControls(){
-  const m=SIMM,nr=m.nodeRange;
-  const sc=document.getElementById('simScn');sc.innerHTML=m.scenarios.map((s,i)=>`<option value="${i}">${sEsc(s.name)}</option>`).join('');
-  const nn=document.getElementById('simN');nn.innerHTML=Array.from({length:nr[1]-nr[0]+1},(_,i)=>`<option value="${nr[0]+i}" ${nr[0]+i===nr[2]?'selected':''}>${nr[0]+i}</option>`).join('');document.getElementById('simNL').textContent=m.nodeLabel;
-  document.getElementById('simSet').innerHTML=(m.settings||[]).map(s=>`<label>${sEsc(s.label)} <select data-set="${s.id}">${s.opts.map(o=>`<option ${o===s.def?'selected':''}>${sEsc(o)}</option>`).join('')}</select></label>`).join('');
-  SIM.set=Object.fromEntries((m.settings||[]).map(s=>[s.id,s.def]));
-  document.getElementById('simOp').innerHTML=m.menu.map((o,i)=>`<option value="${i}">${sEsc(o.label)}</option>`).join('');
-  simArgs();
-}
-function simArgs(){const o=SIMM.menu[+document.getElementById('simOp').value];document.getElementById('simArgs').innerHTML=o.args.map((a,i)=>`<input type="text" data-a="${i}" value="${sEsc(a.d)}" placeholder="${sEsc(a.n)}" style="width:${a.w||80}px">`).join('')}
-function simLoadScenario(i){const s=SIMM.scenarios[i];document.getElementById('simAct').value=s.acts.join('\n');document.getElementById('simDesc').textContent=s.desc;SIM.T=0;SIM.sel=null;SIM.selNode=null;simRun();simDraw()}
-function simInit(){
-  if(!document.getElementById('simSvg'))return;
-  SIM.n=SIMM.nodeRange[2];simBuildControls();simLoadScenario(0);
-  document.getElementById('simScn').onchange=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simLoadScenario(+e.target.value)};
-  document.getElementById('simN').onchange=e=>{SIM.n=+e.target.value;SIM.T=0;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simRun();simDraw()};
-  document.getElementById('simSet').onchange=e=>{const t=e.target.closest('[data-set]');if(t){SIM.set[t.dataset.set]=t.value;simRun();simDraw()}};
-  document.getElementById('simOp').onchange=simArgs;
-  document.getElementById('simAdd').onclick=()=>{const o=SIMM.menu[+document.getElementById('simOp').value],vals=[...document.querySelectorAll('#simArgs input')].map(i=>i.value.trim()||'-');
-    const ta=document.getElementById('simAct'),t=Math.round(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0)+300);ta.value=(ta.value.trim()?ta.value.trim()+'\n':'')+`${t} ${o.op} ${vals.join(' ')}`.trim();SIM.T=Math.max(0,t-200);simRun();simDraw()};
-  document.getElementById('simAct').onchange=()=>{simRun();simDraw()};
-  document.getElementById('simPlay').onclick=()=>{if(SIM.play){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}if(SIM.T>=SIM.end)SIM.T=0;SIM.play=true;SIM.last=null;document.getElementById('simPlay').textContent='⏸ Pause';requestAnimationFrame(simTick)};
-  document.getElementById('simReset').onclick=()=>{SIM.play=false;SIM.T=0;document.getElementById('simPlay').textContent='▶ Play';simDraw()};
-  document.getElementById('simStep').onclick=()=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const nx=SIM.run.events.find(e=>e.t+e.d>SIM.T+1);SIM.T=nx?nx.t+nx.d:SIM.end;SIM.sel=nx?SIM.run.events.indexOf(nx):null;SIM.selNode=null;simDraw()};
-  document.getElementById('simSpeed').onchange=e=>{SIM.speed=+e.target.value};
-  document.getElementById('simT').oninput=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';SIM.T=+e.target.value;simDraw()};
-  document.getElementById('simLog').onclick=e=>{const d=e.target.closest('.simev');if(!d)return;const i=+d.dataset.i;SIM.sel=i;SIM.selNode=null;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const ev=SIM.run.events[i];SIM.T=ev.t+ev.d;simDraw()};
-  document.getElementById('simSvg').onclick=e=>{const g=e.target.closest('.simn');if(g){SIM.selNode=SIM.selNode===g.dataset.id?null:g.dataset.id;SIM.sel=null;simDraw()}};
-}
+Lab.sim(SIMM);})();
 
-window.simInit=simInit;window.__sim={SIM,simDraw,simRun};})();
-/* ===== overview: packets travelling along the connections ===== */
-(function(){
-const _ovr=ovRender;
-function pt(g,f){if(g.c){const u=1-f;return[u*u*g.p0[0]+2*u*f*g.c[0]+f*f*g.p1[0],u*u*g.p0[1]+2*u*f*g.c[1]+f*f*g.p1[1]]}return[g.p0[0]+(g.p1[0]-g.p0[0])*f,g.p0[1]+(g.p1[1]-g.p0[1])*f]}
-function findEdge(a,b){let e=OVS.edges.find(x=>x.from===a&&x.to===b);if(e)return{e,rev:false};e=OVS.edges.find(x=>x.from===b&&x.to===a);return e?{e,rev:true}:null}
-ovRender=function(){
-  _ovr();
-  if(OV.k<0||OV.kf==null)return;const svg=document.querySelector('#ovView svg');if(!svg)return;
-  const flow=OVS.flow,i=Math.min(flow.length-1,Math.floor(OV.kf)),f=OV.kf-Math.floor(OV.kf);let s='';
-  if(i>=1){const ed=findEdge(flow[i-1].n,flow[i].n);
-    if(ed){const g=ovGeom(ed.e),ff=Math.min(1,f*1.15),q=ed.rev?1-ff:ff;
-      for(let tr=3;tr>=1;tr--){const qq=ed.rev?Math.min(1,q+tr*.06):Math.max(0,q-tr*.06),p2=pt(g,qq);s+=`<circle cx="${p2[0]}" cy="${p2[1]}" r="${7-tr*1.4}" fill="var(--acc2)" opacity="${.5-tr*.12}"/>`}
-      const p=pt(g,q);s+=`<circle cx="${p[0]}" cy="${p[1]}" r="8" fill="var(--acc2)" stroke="#fff" stroke-width="2"/><text x="${p[0]}" y="${p[1]-13}" text-anchor="middle" style="font-size:11px;font-weight:700;fill:var(--acc2);paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(short(flow[i].t,44))}</text>`}}
-  svg.insertAdjacentHTML('beforeend',s);
-};
-const tr=document.getElementById('ovTrace');
-tr.onclick=()=>{stopAll();OV.sel=null;OV.k=0;OV.kf=0;animate(p=>{OV.kf=Math.min(OVS.flow.length-.001,p*OVS.flow.length);OV.k=Math.floor(OV.kf);ovRender()},OVS.flow.length*1500)};
-document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.kf=null;OV.sel=null;ovRender()};
-document.getElementById('ovView').addEventListener('click',e=>{if(e.target.closest('[data-node]'))OV.kf=null},true);
-})();
-
-/* ===== accordion: one drop-down per phase + detail (how / pros / cons / failure modes / watch) ===== */
-(function(){
-const g=id=>document.getElementById(id),esc2=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const sec=g('phaseSec'),nav=g('nav'),barNav=g('prev').parentElement;
-const stage=document.createElement('div');stage.id='stage';
-const det=document.createElement('div');det.id='phDetail';
-stage.append(g('blurb'),g('phCtl'),barNav,g('phView'),det);
-nav.style.display='none';
-const acc=document.createElement('div');acc.id='acc';nav.after(acc);
-acc.innerHTML=PHASES.map((ph,i)=>`<details class="acc" data-i="${i}" style="--pc:var(--p${i%8})"><summary><span class="accn">${i+1}</span><span class="acct"><b>${esc2(ph.t)}</b><small>${esc2(ph.s)}${ph.f?' · '+esc2(ph.f):''}</small></span><span class="accg">${typeof DETAIL!=='undefined'&&DETAIL[i]?'pros · cons · failures':''}</span></summary><div class="accb"></div></details>`).join('');
-const items=[...acc.children];
-function renderDetail(k){
-  const d=typeof DETAIL!=='undefined'&&DETAIL[k];if(!d){det.innerHTML='';return}
-  const li=a=>'<ul>'+a.map(x=>`<li>${esc2(x)}</li>`).join('')+'</ul>';
-  det.innerHTML=`<h3 style="margin-top:16px">Deep dive: ${esc2(PHASES[k].t)}</h3>
-  <details class="dd" open><summary>How it works</summary><div class="ddb">${esc2(d.how)}</div></details>
-  <details class="dd" open><summary>Pros and cons</summary><div class="ddb pc"><div class="pro"><b>✓ Pros</b>${li(d.pros)}</div><div class="con"><b>✗ Cons</b>${li(d.cons)}</div></div></details>
-  <details class="dd"><summary>Failure modes (${d.fails.length})</summary><div class="ddb"><table class="fm"><tr><th>Failure mode</th><th>What you see</th><th>Mitigation</th></tr>${d.fails.map(f=>`<tr><td><b>${esc2(f.m)}</b></td><td>${esc2(f.s)}</td><td>${esc2(f.x)}</td></tr>`).join('')}</table></div></details>
-  <details class="dd"><summary>What to watch</summary><div class="ddb">${li(d.watch)}</div></details>`;
-}
-function place(k){
-  items.forEach((d,i)=>{d.open=i===k});
-  items[k].querySelector('.accb').appendChild(stage);
-}
-const _sp=showPhase;
-showPhase=function(k,p=1){place(k);_sp(k,p);renderDetail(k)};
-acc.addEventListener('click',e=>{const s=e.target.closest('summary');if(!s||!s.parentElement.classList.contains('acc'))return;e.preventDefault();
-  const d=s.parentElement,i=+d.dataset.i;
-  if(d.open){d.open=false;stopAll();return}
-  stopAll();showPhase(i);setTimeout(()=>d.scrollIntoView({behavior:'smooth',block:'start'}),30)});
-window.__accReady=true;
-})();
-
-showPhase(typeof cur==="number"&&cur>=0?cur:0);simInit();
+Lab.onStop(()=>{rsLive=false;rsAnim=false;const lb=document.querySelector("[data-act=r-live]");if(lb)lb.textContent="▶ Run live"});
+Lab.start({phases:PHASES,detail:DETAIL,ovs:OVS,ctl:ctlHTML,state:()=>S,beforePlay:k=>{if(k===10){rsInit(OPT.raftScen);rsAnim=true}},afterPlay:k=>{if(k===10)rsAnim=false}});
 </script>
 </body>
 </html>

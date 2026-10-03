@@ -75,12 +75,29 @@ h3{font-size:14px;margin:18px 0 4px}
 .cap{font-family:ui-monospace,monospace;font-size:11.5px;color:var(--mut);min-height:18px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cap b{color:var(--ink)}
 @media(max-width:720px){.step{grid-template-columns:28px 1fr}.step .badge,.step button{grid-column:2}.track{gap:14px}}
+.lab-back{display:inline-block;margin:0 0 10px;font-size:14px;color:var(--acc2);text-decoration:none}.lab-back:hover{text-decoration:underline}
+.leadin{background:var(--card);border-radius:10px;padding:10px 14px;margin:12px 0 0;font-size:14.5px;border:1px solid var(--line);border-left:5px solid var(--acc);color:var(--ink)}
+.leadin b.t{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--acc);margin-bottom:2px}
+.svgscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.swipe{display:none;font-size:12px;color:var(--mut);text-align:center}
+@media(max-width:640px){.swipe{display:block}button,select{min-height:38px}}
+.parts{grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr))}
+table{display:block;overflow-x:auto;max-width:100%}
+#src{max-width:100%}
+.lane>div{min-width:0}
+.nd{padding-left:2px;padding-right:2px}.nd .nm{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:560px){.lane{grid-template-columns:28px 1fr;gap:6px}.track{gap:8px;padding:8px 4px}.track::before{left:16px;right:16px}.nd .nm{font-size:10px}}
+.trace .seg2,.step .mono{overflow-wrap:anywhere;word-break:break-word}
+.step>*{min-width:0}
+@media(max-width:720px){.step>*:not(.n){grid-column:2}.step button{justify-self:start}.step>span:empty{display:none}.step{row-gap:4px;padding:6px 0;border-bottom:1px dashed var(--line)}}
 </style>
 </head>
 <body>
 <header>
+  <a class="lab-back" href="04-spark-internals-end-to-end.html">&larr; Back to the Spark tour</a>
   <h1><span>Spark</span> RDD Playground</h1>
   <p>Load your own CSV / JSONL / JSON, build a pipeline with real closures, and watch each partition get read and each row flow through the transformations.</p>
+  <div class="leadin"><b class="t">The problem this page solves</b>You wrote <code>filter</code> and <code>map</code> over a file, but when does a row actually move, and where? Try it on your own data: building the pipeline reads nothing, and running it streams each partition row by row through every step without building a list in between.</div>
 </header>
 <main>
 

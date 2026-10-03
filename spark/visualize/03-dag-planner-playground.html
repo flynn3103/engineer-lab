@@ -47,11 +47,20 @@ summary{cursor:pointer;color:var(--mut);font-size:14px}
 .key{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--mut);margin-top:6px}
 .key i{display:inline-block;width:26px;border-top:3px solid #8a94a6;vertical-align:3px;margin-right:6px}
 .key i.r{border-top:3px dashed var(--bad)}
+.lab-back{display:inline-block;margin:0 0 10px;font-size:14px;color:var(--acc2);text-decoration:none}.lab-back:hover{text-decoration:underline}
+.leadin{background:var(--card);border-radius:10px;padding:10px 14px;margin:0 0 14px;font-size:14.5px;border:1px solid var(--line);border-left:5px solid var(--acc)}
+.leadin b.t{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--acc);margin-bottom:2px}
+.svgscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.swipe{display:none;font-size:12px;color:var(--mut);text-align:center}
+@media(max-width:640px){.swipe{display:block}button,select{min-height:38px}}
+.bar>span[style*="flex:1"]{min-width:0}
 </style>
 </head>
 <body>
 <main>
+  <a class="lab-back" href="04-spark-internals-end-to-end.html">&larr; Back to the Spark tour</a>
   <h1><span>Spark</span> · How the planner cuts stages</h1>
+  <div class="leadin"><b class="t">The problem this page solves</b>A job with a <code>reduceByKey</code> cannot run in one pass: every reducer needs output from every mapper first. So the planner must find exactly where the job has to stop and wait. Step through the DAGScheduler's backward walk and see why narrow steps share a stage while a shuffle cuts a new one.</div>
   <p class="lead">Rule of thumb: <b>narrow</b> steps stay in one stage; a <b>shuffle</b> (<code>ReduceByKey</code>) cuts the plan into two stages. Press <b>Next</b> and follow the sentence.</p>
 
   <div class="card">
@@ -70,7 +79,7 @@ summary{cursor:pointer;color:var(--mut);font-size:14px}
 
     <div class="caption" id="cap">Pick an example, then press <b>&nbsp;Start planning</b>.</div>
 
-    <svg id="dag" role="img" aria-label="RDD lineage graph"></svg>
+    <div class="svgscroll"><svg id="dag" role="img" aria-label="RDD lineage graph"></svg></div><div class="swipe">&larr; swipe the graph &rarr;</div>
     <div class="key"><span><i></i>narrow (same stage)</span><span><i class="r"></i>shuffle (stage boundary)</span><span>Click a node to change the <b>final RDD</b> of the action</span></div>
 
     <div class="legend" id="stages"></div>
@@ -99,6 +108,11 @@ summary{cursor:pointer;color:var(--mut);font-size:14px}
 <script>
 const $=s=>document.querySelector(s);
 const pc=i=>`var(--p${((i%8)+8)%8})`;
+/* patch the DOM in place (no flicker, CSS transitions keep running) */
+const sameNode=(a,b)=>a.nodeType===b.nodeType&&(a.nodeType!==1||(a.nodeName===b.nodeName&&a.namespaceURI===b.namespaceURI));
+function patchKids(d,s){const sk=s.childNodes;for(let i=0;i<sk.length;i++){const sn=sk[i],dn=d.childNodes[i];if(!dn)d.appendChild(document.importNode(sn,true));else if(sameNode(dn,sn))patchNode(dn,sn);else d.replaceChild(document.importNode(sn,true),dn)}while(d.childNodes.length>sk.length)d.removeChild(d.lastChild)}
+function patchNode(d,s){if(d.nodeType!==1){if(d.nodeValue!==s.nodeValue)d.nodeValue=s.nodeValue;return}for(const a of [...d.attributes])if(!s.hasAttribute(a.name))d.removeAttribute(a.name);for(const a of s.attributes)if(d.getAttribute(a.name)!==a.value)d.setAttribute(a.name,a.value);patchKids(d,s)}
+function morph(root,html){const tpl=document.createElement('template');const isSvg=root.namespaceURI==='http://www.w3.org/2000/svg';tpl.innerHTML=isSvg?'<svg xmlns="http://www.w3.org/2000/svg">'+html+'</svg>':html;patchKids(root,isSvg?tpl.content.firstChild:tpl.content)}
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 /* ---------- model ---------- */
@@ -142,8 +156,8 @@ function layout(){
 }
 function draw(){
   const svg=$('#dag');
-  if(!nodes.length){svg.setAttribute('viewBox','0 0 600 70');svg.innerHTML='<text x="10" y="40" style="fill:var(--mut)">Empty. Pick an example or open "Build your own lineage".</text>';renderSide();return}
-  const L=layout();svg.setAttribute('viewBox',`0 0 ${L.w} ${L.h}`);svg.style.maxHeight=Math.max(L.h,120)*1.4+'px';
+  if(!nodes.length){svg.setAttribute('viewBox','0 0 600 70');svg.style.minWidth='';morph(svg,'<text x="10" y="40" style="fill:var(--mut)">Empty. Pick an example or open "Build your own lineage".</text>');renderSide();return}
+  const L=layout();svg.setAttribute('viewBox',`0 0 ${L.w} ${L.h}`);svg.style.maxHeight=Math.max(L.h,120)*1.4+'px';svg.style.minWidth=Math.round(Math.min(L.w,1100)*0.62)+'px';
   let h='<defs><marker id="ar" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0L8,4L0,8z" fill="#8a94a6"/></marker></defs>';
   nodes.forEach(n=>n.deps.forEach(dp=>{
     const a=nodes[dp.parent],k=a.id+'>'+n.id;
@@ -161,7 +175,7 @@ function draw(){
       <text x="${n.x+9}" y="${n.y+58}" style="font-size:11px;font-weight:700">${st!=null?'Stage '+st:''}</text>
       ${n.id===selected?`<text x="${n.x+L.W-9}" y="${n.y+58}" text-anchor="end" style="fill:var(--acc2);font-size:11px">final RDD</text>`:''}</g>`;
   });
-  svg.innerHTML=h;
+  morph(svg,h);
   svg.querySelectorAll('.nd').forEach(g=>g.onclick=()=>{selected=+g.dataset.id;stopPlay();ui=fresh();events=[];idx=0;setBtn();draw()});
   renderSide();
 }
@@ -169,9 +183,9 @@ function renderSide(){
   const c=$('#cap');
   if(ui.cap){c.className='caption '+(ui.cap.k||'');c.innerHTML=ui.cap.t}
   else{c.className='caption';c.innerHTML=nodes.length?`Final RDD is <b>#${selected}</b>. Press <b>&nbsp;Start planning</b> and the planner will walk backward from it.`:'Pick an example.'}
-  $('#stages').innerHTML=ui.cards.map(({stage:s,reused})=>`<div class="st ${reused?'reuse':''}" style="background:${pc(s.id)}"><b>Stage ${s.id}</b> · ${s.kind==='result'?'ResultStage':'ShuffleMapStage'}${reused?` <i>(reused from an earlier job)</i>`:''}
-    <div class="mono">${s.members.slice().sort((a,b)=>a-b).map(i=>'#'+i+' '+nodes[i].op).join(' → ')} · ${s.parts} tasks later${s.parents.length?' · waits for Stage '+s.parents.join(', '):' · can run first'}</div></div>`).join('');
-  $('#log').innerHTML=ui.logs.map(l=>`<div>${esc(l)}</div>`).join('');
+  morph($('#stages'),ui.cards.map(({stage:s,reused})=>`<div class="st ${reused?'reuse':''}" style="background:${pc(s.id)}"><b>Stage ${s.id}</b> · ${s.kind==='result'?'ResultStage':'ShuffleMapStage'}${reused?` <i>(reused from an earlier job)</i>`:''}
+    <div class="mono">${s.members.slice().sort((a,b)=>a-b).map(i=>'#'+i+' '+nodes[i].op).join(' → ')} · ${s.parts} tasks later${s.parents.length?' · waits for Stage '+s.parents.join(', '):' · can run first'}</div></div>`).join(''));
+  morph($('#log'),ui.logs.map(l=>`<div>${esc(l)}</div>`).join(''));
 }
 
 /* ---------- planner (events) ---------- */
@@ -224,12 +238,12 @@ function apply(e){
     case'look':ui.cur=e.rdd;ui.cap={t:`Looking at ${nm(e.rdd)}.`};return false;
     case'skip':ui.cap={t:`${nm(e.rdd)} was already seen, so it is not visited twice.`};return true;
     case'keep':ui.edgeWalk.add(e.parent+'>'+e.child);ui.cap={t:`${nm(e.child)} ← ${nm(e.parent)} is <b>narrow</b>: same stage, keep walking.`};return true;
-    case'cut':ui.edgeFound.add(e.parent+'>'+e.child);ui.cap={k:'cut',t:`⚡ ${nm(e.child)} ← ${nm(e.parent)} is a <b>shuffle</b>. <b>Cut here</b>: ${nm(e.parent)} and everything before it belong to a different stage.`};return true;
+    case'cut':ui.edgeFound.add(e.parent+'>'+e.child);ui.cap={k:'cut',t:`${nm(e.child)} ← ${nm(e.parent)} is a <b>shuffle</b>. <b>Cut here</b>: ${nm(e.parent)} and everything before it belong to a different stage.`};return true;
     case'make':ui.cur=null;ui.cards.push({stage:e.stage,reused:false});e.stage.members.forEach(m=>ui.stageOf.set(m,e.stage.id));
       ui.cap={k:'make',t:`Create <b>Stage ${e.stage.id}</b> (${e.stage.kind==='result'?'ResultStage':'ShuffleMapStage'}) containing ${e.stage.members.slice().sort((a,b)=>a-b).map(i=>'#'+i).join(', ')}. It will need ${e.stage.parts} tasks later.`};return true;
     case'reuse':ui.cur=null;ui.cards.push({stage:e.stage,reused:true});e.stage.members.forEach(m=>ui.stageOf.set(m,e.stage.id));
       ui.cap={k:'make',t:`Stage ${e.stage.id} already exists for this shuffle, so it is <b>reused</b> instead of being created again.`};return true;
-    case'done':ui.cur=null;ui.cap={k:'make',t:`✅ Plan ready. Run order: ${e.order.map(s=>'Stage '+s).join(' → ')}. Still 0 tasks launched and 0 closures called.`};return true;
+    case'done':ui.cur=null;ui.cap={k:'make',t:`Plan ready. Run order: ${e.order.map(s=>'Stage '+s).join(' → ')}. Still 0 tasks launched and 0 closures called.`};return true;
   }
 }
 function step(){

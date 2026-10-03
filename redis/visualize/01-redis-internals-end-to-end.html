@@ -4,179 +4,167 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Redis Internals End-to-End</title>
+<link rel="stylesheet" href="../../assets/lab.css">
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2230;--mut:#667085;--line:#d9dee7;--acc:#d82c20;--acc2:#2f6fed;--ok:#1a9b5a;--bad:#d64545;
---p0:#dbe9ff;--p1:#ffe6cf;--p2:#d9f4e3;--p3:#f1defa;--p4:#fff3b8;--p5:#ffd9de;--p6:#d6f2f2;--p7:#e6e6e6;
---t0:#2f6fed;--t1:#e25a1c;--t2:#1a9b5a;--t3:#9b4fd0;--t4:#c9a400;--t5:#d6456b;--t6:#12a1a1;--t7:#6b7280}
-@media(prefers-color-scheme:dark){:root{--bg:#10141c;--card:#181e29;--ink:#e8ecf3;--mut:#93a0b5;--line:#2b3445;--acc:#ff5a4d;--acc2:#6c9bff;--ok:#43c783;--bad:#ff6b6b;
---p0:#1f3556;--p1:#53361c;--p2:#1d4630;--p3:#44274f;--p4:#524a17;--p5:#552630;--p6:#17454a;--p7:#3a3f48}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
-header,main{max-width:1180px;margin:auto;padding:0 16px}
-header{padding-top:24px}
-h1{margin:0 0 4px;font-size:25px}h1 span{color:var(--acc)}
-header p{margin:0;color:var(--mut)}
-section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-top:16px}
-section>h2{margin:0 0 6px;font-size:17px}
-section>h2 em{font-style:normal;background:var(--acc);color:#fff;border-radius:6px;padding:1px 8px;font-size:12px;margin-right:8px;vertical-align:2px}
-h3{font-size:14px;margin:14px 0 6px}
-button,select,input[type=text],textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 10px}
-button{cursor:pointer}button:hover{border-color:var(--acc)}
-button.primary{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
-button.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
-button:disabled{opacity:.45;cursor:default}
-.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
-label{color:var(--mut);font-size:13px}
-.mono,code,pre,textarea,input.cli{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
-textarea{width:100%;resize:vertical}
-pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;margin:0;max-height:300px}
-.note{font-size:13px;color:var(--mut);margin:6px 0 0}
-.ok{color:var(--ok)}.bad{color:var(--bad)}
-.box{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--bg);min-width:0}
-.chips{display:flex;flex-wrap:wrap;gap:4px}
-.chip{font-family:ui-monospace,monospace;font-size:11.5px;border:1px solid var(--line);border-radius:5px;padding:1px 7px;background:var(--card)}
-.tag{display:inline-block;font-size:10.5px;padding:0 6px;border-radius:5px;background:var(--acc2);color:#fff;margin-left:4px;font-weight:400}
-.tag.r{background:var(--bad)}.tag.g{background:var(--ok)}.tag.o{background:var(--acc)}.tag.m{background:var(--t7)}
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+:root{--acc:#d82c20;--acc2:#2f6fed}
+@media(prefers-color-scheme:dark){:root{--acc:#ff5a4d;--acc2:#6c9bff}}
 @media(max-width:820px){.g2{grid-template-columns:1fr}}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
-table{border-collapse:collapse;width:100%;font-size:12.5px}td,th{border:1px solid var(--line);padding:3px 7px;text-align:left;vertical-align:top}
-td.n,th.n{text-align:right}
-svg{display:block;width:100%}
-svg text{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;fill:var(--ink)}
-.jobgrid{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:10px}
-.jobgrid>span,.jobgrid>label{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
-.nv{flex:1;min-width:112px;border:1.5px solid var(--line);border-radius:10px;padding:6px 8px;cursor:pointer;background:var(--bg);font-size:12px;line-height:1.3}
-.nv b{display:block;font-size:12.5px}.nv small{color:var(--mut)}
-.nv.act{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 11%,var(--card))}
-.nv.done b::after{content:" ✓";color:var(--ok)}
-.blurb{padding:10px 12px;border-left:5px solid var(--acc);background:var(--bg);border-radius:8px;margin:6px 0 10px;font-size:14px}
-.blurb .ft{color:var(--mut);font-size:12px;margin-top:3px}
-.caption{margin:8px 0;padding:9px 12px;border-radius:8px;background:var(--bg);border-left:5px solid var(--acc);font-size:14.5px;min-height:44px}
-.caption.bad{border-left-color:var(--bad)}.caption.good{border-left-color:var(--ok)}
-.row{display:block;padding:2px 6px;margin:2px 0;border-radius:5px;border:1px solid var(--line);background:var(--bg);font-family:ui-monospace,monospace;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.col{border:1.5px solid var(--line);border-radius:8px;padding:8px;min-width:0}
-.col h4{margin:0 0 6px;font-size:12.5px}
-.meter{height:7px;border-radius:4px;background:var(--line);overflow:hidden;margin:4px 0}.meter i{display:block;height:100%;background:var(--acc)}
-.big{font-size:28px;font-weight:700}
-.bar2{height:14px;border-radius:4px;display:inline-block;vertical-align:middle}
-.lrow{display:flex;align-items:center;gap:6px;margin:4px 0}.lrow>b{min-width:60px;font-size:12px;color:var(--mut)}
 .resp{font-family:ui-monospace,monospace;font-size:12.5px;line-height:1.9;word-break:break-all}
 .resp .b{display:inline-block;padding:0 1px;border-radius:3px}
 .resp .crlf{color:var(--mut);font-size:10px}
 .cut{border-left:2px solid var(--bad);margin-left:1px}
 .tile{display:inline-block;width:28px;height:28px;margin:2px;border-radius:5px;border:1px solid var(--line);font-size:9px;text-align:center;line-height:28px;overflow:hidden}
 .ent{display:inline-block;border:2px solid var(--line);border-radius:7px;padding:2px 7px;margin:2px;font-family:ui-monospace,monospace;font-size:11px;background:var(--card);vertical-align:top}
-details.dd{border:1px solid var(--line);border-radius:10px;padding:8px 14px;margin-top:10px;background:var(--bg)}
-details.dd summary{cursor:pointer;font-weight:600}details.dd summary small{color:var(--mut);font-weight:400;margin-left:6px}
 input.cli{width:100%}
-.con{background:#10141c;color:#e8ecf3;border-radius:8px;padding:10px;max-height:300px;overflow:auto;font-family:ui-monospace,monospace;font-size:12.5px}
-.con .q{color:#8ab4ff}.con .e{color:#ff8a8a}.con .m{color:#8b97ab}
-@keyframes flow{to{stroke-dashoffset:-20}}.flow{stroke-dasharray:6 4;animation:flow .6s linear infinite}
-
-.ovn{cursor:pointer}.ovn rect{stroke:var(--line);stroke-width:1.5;transition:opacity .2s}
-.ovn.sel rect{stroke:var(--acc);stroke-width:3.5}.ovn.cur rect{stroke:var(--ink);stroke-width:3}
-.ovn.act rect{stroke:var(--acc);stroke-width:4}
-.ove{fill:none;stroke:#8a94a6;stroke-width:1.8}.ove.ctl{stroke-dasharray:6 4}.ove.async{stroke-dasharray:2 4;stroke:var(--bad)}.ove.act{stroke:var(--acc);stroke-width:3.5}
-.ove.flow{animation:flow .6s linear infinite}
-.simgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:900px){.simgrid{grid-template-columns:1fr}}.simgrid>div{min-width:0}
-.simlog{max-height:210px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:4px}.simev{font-size:12px;padding:2px 6px;border-radius:5px;cursor:pointer;border:1px solid transparent}.simev:hover{border-color:var(--line)}.simev.cur{background:color-mix(in srgb,var(--acc) 16%,var(--card));border-color:var(--acc)}.simev.fut{opacity:.45}
-.simtag{display:inline-block;color:#fff;font-size:10px;border-radius:4px;padding:0 5px}
-#acc{display:flex;flex-direction:column;gap:8px;margin-top:10px}
-details.acc{border:1px solid var(--line);border-radius:12px;background:var(--bg);overflow:hidden}
-details.acc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 14px;background:color-mix(in srgb,var(--pc) 55%,var(--card))}
-details.acc>summary::-webkit-details-marker{display:none}
-details.acc>summary::after{content:'▾';margin-left:auto;color:var(--mut);transition:transform .15s}
-details.acc:not([open])>summary::after{transform:rotate(-90deg)}
-details.acc[open]{border-color:var(--acc2);box-shadow:0 0 0 1px var(--acc2)}
-.accn{flex:none;width:26px;height:26px;border-radius:50%;background:var(--card);border:2px solid var(--acc2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
-.acct{display:flex;flex-direction:column;min-width:0}.acct small{color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.accg{font-size:11px;color:var(--mut);margin-left:auto;padding-right:6px;white-space:nowrap}@media(max-width:700px){.accg{display:none}}
-.accb{padding:12px 14px;background:var(--card)}
-.ddb{padding:8px 4px 4px;line-height:1.6}.ddb ul{margin:4px 0 0;padding-left:18px}.ddb li{margin:3px 0}
-.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:700px){.pc{grid-template-columns:1fr}}
-.pc .pro,.pc .con{border-radius:8px;padding:8px 12px;background:var(--bg);border-left:4px solid var(--ok)}.pc .con{border-left-color:var(--bad)}
-table.fm{width:100%;border-collapse:collapse;font-size:13px}table.fm th,table.fm td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}table.fm th{background:var(--bg);font-size:12px}
-@media(max-width:700px){table.fm{display:block;overflow-x:auto}}
+.view table{white-space:normal}
+.view td.mono{overflow-wrap:anywhere}
+.view .row{white-space:normal;overflow-wrap:anywhere}
+.legend2{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;color:var(--mut);margin:2px 0 6px}.legend2 i{display:inline-block;width:14px;height:4px;border-radius:2px;vertical-align:middle;margin-right:4px}
+.rcon{background:#10141c;color:#e8ecf3;border-radius:8px;padding:10px;max-height:300px;overflow:auto;font-family:ui-monospace,monospace;font-size:12.5px}
+.rcon .q{color:#8ab4ff}.rcon .e{color:#ff8a8a}.rcon .m{color:#8b97ab}
+.rcon>div{white-space:pre-wrap;word-break:break-word}
 
 </style>
 </head>
 <body>
-<header>
-  <h1><span>Redis</span> Internals · End-to-End</h1>
-  <p>Your data is loaded into a real mini-Redis engine (strings, hashes, lists, sets, sorted sets, streams, TTL, MULTI/WATCH). Each phase replays that workload through one internal mechanism: event loop, keyspace, expiry, eviction, persistence, replication, transactions, failover, cluster, streams.</p>
-</header>
-<main>
-
-<section>
-  <h2><em>1</em>Your data &amp; workload</h2>
-  <div class="bar">
-    <input type="file" id="file" accept=".csv,.json,.jsonl,.ndjson">
-    <button data-sample="users">Users CSV</button><button data-sample="products">Products CSV</button><button data-sample="events">Events JSONL</button>
-    <label>Format <select id="fmt"><option value="auto">auto-detect</option><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="json">JSON array</option></select></label>
-  </div>
-  <textarea id="src" rows="4" spellcheck="false"></textarea>
+<div id="dataSlot" hidden>
+<div class="sample-row"><span class="lbl">Every chapter runs this dataset through a mini Redis engine:</span>
+  <button data-sample="users">Users (CSV)</button><button data-sample="products">Products (CSV)</button><button data-sample="events">Events (JSONL)</button>
+  <span class="note" id="statLine" style="margin:0"></span></div>
+<details class="mydata"><summary>Use your own data, key layout and workload</summary>
+  <div class="bar"><input type="file" id="file" accept=".csv,.json,.jsonl,.ndjson"><label>Format <select id="fmt"><option value="auto">auto-detect</option><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="json">JSON array</option></select></label></div>
+  <textarea id="src" rows="5" spellcheck="false"></textarea>
   <div class="note" id="srcInfo"></div>
   <div class="jobgrid">
     <span>Key column <select id="kcol"></select></span>
     <span>Key prefix <input type="text" id="prefix" style="width:90px"></span>
     <label>Load each row as <select id="ltype"><option value="hash">HASH (HSET)</option><option value="string">STRING (SET json)</option></select></label>
     <label>Rows with TTL <select id="ttlp"><option value="0">0%</option><option value="30" selected>30%</option><option value="60">60%</option><option value="100">100%</option></select></label>
-    <span class="note" style="margin:0">Also builds a set index, a sorted-set ranking, a recent-list and counters, so every type exists.</span>
+    <span class="note" style="margin:0">Each row also feeds a set index, a sorted-set ranking, a recent-list and a counter, so every type exists.</span>
   </div>
-  <h3>Workload script (runs after the load, one command every 20 ms of virtual time)</h3>
+  <h4 style="margin:12px 0 4px;font-size:13px">Workload script <span class="note" style="font-weight:400">runs after the load, one command every 20 ms of virtual time</span></h4>
   <textarea id="script" rows="6" spellcheck="false"></textarea>
-  <div class="bar">
-    <button class="primary" id="playAll">▶ Play all 10 phases</button>
-    <button id="pauseBtn" disabled>⏸ Pause</button>
-    <label>Speed <input type="range" id="speed" min="0.25" max="4" step="0.25" value="1"> <b id="speedV">1×</b></label>
-    <span class="note" id="statLine"></span>
-  </div>
-</section>
-
-<section>
-  <h2><em>◎</em>Architecture overview <span class="note" style="font-weight:400">components and how they connect · colors match the phases below</span></h2>
-  <div class="bar"><button class="primary" id="ovTrace">▶ Trace a request through the system</button><button id="ovClear">Clear</button><span class="note" id="ovCap"></span></div>
-  <div id="ovView"></div>
-  <div class="chips" style="margin-top:6px"><span class="chip">solid = data flow</span><span class="chip">dashed = control / metadata</span><span class="chip" style="border-color:var(--bad)">dotted = events / async</span></div>
-  <div id="ovInfo"></div>
-</section>
-
-<section id="simSec">
-  <h2><em>▶</em>Live cluster simulation <span class="note" style="font-weight:400">watch inserts, updates and deletes travel between the nodes · edit the actions or inject failures</span></h2>
-  <div class="bar"><label>Scenario <select id="simScn"></select></label><label><span id="simNL">nodes</span> <select id="simN"></select></label><span id="simSet" class="bar" style="margin:0"></span>
-    <button class="primary" id="simPlay">▶ Play</button><button id="simStep">Step ›</button><button id="simReset">⏮</button><label>Speed <select id="simSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label></div>
-  <div class="note" id="simDesc" style="margin:0 0 6px"></div>
-  <svg id="simSvg" style="width:100%;border:1px solid var(--line);border-radius:10px;background:var(--bg)"></svg>
-  <div class="bar"><input type="range" id="simT" min="0" max="1000" value="0" step="10" style="flex:1"><span class="mono" id="simTv"></span></div>
-  <div id="simInsp" class="box" style="margin:8px 0"></div>
-  <div class="simgrid"><div><h3 style="margin-top:0">Actions <span class="note" style="font-weight:400">(time in ms, then op and arguments)</span></h3><textarea id="simAct" rows="7" spellcheck="false"></textarea>
-    <div class="bar"><select id="simOp"></select><span id="simArgs" class="bar" style="margin:0"></span><button id="simAdd">＋ add action</button></div></div>
-   <div><h3 style="margin-top:0">Event log <span class="note" style="font-weight:400">(click an event to see why)</span></h3><div id="simLog" class="simlog"></div></div></div>
-</section>
-
-<section id="phaseSec">
-  <h2><em>2</em>Inside the server, phase by phase</h2>
-  <div class="nav" id="nav"></div>
-  <div class="blurb" id="blurb"></div>
-  <div class="bar" id="phCtl"></div>
-  <div class="bar"><button id="prev">‹ Prev</button><button class="primary" id="anim">▶ Animate this phase</button><button id="nextB">Next ›</button></div>
-  <div id="phView"></div>
-</section>
-
-<section>
-  <h2><em>3</em>Try it live</h2>
-  <details class="dd" open><summary>Mini redis-cli on the same keyspace <small>mutates the loaded data; Reset to restore</small></summary>
-    <div class="con" id="con"></div>
-    <div class="bar"><input class="cli" id="cli" type="text" placeholder="e.g.  HGETALL user:1   |   INCR hits   |   TTL session:1   |   XLEN events" autocomplete="off"><button id="cliRun" class="primary">Run</button><button id="cliReset">Reset data</button></div>
-    <div class="note">Supported: PING SET GET DEL EXISTS INCR/DECR/INCRBY/DECRBY APPEND STRLEN TYPE KEYS DBSIZE FLUSHALL EXPIRE PEXPIRE PEXPIREAT TTL PTTL PERSIST HSET HGET HGETALL HDEL HLEN LPUSH RPUSH LPOP RPOP LRANGE LLEN SADD SREM SMEMBERS SISMEMBER SCARD ZADD ZRANGE ZSCORE ZREM ZCARD ZRANK MULTI EXEC DISCARD WATCH XADD XLEN XRANGE XGROUP XREADGROUP XACK XPENDING XAUTOCLAIM XTRIM. Each reply shows the RESP bytes and the cost units.</div>
-  </details>
-  <details class="dd"><summary>What each command costs <small>Feature 01–02</small></summary><div id="ddCost"></div></details>
-</section>
-</main>
-
+</details>
+</div>
+<script src="../../assets/lab.js"></script>
 <script>
+const STORY={
+ system:'Redis',
+ title:'Build <span>Redis</span> from scratch',
+ lead:'Start from a real production problem. Watch the obvious fix break. Then see the design Redis uses, running on your own data inside a small Redis engine.',
+ problem:{
+  scene:[
+   'You run the <b>backend of a busy marketplace</b>: 50,000 requests per second at peak. Every request checks a session and bumps a rate-limit counter, the homepage shows a live leaderboard, and every order feeds a queue of background jobs.',
+   'Your PostgreSQL primary sits at 85% CPU, mostly on these tiny lookups, and p99 latency is 40 ms. Product says: <i>"Keep the hot data in memory, under 1 ms, and do not lose it when a machine dies."</i> You have to design that store.'],
+  musts:[
+   '<b>Sub-millisecond</b> reads and writes at 100k+ operations per second.',
+   '<b>No lost updates.</b> Concurrent increments and check-then-set stay correct.',
+   '<b>Bounded memory.</b> Sessions expire on time, and a full cache evicts instead of crashing.',
+   '<b>Declared durability.</b> A crash loses at most a known window, for example one second.',
+   '<b>Survives a dead machine</b>, and can grow past the RAM of one machine.'],
+  naive:{title:'Your first instinct: a hash map inside every app server',text:'Each app process keeps its own in-memory map of sessions, counters and carts. It is fast on day one, then:',
+   breaks:['20 app servers hold 20 different copies: a rate limit counted per process is 20&times; too generous.','A deploy or a crash restarts the process, and every session is gone.','Nothing bounds memory: old sessions pile up until the process is OOM-killed.']},
+  quest:'Rebuild the core of Redis in 10 chapters: one shared, single-threaded, in-memory server first, then make it expire, evict, persist, replicate, fail over, shard and queue. Each chapter meets a problem, tries the naive fix, watches it fail, then runs the real design on your data.'},
+ overview:{title:'The whole system on one page',lead:'Before the details, see how one command travels. Press <b>Trace a request</b> to follow a <code>SET</code> from the client to the replicas, or tap a component to see what it receives and sends. Colors match the chapters.'},
+ chapters:[
+  {ask:'Thousands of clients send commands at once over TCP. How do you run them without locks or lost updates?',
+   why:'Two clients each run <i>read counter, add 1, write it back</i> 5 times. If their steps interleave, the counter ends below 10, and at 100k ops/s a lock per key becomes the bottleneck.',
+   v0:{name:'One thread per connection, a shared map, read-then-write',code:'on request(line):            // split on "\\n"\n  v = map.get(key)\n  map.set(key, v + 1)',breaks:'The two read-then-write sequences interleave: both read the same value and both write <code>v+1</code>, so <b>updates are lost</b> (the playground ends at 8, not 10). And splitting requests on newlines breaks as soon as a value contains <code>\\r\\n</code>.'},
+   design:'Frame every request with length prefixes (RESP) so any byte is safe inside a value, then let one thread execute complete commands one at a time: each command is atomic without a single lock.',
+   predict:{q:'<code>SET bin "a\\r\\nb"</code> arrives split across two TCP chunks, cut in the middle of the value. What does the server do with the first chunk?',opts:['Runs SET with the truncated value <code>"a"</code>','Rejects the request: values cannot contain CRLF','Keeps the bytes in a buffer; nothing runs until the frame is complete'],ans:2,why:'A bulk string announces its byte length (<code>$4</code>), so the parser knows exactly how many bytes to wait for, and a CRLF inside the value is just data. Press Play: bytes arrive chunk by chunk, and a command turns green only once its whole frame has arrived, whatever <b>TCP chunk</b> size you pick.'},
+   build:{intro:'One process, one executor, many sockets:',
+    steps:['A <b>query buffer</b> per connection: append whatever the socket returns, never assume one read = one command.','An <b>incremental RESP parser</b>: <code>*N</code> then N &times; <code>$len\\r\\n&lt;bytes&gt;\\r\\n</code>; if bytes are missing, return "need more" and keep them.','An <b>event loop</b> (epoll/kqueue) tells you which sockets are readable or writable; nothing blocks.','A <b>single executor</b>: look the command up, check its arity, run it to completion, append the encoded reply to that client\'s output buffer.','Measure <b>queue wait</b> separately from command time: one slow KEYS delays everyone behind it.'],
+    code:'loop:\n  for conn in poll(readable):\n    conn.buf += read(conn)\n    while argv = parseRESP(conn.buf):   // null if incomplete\n      reply = COMMANDS[argv[0]](argv)   // runs to completion\n      conn.out += encode(reply)\n  flush writable outputs',
+    rule:'Exactly <b>one command touches the data at a time</b>, and it runs to completion before the next one starts.'}},
+  {ask:'A cart, a leaderboard and a session share one keyspace. How do commands on them stay fast and safe?',
+   why:'If every value is an opaque blob, adding one item to a 2,000-item cart means fetching, decoding, editing and rewriting the whole thing, from every client.',
+   v0:{name:'Store everything as a JSON string',code:'cart = JSON.parse(GET cart:7)\ncart.push(item)\nSET cart:7 JSON.stringify(cart)',breaks:'Every change ships and rewrites the whole value, O(size) per update. Two clients doing it at once each overwrite the other\'s item: the round trip between GET and SET makes it non-atomic.'},
+   design:'Give each value a type with its own server-side structure and operations (HSET, LPUSH, ZADD...), and check the type before a command touches anything.',
+   predict:{q:'<code>LPUSH</code> is sent to a key that currently holds a hash. What happens to the hash?',opts:['Nothing: the command fails with WRONGTYPE and the hash is unchanged','The hash is converted into a list','The hash is replaced by a new list'],ans:0,why:'The type is checked before any mutation, so the error leaves state untouched. The <b>Wrong-type guard</b> box in the playground compares a digest of the whole keyspace before and after the bad command.'},
+   build:{steps:['Keyspace = one hash map <code>key &rarr; {type, value, expireAt}</code>.','One structure per type: byte string, hash map, list (deque), set, sorted set (hash map + skip list), stream (log).','A command table with <b>arity</b> and a <i>write</i> flag; reject wrong arity before running anything.','A <b>type guard first</b>: <code>lookup(key, type)</code> fails with WRONGTYPE before the first change.','Account bytes per key (key + value + overhead) so chapter 4 can enforce a budget.'],
+    code:'lookup(key, type):\n  e = db.get(key)\n  if e and e.type != type: error WRONGTYPE   // nothing changed yet\n  return e\nHSET(k, f, v):\n  e = lookup(k, "hash") or db.put(k, newHash())\n  e.value[f] = v',
+    rule:'A failing command <b>changes nothing</b>: validate type and arguments before the first mutation.'}},
+  {ask:'A million sessions must disappear after 30 minutes. Who deletes them, and when?',
+   why:'Scanning every key each second would stall the single thread; never deleting them leaks memory; and a read must never return a session that has expired.',
+   v0:{name:'Scan the whole keyspace every second',code:'every 1s:\n  for k in db:\n    if k.expireAt <= now: delete k',breaks:'The scan is O(all keys) on the one executor thread: with 10 million keys, every second becomes a latency spike for every client. Between scans, reads still return expired keys.'},
+   design:'Store an absolute deadline per key, check it on every access (lazy expiry), and reclaim untouched keys with a small random-sampling cycle that only repeats while many sampled keys are expired.',
+   predict:{q:'Turn the <b>active expire cycle off</b>. A key\'s deadline has passed but no client touches it. What is true?',opts:['Reads still return it until something deletes it','Reads already treat it as gone, but its memory stays allocated until something touches it','It is deleted exactly at its deadline'],ans:1,why:'Every lookup checks the deadline first (and deletes the key on the spot), so no read ever sees an expired key. But with no active cycle nothing frees the bytes of keys nobody touches: watch the red <b>held in RAM but invisible</b> counter grow.'},
+   build:{steps:['<code>EXPIRE</code> stores <code>expireAt = now + ttl</code> as an <b>absolute</b> millisecond time, in a separate index of keys that have one.','<b>Lazy:</b> every lookup checks <code>now &gt;= expireAt</code> and deletes the key before answering.','<b>Active:</b> 10 times a second, sample 20 keys from that index, delete the expired ones, repeat while more than 25% were expired, stop at a time budget.','Drive tests with a <b>fake clock</b> so expiry is deterministic.'],
+    code:'lookup(k):\n  e = db[k]\n  if e and e.expireAt <= now: delete k; return nil\nevery 100 ms:\n  repeat:\n    s = sample(expires, 20); delete s.filter(expired)\n  until expiredShare(s) <= 25% or budgetSpent',
+    rule:'A key past its deadline is <b>never returned</b>, whether or not its memory has been freed yet.'}},
+  {ask:'The memory budget is full and a new key arrives. What do you throw away?',
+   why:'As a cache, rejecting writes breaks the app, and evicting the wrong keys drops the hit rate and sends that load straight back to the database.',
+   v0:{name:'Exact LRU with one global linked list',code:'on access(k): list.moveToFront(k)\non full:      delete list.tail',breaks:'Two extra pointers per key and a list update on <b>every read</b>, across millions of keys. Pure recency is also fooled by one big scan that touches everything once.'},
+   design:'Do not keep a global order: sample a few random keys and evict the worst of them, judged by a per-key access clock (LRU) or a decaying frequency counter (LFU).',
+   predict:{q:'Memory is at <code>maxmemory</code> and the policy is <code>noeviction</code>. A client writes a new key. What happens?',opts:['The least recently used key is evicted to make room','Redis keeps growing past the limit until the OS kills it','The write fails with an OOM error; reads keep working'],ans:2,why:'<code>noeviction</code> turns memory pressure into rejected writes instead of data loss. Pick it in the playground: the <b>rejected writes</b> column fills up while the other policies evict.'},
+   build:{steps:['Track <code>used</code> bytes as keys change (chapter 2 accounting).','Before running a <b>write</b>, while <code>used &gt; maxmemory</code>: pick a victim and delete it, or reply OOM under noeviction.','Per key keep a coarse <b>last-access clock</b> (LRU) or a <b>logarithmic counter that decays</b> (LFU), updated on lookup.','Choose victims from <b>N random samples</b> (Redis default 5), kept in a small pool of the best candidates.','Count hits, misses and evictions to judge the policy.'],
+    code:'beforeWrite():\n  while used > maxmemory:\n    if policy == noeviction: error OOM\n    cand = sample(db, N)\n    victim = worst(cand)   // oldest access or lowest freq\n    delete(victim)',
+    rule:'A write is admitted only once <b>used memory is back under the budget</b>; otherwise it is refused, never half-applied.'}},
+  {ask:'The machine loses power right after the server replied OK. What is still there after the restart?',
+   why:'Everything lives in RAM. Without a disk copy a restart empties every session. Bytes handed to the OS survive a process crash but not a power cut; only fsync survives that, and fsyncing every write makes each one wait for the disk.',
+   v0:{name:'Dump the whole map to a file every 5 minutes',code:'every 300s:\n  write("dump", serialize(db))',breaks:'A crash loses up to 5 minutes of acknowledged writes, and a crash <b>during</b> the dump leaves a half-written file in place of the good one.'},
+   design:'Append every write to a log (AOF) and fsync it on a declared policy; write snapshots (RDB) to a temp file with a checksum and publish them with an atomic rename.',
+   predict:{q:'AOF with <code>appendfsync everysec</code>. The crash cuts the last record in half (torn tail). What does recovery do?',opts:['Replays every complete record and drops the torn tail','Refuses to start: the whole log is corrupt','Applies the partial record with a truncated value'],ans:0,why:'Records are RESP frames, so the parser knows where each one ends; it stops at the last complete one. Redis does the same with <code>aof-load-truncated yes</code>. Under <b>More options</b>, set <b>Crash type</b> to <i>mid-record</i> and compare the recovered state with the durable prefix.'},
+   build:{steps:['<b>AOF:</b> after a write executes, append its RESP form to the log; rewrite relative TTLs as absolute <code>PEXPIREAT</code>.','<b>fsync policy:</b> <i>always</i> (fsync before the reply leaves), <i>everysec</i> (about 1 s at risk), <i>no</i> (the OS decides).','<b>Recovery:</b> replay complete records in order; stop at a torn tail.','<b>Snapshot:</b> serialize to a temp file with a checksum, fsync, then rename over the old one (Redis forks a child so the main thread keeps serving).','<b>Rewrite</b> the log from current state now and then so it does not grow forever.'],
+    code:'execWrite(argv):\n  apply(argv)\n  aof.append(resp(absoluteTTL(argv)))\n  if policy == always: aof.fsync()\n  reply(OK)\nrecover():\n  for rec in aof.completeRecords(): apply(rec)',
+    rule:'Recovery <b>never applies a partial record</b>, and the policy states exactly which acknowledged writes a crash may lose.'}},
+  {ask:'The primary\'s machine is gone, RAM and disk included. Where is an up-to-date copy?',
+   why:'Persistence only helps if the same box comes back. You need a second live copy that keeps up with 100k writes per second.',
+   v0:{name:'Copy the whole dataset to a replica every minute',code:'every 60s:\n  replica.load(primary.snapshot())',breaks:'The copy is up to a minute stale, and every round ships the entire dataset (gigabytes) even if only ten keys changed.'},
+   design:'Stream every write to the replicas in order and number the stream by byte offset; a replica that reconnects asks to continue from its offset and gets the gap from a bounded backlog.',
+   predict:{q:'Replica 1 is disconnected while the primary keeps writing, and it misses more bytes than the backlog holds. What happens when it reconnects?',opts:['Partial resync: it receives just the missing bytes','Full resync: a fresh snapshot, then the stream continues','It carries on with a permanent gap'],ans:1,why:'The missing bytes are no longer in the backlog, so the only safe way back is a full copy. With the default settings replica 1 misses more than the 1000 B backlog and needs a full resync; raise <b>Backlog</b> (under More options) to 50000 B and the same gap becomes a cheap partial resync.'},
+   build:{steps:['The primary keeps a <b>replication offset</b>: the number of bytes of write stream produced so far.','Each write is appended to a ring-buffer <b>backlog</b> and sent to every connected replica.','Replicas apply records in order and report their offset; anything at or below it is skipped, so duplicates are harmless.','Reconnect with <code>PSYNC replid offset</code>: still inside the backlog &rarr; partial; otherwise snapshot + stream (full).','Reply to the client <b>before</b> replicas confirm (asynchronous) and expose the lag.'],
+    code:'onWrite(rec):\n  offset += len(rec); backlog.push(rec)\n  for r in replicas: send(r, rec)\npsync(id, from):\n  if id == replId and from >= backlog.start: send(backlog[from:])  // partial\n  else: send(snapshot()); then stream                          // full',
+    rule:'A replica applies each offset <b>once and in order</b>, so at offset X its data equals the primary\'s at offset X.'}},
+  {ask:'Move 10 credits out of a balance. How do you stop another client changing it halfway?',
+   why:'Each command is atomic, but a business operation is several commands, and another client\'s write can land between them.',
+   v0:{name:'Read, compute, write back',code:'b = GET bal\nSET bal (b - 10)',breaks:'Another client can write <code>bal</code> between your GET and your SET; your SET silently overwrites it (a lost update). Pipelining the commands does not help: it saves round trips, but other clients still interleave.'},
+   design:'MULTI queues commands and EXEC runs them back-to-back on the single executor; WATCH adds an optimistic check that aborts EXEC if a watched key changed in the meantime.',
+   predict:{q:'Client A runs <code>WATCH bal</code> and <code>GET bal</code>. Client B then runs <code>SET bal 50</code>. A sends <code>MULTI</code>, <code>SET bal 90</code>, <code>EXEC</code>. What happens?',opts:['EXEC returns nil, nothing is applied, and A must retry','A\'s SET wins: bal becomes 90','B\'s SET waited until A was done'],ans:0,why:'B modified a watched key after A read it, so EXEC aborts and applies nothing. Pick the <b>WATCH conflict</b> scenario to replay exactly this sequence.'},
+   build:{steps:['Per client: a <code>queue</code> (null outside MULTI) and a <code>watched</code> map of key &rarr; version.','Every change to a key bumps its <b>version</b>, including deletes by expiry and eviction.','<code>MULTI</code>: from now on, validate and <b>queue</b> each command and reply QUEUED.','<code>EXEC</code>: if any watched version changed, reply nil; otherwise run the queue back-to-back, with no other client in between.','No rollback: a command that fails at run time does not undo the others.'],
+    code:'WATCH k: client.watched[k] = version[k]\nEXEC:\n  for k, v in client.watched:\n    if version[k] != v: return nil      // someone changed it\n  return [run(c) for c in client.queue]  // single executor: no interleaving',
+    rule:'Between EXEC\'s version check and its last queued command, <b>no other client\'s command runs</b>.'}},
+  {ask:'The primary stops answering at 3 a.m. Who decides it is dead, and who takes over?',
+   why:'Promote too eagerly and a network blip creates two primaries; too slowly and writes fail for minutes. And replication is asynchronous, so the newest writes may exist only on the dead machine.',
+   v0:{name:'Every client fails over on its own timeout',code:'if ping(primary) times out:\n  connect(replicas[0])\n  send REPLICAOF NO ONE',breaks:'Different clients see different blips and promote different replicas: <b>two primaries</b> accept writes (split brain). They may also promote a replica that is far behind.'},
+   design:'Several independent sentinels must agree the primary is down (quorum), then one elected leader promotes the replica with the highest replication offset and fences the old primary with a higher epoch.',
+   predict:{q:'The sentinels promote the replica with the <b>highest</b> offset. Can acknowledged writes still be lost?',opts:['No: the highest offset means it has every write','Only if the quorum is set to 1','Yes: writes acknowledged after the last byte it received are gone'],ans:2,why:'The primary replies before replicas have the write. Whatever it acknowledged beyond the best replica\'s offset existed only on the dead machine: the <b>Possible data loss</b> box lists those writes. <code>WAIT</code> and <code>min-replicas-to-write</code> narrow this window but do not close it.'},
+   build:{steps:['Three or more sentinels PING the primary; no valid reply for <code>down-after</code> ms &rarr; <b>SDOWN</b> (one sentinel\'s opinion).','When <b>quorum</b> sentinels report it &rarr; <b>ODOWN</b>; a leader is elected by majority vote for a new <b>epoch</b>.','The leader picks the replica with the best priority and <b>highest offset</b>, sends <code>REPLICAOF NO ONE</code>, and repoints the other replicas.','Publish the new primary with its epoch; clients ask Sentinel again on errors.','When the old primary returns it sees the higher epoch and becomes a replica; its unreplicated writes are discarded.'],
+    code:'if silentFor(primary) > downAfter: sdown = true\nif count(sdown) >= quorum and winVote(epoch + 1):\n  best = max(replicas, by offset)\n  best.send("REPLICAOF NO ONE")\n  publish(primary = best, epoch + 1)',
+    rule:'In a stable view <b>only one primary accepts writes</b>: the one named by the highest epoch.'}},
+  {ask:'The data outgrows one machine\'s RAM. How does a client know which machine holds a key?',
+   why:'Every request must reach its owner in one hop, and adding a machine must move only a slice of the keys, online, while traffic continues.',
+   v0:{name:'Hash the key modulo the number of nodes',code:'node = nodes[hash(key) % nodes.length]',breaks:'Going from 3 to 4 nodes changes the owner of about 75% of the keys, and every client still using the old N sends requests to the wrong node.'},
+   design:'Hash keys into a fixed set of 16,384 slots with CRC16, assign slot ranges to nodes, and move one slot at a time while nodes redirect stale clients with MOVED and ASK.',
+   predict:{q:'Slot S is being migrated. A client asks the <b>source</b> node for a key of S that has already been copied to the target. What is the reply?',opts:['MOVED: update your slot map for good','ASK: try the target for this one request','The value, served from the source'],ans:1,why:'The key has already left the source, but the slot still belongs to it until the migration commits. ASK is a one-shot redirect; MOVED only comes after the owner switches. Press Play and watch the probe in <b>Online migration</b>.'},
+   build:{steps:['<code>slot = CRC16(key) mod 16384</code>; if the key has a non-empty <code>{tag}</code>, hash only the tag.','Each node owns slot ranges; the slot map is versioned by a config epoch and shared by gossip.','A node asked for a slot it does not own replies <code>MOVED slot host:port</code>; clients cache the map.','Migration: mark the slot MIGRATING on the source and IMPORTING on the target, copy keys with their TTL, answer ASK for keys already moved, then commit the new owner with a new epoch.','Reject multi-key commands that span slots (CROSSSLOT).'],
+    code:'handle(k):\n  s = crc16(tagOrKey(k)) % 16384\n  if owner[s] != me: return MOVED(s, owner[s])\n  if k in db: return serve(k)\n  if migrating[s]: return ASK(s, target[s])  // already copied\n  return nil',
+    rule:'Every slot has <b>exactly one owner per epoch</b>, and a key is only ever served by the node that holds it.'}},
+  {ask:'A pool of workers processes order events. One worker crashes mid-job. Is that event lost?',
+   why:'Background jobs (emails, payments, stock updates) must each be done at least once, even when workers die, and you need to see which job is stuck where.',
+   v0:{name:'A list as a queue',code:'LPUSH jobs e        // producer\ne = BRPOP jobs      // worker: removed now\nprocess(e)          // crash here = lost',breaks:'The job is removed <b>before</b> it is processed. If the worker dies in between, the job is gone and nothing records who had it.'},
+   design:'Keep events in an append-only log with time-ordered IDs; a consumer group remembers what it delivered to whom (the pending entries list) until each consumer acknowledges.',
+   predict:{q:'Consumer c1 reads 2 entries and crashes before <code>XACK</code>. What happens to those entries?',opts:['They are lost: they were already delivered','They stay pending; after min-idle another consumer claims them','They are redelivered automatically, but only to c1'],ans:1,why:'Delivery and acknowledgement are separate. The entries sit in the PEL until a live consumer runs <code>XAUTOCLAIM</code> after the idle time; their delivery count goes up, so handlers must be idempotent.'},
+   build:{steps:['Entry ID = <code>ms-seq</code>, strictly increasing (seq+1 within the same ms; reject IDs &lt;= the last one).','Group state: <code>last-delivered-id</code> plus the <b>PEL</b> (pending entries list): id &rarr; consumer, delivery time, count.','<code>XREADGROUP &gt;</code> hands out entries after last-delivered-id and records them in the PEL; <code>XACK</code> removes them.','<code>XAUTOCLAIM</code>: entries idle longer than min-idle move to a new consumer, delivery count +1.','Retention is separate: <code>XTRIM MAXLEN</code> drops old entries even if they are still pending.'],
+    code:'XREADGROUP(g, c, ">"):\n  out = entries after g.lastDelivered\n  for e in out: g.pel[e.id] = {c, now, n: 1}; g.lastDelivered = e.id\nXACK(g, id): delete g.pel[id]\nXAUTOCLAIM(g, c2, minIdle):\n  for p in g.pel where now - p.t >= minIdle: p.c = c2; p.n += 1',
+    rule:'An entry stays pending until it is acknowledged: delivery is <b>at-least-once</b>, so handlers must be idempotent.'}}
+ ],
+ milestones:[
+  {t:'RESP server with one executor',test:'Two clients &times; 10,000 <code>INCR</code> end at exactly 20,000; a request split at every possible byte boundary parses to the same command.'},
+  {t:'Typed keyspace and TTL',test:'Every command on the wrong type returns WRONGTYPE with the keyspace unchanged; after a fake clock passes a deadline, no read returns the key.'},
+  {t:'maxmemory and eviction',test:'After every write, used memory is at or under the budget; under <code>noeviction</code> writes fail with OOM and reads still work.'},
+  {t:'AOF and snapshots',test:'Simulate power loss by dropping every byte not yet fsynced: with <code>appendfsync always</code> no acknowledged write is lost; truncating the log at any byte still recovers a valid prefix.'},
+  {t:'Replication with offsets',test:'Cut the link at random moments: after reconnecting, the replica\'s digest equals the primary\'s (partial inside the backlog, full otherwise).'},
+  {t:'MULTI, EXEC and WATCH',test:'A concurrent write to a watched key always makes EXEC return nil, and no other client\'s command ever runs inside an EXEC.'},
+  {t:'Sentinel failover',test:'Kill the primary: exactly one replica, the one with the highest offset, is promoted, and the old primary rejoins as a replica; lost writes are reported.'},
+  {t:'Cluster slots, then streams',test:'Migrate a slot under load with no lost key or TTL; kill a consumer before XACK and see its entries reclaimed by XAUTOCLAIM.'}],
+ capstone:{title:'Put it together: primary, replicas and a sentinel',lead:'Everything from the chapters, running at once: writes execute on the primary, go to the AOF, and stream to the replicas by offset. Play a scenario, scrub the timeline, tap a node or event to see why it happened, then kill the primary.'},
+ extras:[{id:'cliHost',title:'Mini redis-cli on the same keyspace',sub:'changes the loaded data; Reset restores it'},{id:'ddCost',title:'What each command costs',sub:'chapters 1 and 2'}]
+};
+</script>
+<script>
+Lab.mount(STORY);
+document.getElementById('cliHost').innerHTML='<div class="rcon" id="con"></div><div class="bar"><input class="cli" id="cli" type="text" placeholder="e.g.  HGETALL user:1   |   INCR hits   |   TTL session:1" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="cliRun" class="primary">Run</button><button id="cliReset">Reset data</button></div><div class="note">Supported: PING SET GET DEL EXISTS INCR/DECR/INCRBY/DECRBY APPEND STRLEN TYPE KEYS DBSIZE FLUSHALL EXPIRE PEXPIRE PEXPIREAT TTL PTTL PERSIST HSET HGET HGETALL HDEL HLEN LPUSH RPUSH LPOP RPOP LRANGE LLEN SADD SREM SMEMBERS SISMEMBER SCARD ZADD ZRANGE ZSCORE ZREM ZCARD ZRANK MULTI EXEC DISCARD WATCH XADD XLEN XRANGE XGROUP XREADGROUP XACK XPENDING XAUTOCLAIM XTRIM INFO. Each reply shows the RESP bytes and the cost units.</div>';
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const J=x=>{try{return JSON.stringify(x)}catch{return String(x)}};
@@ -435,19 +423,6 @@ function build(){
 /* =========================================================
    PLAYER
    ========================================================= */
-let gen=0,paused=false,speed=1,cur=0,playingAll=false;
-function animate(draw,dur){
-  const g=++gen;let el=0,last=null;
-  return new Promise(res=>{
-    function frame(now){
-      if(g!==gen){res(false);return}
-      if(last===null)last=now;const dt=now-last;last=now;if(!paused)el+=dt*speed;
-      const p=Math.min(1,el/dur);draw(p);if(p<1)requestAnimationFrame(frame);else res(true);
-    }
-    requestAnimationFrame(frame);
-  });
-}
-const sleep=ms=>new Promise(r=>setTimeout(r,ms/speed));
 const cmdStr=a=>a.map(x=>/[\s"]/.test(x)||x===''?JSON.stringify(x):x).join(' ');
 const nodeName=i=>['P','R1','R2','R3'][i]??'N'+i;
 
@@ -472,8 +447,8 @@ function draw1(p){
   // executor timeline
   const cl=OPT.clients,cs=S.cmds.slice(-18),tasks=cs.map((c,i)=>({i,c:i%cl,argv:c.argv,arr:i*0.25,dur:Math.max(0.05,c.cost*0.2)}));
   let tt=0;tasks.forEach(t=>{t.start=Math.max(tt,t.arr);t.end=t.start+t.dur;tt=t.end;t.wait=t.start-t.arr});
-  const T=tt,now=p*T,W=860,X0=60,xs=t=>X0+t/T*W;
-  let sv=`<svg viewBox="0 0 940 ${40+cl*30+50}" style="max-height:${120+cl*30}px">`;
+  const T=tt,now=p*T,W=440,X0=62,xs=t=>X0+t/T*W;
+  let sv=`<svg viewBox="0 0 510 ${40+cl*30+50}" style="max-height:${150+cl*30}px">`;
   for(let c=0;c<cl;c++)sv+=`<text x="4" y="${50+c*30}" font-weight="700" style="fill:${tc(c)}">client ${c+1}</text>`;
   sv+=`<text x="4" y="${50+cl*30+22}" font-weight="700">executor</text>`;
   tasks.forEach(t=>{
@@ -494,7 +469,7 @@ function draw1(p){
    <div class="chips"><span class="chip">slowest: ${esc(slow.argv[0])} ${slow.dur.toFixed(1)} ms</span><span class="chip ${maxWait>1?'bad':''}">longest queue wait: ${maxWait.toFixed(2)} ms</span><span class="chip">${cl} clients → 1 executor</span></div>
    <div class="note">Red dashed = time spent queued behind other commands. Every command runs to completion before the next starts, so no locks are needed; a slow command (like KEYS with ${S.srv.db.size} keys) delays everyone.</div></div></div>
    <h3>Atomicity: 2 clients × 5 increments</h3><div class="g2"><div class="box"><b>INCR (executed serially)</b><div class="big ok">10</div><div class="note">No lost updates.</div></div>
-   <div class="box"><b>Client-side GET, then SET x+1 (interleaved)</b><div class="big bad">${state.v}</div><div class="note mono">${seq.map(k=>k?'B':'A').join('')}</div><div class="note">Both read the same value, both write x+1: updates are lost. Atomicity comes from one command, not from the single thread alone.</div></div></div>`;
+   <div class="box"><b>Client-side GET, then SET x+1 (interleaved)</b><div class="big bad">${state.v}</div><div class="note">step order: <span class="mono">${seq.map(k=>k?'B':'A').join('')}</span></div><div class="note">Both read the same value, both write x+1: updates are lost. Atomicity comes from one command, not from the single thread alone.</div></div></div>`;
 }
 
 /* =========================================================
@@ -550,7 +525,7 @@ function draw3(p){
     sv+=`<line x1="${xs(t0)}" x2="${xs(k.exp)}" y1="${y}" y2="${y}" stroke="${st==='live'?'var(--ok)':st==='expired'?'var(--bad)':'var(--line)'}" stroke-width="5"/><circle cx="${xs(k.exp)}" cy="${y}" r="3.5" fill="${st==='reclaimed'?'var(--mut)':'var(--bad)'}"/>`});
   sv+=`<line x1="${xs(T)}" x2="${xs(T)}" y1="4" y2="${H-4}" stroke="var(--acc)" stroke-width="2"/></svg>`;
   const mx=Math.max(1,...sim.series.map(s=>s.held));let chart=`<svg viewBox="0 0 680 80" style="max-height:90px"><polyline fill="none" stroke="var(--bad)" stroke-width="2" points="${sim.series.filter(s=>s.t<=T).map(s=>`${xs(s.t)},${70-s.held/mx*60}`).join(' ')}"/><text x="10" y="12" style="fill:var(--mut);font-size:10px">memory held by expired-but-not-reclaimed keys (max ${mx} B)</text></svg>`;
-  const gk=tk.find(k=>k.exp<=T)||tk[0];srv.now=T;const rr=srv.exec(['TTL',gk.key]),rg=['GET',gk.key];srv.now=t0;
+  const gk=tk.find(k=>k.exp<=T)||tk[0],rr=I_(gk.exp<=T?-2:Math.ceil((gk.exp-T)/1000));
   return`<div class="caption">t = +${((T-t0)/1000).toFixed(1)}s · ${tk.filter(k=>k.exp<=T).length}/${tk.length} deadlines passed · <b>${cur.gone}</b> reclaimed by the active cycle · held in RAM but invisible: <b class="bad">${cur.held} B</b></div>
   <div class="g2"><div>${sv}<div class="chips"><span class="chip" style="border-color:var(--ok)">live</span><span class="chip" style="border-color:var(--bad)">expired, still in memory</span><span class="chip">reclaimed</span></div></div>
   <div>${chart}<h3>Active expire cycle (every 100 ms)</h3>${OPT.active?`<table><tr><th class="n">t+ms</th><th class="n">sampled</th><th class="n">expired</th><th>loop</th></tr>${cyc.map(c=>`<tr><td class="n">${c.t-t0}</td><td class="n">${c.sampled}</td><td class="n">${c.expired}</td><td>${c.rep?'repeat #'+c.rep+' (>25% expired)':'first pass'}</td></tr>`).join('')||'<tr><td colspan="4">waiting for first cycle…</td></tr>'}</table>`:'<div class="note bad">Active cycle is OFF: expired keys are only reclaimed when somebody touches them, so untouched keys keep their memory forever.</div>'}</div></div>
@@ -602,7 +577,7 @@ function draw4(p){
   return`<div class="caption">Request ${n}/${trace.length} · key #${L.ki} → <b>${L.st==='hit'?'hit':L.st==='oom'?'<span class="bad">OOM: write rejected (noeviction)</span>':L.st==='evict'?'miss, evicted #'+L.ev+' to make room':'miss, admitted'}</b> · budget ${cap} B (${OPT.mem}% of ${total} B) · cached ${cache.size}/${uni.length} keys</div>
   <div class="g2"><div>${tiles}<div class="note">Green = cached (brighter = ${OPT.pol==='sampled-lfu'?'more frequent':'more recent'}), red outline = just evicted, orange = requested.</div>${spark}</div>
   <div><table><tr><th>policy</th><th class="n">hit rate</th><th class="n">evictions</th><th class="n">rejected writes</th></tr>${pols.map(x=>`<tr style="${x===OPT.pol?'background:var(--p0)':''}"><td><b>${x}</b></td><td class="n">${(res[x].rate*100).toFixed(1)}%</td><td class="n">${res[x].evict}</td><td class="n">${res[x].oom}</td></tr>`).join('')}</table>
-  <div class="note"><b>noeviction</b> keeps old data and rejects new writes when full. <b>exact-lru</b> is the textbook baseline (needs a global ordering); Redis instead <b>samples</b> ${OPT.samples} random keys and evicts the worst of them, which approximates it cheaply. <b>sampled-lfu</b> favors frequently used keys, which wins when a few keys are hot. Expiry (phase 3) and eviction are different: eviction removes <i>live</i> keys.</div></div></div>`;
+  <div class="note"><b>noeviction</b> keeps old data and rejects new writes when full. <b>exact-lru</b> is the textbook baseline (needs a global ordering); Redis instead <b>samples</b> ${OPT.samples} random keys and evicts the worst of them, which approximates it cheaply. <b>sampled-lfu</b> favors frequently used keys, which wins when a few keys are hot. Expiry (chapter 3) and eviction are different: eviction removes <i>live</i> keys.</div></div></div>`;
 }
 
 /* =========================================================
@@ -644,8 +619,8 @@ function draw5(p){
   let tl=`<svg viewBox="0 0 680 110" style="max-height:120px"><line x1="10" x2="650" y1="50" y2="50" stroke="var(--line)" stroke-width="2"/>`;
   for(let i=0;i<Math.min(shown,M.n);i++){const after=i>=M.c,isDur=i<durable;tl+=`<circle cx="${px(i)}" cy="50" r="3.5" fill="${after?'var(--line)':isDur?'var(--ok)':'var(--bad)'}"/>`}
   if(M.K>0)for(let i=M.K;i<=M.n;i+=M.K)if(i<=shown)tl+=`<path d="M${px(i)},24 l6,8 l-6,8 l-6,-8z" fill="var(--acc2)"><title>snapshot after write ${i}</title></path>`;
-  if(p>=0.8)tl+=`<line x1="${px(M.c)}" x2="${px(M.c)}" y1="12" y2="92" stroke="var(--acc)" stroke-width="3"/><text x="${px(M.c)+4}" y="14" style="fill:var(--acc)">💥 crash</text><rect x="${px(durable)}" y="58" width="${Math.max(0,px(M.c)-px(durable))}" height="14" fill="var(--bad)" opacity=".35"/><text x="${px(durable)}" y="86" style="fill:var(--bad);font-size:10.5px">${lost} write(s) lost</text>`;
-  tl+=`<text x="10" y="106" style="fill:var(--mut);font-size:10px">write #1 … #${M.n} (green = durable, red = acknowledged but lost, ◆ = RDB snapshot)</text></svg>`;
+  if(p>=0.8)tl+=`<line x1="${px(M.c)}" x2="${px(M.c)}" y1="12" y2="92" stroke="var(--acc)" stroke-width="3"/><text x="${px(M.c)+4}" y="14" style="fill:var(--acc);font-weight:700">crash</text><rect x="${px(durable)}" y="58" width="${Math.max(0,px(M.c)-px(durable))}" height="14" fill="var(--bad)" opacity=".35"/><text x="${px(durable)}" y="86" style="fill:var(--bad);font-size:10.5px">${lost} write(s) lost</text>`;
+  tl+=`</svg><div class="legend2"><span>write #1 … #${M.n}</span><span><i style="background:var(--ok)"></i>durable</span><span><i style="background:var(--bad)"></i>acknowledged but lost</span><span style="color:var(--acc2)">◆ RDB snapshot</span></div>`;
   const tornTxt=torn?`The last record was cut mid-append (${tail.length} of ${(M.aof[durable]||'').length} bytes written). The parser stops at the last <b>complete</b> record (${pr.frames.length} frames) and ignores the torn tail.`:'';
   const lastRec=durable>0?M.aof[durable-1].replace(/\r\n/g,'⏎'):'';
   const modesT=Object.entries(M.modes).map(([k,d])=>`<tr style="${(fs==='always'&&k==='AOF always')||(fs==='everysec'&&k==='AOF everysec')||(fs==='no'&&k.startsWith('AOF no'))||(fs==='rdb'&&k.startsWith('RDB'))?'background:var(--p0)':''}"><td><b>${k}</b></td><td class="n">${d}</td><td class="n ${M.c-d?'bad':'ok'}">${M.c-d}</td></tr>`).join('');
@@ -696,17 +671,16 @@ function draw6(p){
   const series=(f)=>{const pts=[];for(let t=sim.t0;t<=Math.min(T,sim.tmax+800);t+=25)pts.push(`${xs(t)},${100-(f(t))/Math.max(1,sim.total)*90}`);return pts.join(' ')};
   let chart=`<svg viewBox="0 0 680 120" style="max-height:130px"><polyline fill="none" stroke="var(--acc)" stroke-width="2.5" points="${series(t=>sim.pOffAt(t))}"/><polyline fill="none" stroke="var(--t2)" stroke-width="2" points="${series(t=>sim.offAt(0,t))}"/><polyline fill="none" stroke="var(--t3)" stroke-width="2" points="${series(t=>sim.offAt(1,t))}"/>`;
   if(OPT.discR)chart+=`<rect x="${xs(sim.dsStart)}" y="4" width="${xs(sim.dsEnd)-xs(sim.dsStart)}" height="104" fill="var(--bad)" opacity=".1"/><text x="${xs(sim.dsStart)+3}" y="14" style="fill:var(--bad);font-size:10px">R${OPT.discR} disconnected</text>`;
-  chart+=`<line x1="${xs(T)}" x2="${xs(T)}" y1="4" y2="110" stroke="var(--ink)" opacity=".4"/><text x="10" y="116" style="fill:var(--mut);font-size:10px">replication offset (bytes) over time: primary (red), R1, R2</text></svg>`;
+  chart+=`<line x1="${xs(T)}" x2="${xs(T)}" y1="4" y2="110" stroke="var(--ink)" opacity=".4"/></svg><div class="legend2"><span>replication offset (bytes) over time:</span><span><i style="background:var(--acc)"></i>primary</span><span><i style="background:var(--t2)"></i>replica 1</span><span><i style="background:var(--t3)"></i>replica 2</span></div>`;
   const po=sim.pOffAt(T),o1=sim.offAt(0,T),o2=sim.offAt(1,T);
   const rs=sim.reps.map(r=>r.rs).find(Boolean);
-  const nodes=`<svg viewBox="0 0 680 130" style="max-height:140px">${[[90,65,'primary',po,'var(--acc)'],[500,28,'replica 1',o1,'var(--t2)'],[500,102,'replica 2',o2,'var(--t3)']].map(([x,y,l,o,c],i)=>`<rect x="${x-70}" y="${y-22}" width="140" height="44" rx="9" fill="var(--card)" stroke="${c}" stroke-width="3"/><text x="${x}" y="${y-3}" text-anchor="middle" font-weight="700">${l}</text><text x="${x}" y="${y+13}" text-anchor="middle" style="font-size:11px">offset ${o}${i?` · lag ${po-o} B`:''}</text>`).join('')}
-    ${[28,102].map((y,i)=>{const dis=OPT.discR===i+1&&T>=sim.dsStart&&T<sim.dsEnd;const fl=((T/90)%1);return`<line x1="160" y1="65" x2="430" y2="${y}" stroke="${dis?'var(--bad)':'var(--line)'}" stroke-width="2" ${dis?'stroke-dasharray="3 4"':''}/>${dis?'':`<circle cx="${160+270*fl}" cy="${65+(y-65)*fl}" r="5" fill="var(--acc)"/>`}`}).join('')}</svg>`;
+  const nodes=`<svg viewBox="0 0 420 124" style="max-height:170px">${[26,98].map((y,i)=>{const dis=OPT.discR===i+1&&T>=sim.dsStart&&T<sim.dsEnd;const fl=((T/90)%1);return`<line x1="150" y1="62" x2="270" y2="${y}" stroke="${dis?'var(--bad)':'var(--line)'}" stroke-width="2" ${dis?'stroke-dasharray="3 4"':''}/>${dis?`<text x="210" y="${(62+y)/2+(i?14:-6)}" text-anchor="middle" style="fill:var(--bad);font-size:10px;font-weight:700">link down</text>`:`<circle cx="${150+120*fl}" cy="${62+(y-62)*fl}" r="5" fill="var(--acc)"/>`}`}).join('')}${[[80,62,'primary',po,'var(--acc)',null],[340,26,'replica 1',o1,'var(--t2)',po-o1],[340,98,'replica 2',o2,'var(--t3)',po-o2]].map(([x,y,l,o,c,lag])=>`<rect x="${x-70}" y="${y-24}" width="140" height="48" rx="9" fill="var(--card)" stroke="${c}" stroke-width="3"/><text x="${x}" y="${y-7}" text-anchor="middle" font-weight="700">${l}</text><text x="${x}" y="${y+8}" text-anchor="middle" style="font-size:10.5px">offset ${o}</text>${lag==null?'':`<text x="${x}" y="${y+20}" text-anchor="middle" style="font-size:10.5px;fill:${lag?'var(--bad)':'var(--mut)'}">lag ${lag} B</text>`}`).join('')}</svg>`;
   const finalOK=sim.reps.every(r=>{const rr=new Redis();const seen=new Set();let cur=0,dups=0;r.applied.forEach(a=>{if(a.off>cur){cur=a.off;rr.now=W[a.i].t;W[a.i].aof.forEach(x=>rr.exec(x))}});return digest(rr)===digest(replayWrites(W,W.length))});
   const resTxt=rs?(rs.kind==='partial'?`R${OPT.discR} reconnected with offset ${po-rs.missing}: the primary still had the missing ${rs.missing} B in its backlog (${OPT.backlog} B) → <b class="ok">partial resync</b> (${sim.reps[OPT.discR-1].dup} duplicate record skipped by offset).`:`R${OPT.discR} was ${rs.missing} B behind but the backlog holds only ${OPT.backlog} B → <b class="bad">full resync</b>: snapshot transfer, then the stream continues.`):'';
   return`<div class="caption">t = +${Math.round(T-sim.t0)} ms · primary offset <b>${po}</b> B · lag R1 ${po-o1} B, R2 ${po-o2} B</div>${nodes}${chart}
   ${resTxt?`<div class="caption ${rs.kind==='partial'?'good':'bad'}">${resTxt}</div>`:''}
   <div class="chips"><span class="chip ${finalOK?'ok':'bad'}">${finalOK?'✔ replicas converge to the primary state after catch-up':'✘ replicas differ'}</span><span class="chip">${W.length} writes · ${sim.total} B stream</span></div>
-  <div class="note">Every write gets a byte offset in an ordered stream. A replica applies only records beyond its own offset (duplicates are skipped), so reconnecting is safe. Replication is <b>asynchronous</b>: the primary acknowledges before replicas have the write, which is the window failover (phase 8) can lose.</div>`;
+  <div class="note">Every write gets a byte offset in an ordered stream. A replica applies only records beyond its own offset (duplicates are skipped), so reconnecting is safe. Replication is <b>asynchronous</b>: the primary acknowledges before replicas have the write, which is the window failover (chapter 8) can lose.</div>`;
 }
 
 /* =========================================================
@@ -776,10 +750,10 @@ function draw9(p){
   // migration: slot with most keys
   const bySlot={};keys.forEach(k=>{const s=slotOf(k);(bySlot[s]=bySlot[s]||[]).push(k)});
   let ms=OPT.migSlot>=0?OPT.migSlot:+(Object.keys(bySlot).sort((a,b)=>bySlot[b].length-bySlot[a].length)[0]),mk=(bySlot[ms]||[]).slice(0,8);
-  const src=slotNode(ms,n),dst=(src+1)%n,step=p>=1?mk.length+1:Math.floor(p*(mk.length+2)),moved=Math.min(mk.length,Math.max(0,step-1)),state=step===0?'stable':step<=mk.length?'migrating':'committed';
-  const probe=mk[Math.min(mk.length-1,Math.max(0,moved))]||key;
+  const src=slotNode(ms,n),dst=(src+1)%n,step=p>=1?mk.length+2:Math.floor(p*(mk.length+3)),moved=Math.min(mk.length,Math.max(0,step-1)),state=step===0?'stable':step<=mk.length+1?'migrating':'committed';
+  const probe=(moved>0?mk[moved-1]:mk[0])||key;
   const probeIdx=mk.indexOf(probe),probeMoved=probeIdx<moved;
-  const resp=state==='committed'?`MOVED ${ms} node${nodeName(dst).replace('P','0').replace('R','')}`:state==='stable'?'served by owner':(probeMoved?'-ASK '+ms+' (key already moved to target)':'served by source (key still here)');
+  const resp=state==='committed'?`MOVED ${ms} node ${dst} (slot owner changed)`:state==='stable'?'served by owner':(probeMoved?'-ASK '+ms+' (key already moved to target)':'served by source (key still here)');
   const crossA=key,crossB=keys.find(k=>slotOf(k)!==slotOf(key))||key,tagged=['{'+key+'}a','{'+key+'}b'];
   const redirect=own===cl?`served by node ${cl}`:`-MOVED ${sl} node ${own}`;
   return`<div class="g2"><div><h3 style="margin-top:0">Key → slot → owner</h3><div class="note" style="margin:0 0 4px">slot = CRC16(key or {hash tag}) mod 16384</div>
@@ -851,7 +825,7 @@ function ctlHTML(k){
   const rng=(key,min,max,step,val,suffix='')=>`<input type="range" data-opt="${key}" min="${min}" max="${max}" step="${step}" value="${val}" style="width:120px"> ${val}${suffix}`;
   if(k===0){const pool=S.cmds.slice(S.nLoad);return`<label>Command ${sel('p1cmd',pool.map((c,i)=>[i,short(cmdStr(c.argv),26)]),OPT.p1cmd)}</label><label>TCP chunk (bytes) ${rng('chunk',1,40,1,OPT.chunk)}</label><label>Clients ${sel('clients',[1,2,3,4].map(x=>[x,x]),OPT.clients)}</label>`}
   if(k===1)return`<label>Try a bad command ${sel('attempt',[['wrongtype','LPUSH on a hash/string'],['notint','INCR on a non-number'],['hset','HSET on a set'],['zadd','ZADD with a non-numeric score']],OPT.attempt)}</label>`;
-  if(k===2)return`<label><input type="checkbox" data-opt="active" ${OPT.active?'checked':''}> active expire cycle</label><span class="note">Tip: set “Rows with TTL” to 60% in the data panel.</span>`;
+  if(k===2)return`<label><input type="checkbox" data-opt="active" ${OPT.active?'checked':''}> active expire cycle</label><span class="note">Tip: raise “Rows with TTL” under “Use your own data” at the top.</span>`;
   if(k===3)return`<label>Policy ${sel('pol',['noeviction','exact-lru','sampled-lru','sampled-lfu'].map(x=>[x,x]),OPT.pol)}</label><label>maxmemory ${rng('mem',10,100,5,OPT.mem,'%')}</label><label>samples ${rng('samples',1,10,1,OPT.samples)}</label><label>Access pattern ${sel('wl',[['zipf','skewed, hot set shifts mid-run'],['hot','80/20, hot set shifts mid-run'],['uniform','uniform']],OPT.wl)}</label>`;
   if(k===4)return`<label>Persistence ${sel('fsync',[['always','AOF fsync always'],['everysec','AOF everysec'],['no','AOF no'],['rdb','RDB snapshot only']],OPT.fsync)}</label><label>Snapshot every ${sel('snapK',[0,5,10,25].map(x=>[x,x?x+' writes':'off']),OPT.snapK)}</label><label>Crash at ${rng('crashPct',10,100,5,OPT.crashPct,'%')}</label><label>Crash type ${sel('crashMode',[['clean','between records'],['torn','mid-record (torn tail)']],OPT.crashMode)}</label><label><input type="checkbox" data-opt="corrupt" ${OPT.corrupt?'checked':''}> corrupt snapshot</label>`;
   if(k===5)return`<label>Network ${sel('lat',[['low','fast'],['med','medium'],['high','slow']],OPT.lat)}</label><label>Disconnect ${sel('discR',[[0,'none'],[1,'replica 1'],[2,'replica 2']],OPT.discR)}</label><label>from ${rng('discFrom',0.1,0.7,0.05,OPT.discFrom)}</label><label>to ${rng('discTo',0.3,0.95,0.05,OPT.discTo)}</label><label>Backlog ${sel('backlog',[200,1000,5000,50000].map(x=>[x,x+' B']),OPT.backlog)}</label>`;
@@ -874,27 +848,6 @@ function rebuildKeep(){showPhase(cur)}
 /* =========================================================
    RENDER / WIRING
    ========================================================= */
-function renderNav(){$('#nav').innerHTML=PHASES.map((ph,i)=>`<div class="nv ${i===cur?'act':''} ${i<cur?'done':''}" data-ph="${i}"><b>${i+1}. ${ph.t}</b><small>${ph.s} · ${ph.f}</small></div>`).join('')}
-function showPhase(k,p=1){
-  cur=k;renderNav();ovRender();const ph=PHASES[k];$('#blurb').innerHTML=`${ph.b}<div class="ft">Reimplementation feature: ${ph.f}</div>`;
-  $('#phCtl').innerHTML=ctlHTML(k);paintView(p);$('#prev').disabled=k===0;$('#nextB').disabled=k===PHASES.length-1;
-}
-function paintView(p=1){
-  if(!S||S.error){$('#phView').innerHTML=`<div class="box bad">${esc(S?S.error:'')}</div>`;return}
-  try{$('#phView').innerHTML=PHASES[cur].draw(p)}catch(e){$('#phView').innerHTML=`<div class="box bad">Render error: ${esc(e.message)}</div>`;console.error(e)}
-}
-function stopAll(){gen++;playingAll=false;paused=false;$('#pauseBtn').disabled=true;$('#pauseBtn').textContent='⏸ Pause'}
-$('#nav').onclick=e=>{const n=e.target.closest('[data-ph]');if(!n)return;stopAll();showPhase(+n.dataset.ph)};
-$('#prev').onclick=()=>{stopAll();showPhase(Math.max(0,cur-1))};
-$('#nextB').onclick=()=>{stopAll();showPhase(Math.min(PHASES.length-1,cur+1))};
-$('#anim').onclick=()=>{stopAll();animate(p=>paintView(p),PHASES[cur].dur)};
-$('#playAll').onclick=async()=>{
-  if(!S||S.error)return;stopAll();playingAll=true;$('#pauseBtn').disabled=false;
-  for(let k=0;k<PHASES.length;k++){showPhase(k,0);const ok=await animate(p=>paintView(p),PHASES[k].dur);if(!ok)return;await sleep(500);if(!playingAll)return}
-  playingAll=false;$('#pauseBtn').disabled=true;
-};
-$('#pauseBtn').onclick=()=>{paused=!paused;$('#pauseBtn').textContent=paused?'▶ Resume':'⏸ Pause'};
-$('#speed').oninput=e=>{speed=+e.target.value;$('#speedV').textContent=speed+'×'};
 
 function fillSel(sel,opts,keep,pref){const old=keep?$(sel).value:null;$(sel).innerHTML=opts.map(o=>`<option>${esc(o)}</option>`).join('');$(sel).value=opts.includes(old)?old:(opts.includes(pref)?pref:opts[0])}
 function onData(auto,prefix){
@@ -944,62 +897,6 @@ function ddCost(){
    ARCHITECTURE OVERVIEW (components + relationships)
    ========================================================= */
 const OVS={"w": 1000, "h": 430, "groups": [{"x": 190, "y": 55, "w": 570, "h": 345, "label": "Redis primary: one process, one executor thread"}], "nodes": [{"id": "client", "x": 10, "y": 190, "w": 120, "h": 64, "label": "Clients", "sub": "many connections", "desc": "Any number of clients open TCP connections and send commands. Everything they send funnels into one executor."}, {"id": "cluster", "x": 10, "y": 60, "w": 130, "h": 64, "label": "Cluster slots", "sub": "CRC16 \u2192 node", "desc": "In cluster mode the key is hashed to one of 16,384 slots and the client is routed (or redirected) to the node that owns that slot.", "phase": 8}, {"id": "resp", "x": 210, "y": 90, "w": 130, "h": 60, "label": "RESP parser", "sub": "bytes \u2192 frames", "desc": "Turns a stream of bytes (possibly fragmented or pipelined) into complete command frames. Incomplete frames wait for more bytes.", "phase": 0}, {"id": "loop", "x": 400, "y": 90, "w": 150, "h": 60, "label": "Event loop", "sub": "1 command at a time", "desc": "The single thread that runs each command to completion. This is the source of atomicity, and of head-of-line blocking by slow commands.", "phase": 0}, {"id": "tx", "x": 595, "y": 90, "w": 150, "h": 60, "label": "MULTI / WATCH", "sub": "atomic batch", "desc": "Queues commands until EXEC, then runs them back-to-back with no interleaving. WATCH aborts the batch if a watched key changed.", "phase": 6}, {"id": "exp", "x": 210, "y": 215, "w": 130, "h": 60, "label": "Expiry", "sub": "TTL deadlines", "desc": "Absolute deadlines on keys. Checked on access (lazy) and swept by a bounded active cycle.", "phase": 2}, {"id": "ks", "x": 400, "y": 210, "w": 150, "h": 70, "label": "Keyspace", "sub": "typed values", "desc": "The map from key to a typed value: string, hash, list, set, sorted set, stream. Every command validates the type first.", "phase": 1}, {"id": "streams", "x": 595, "y": 215, "w": 150, "h": 60, "label": "Streams", "sub": "groups \u00b7 PEL", "desc": "An ID-ordered log stored as one value type, with consumer groups that track pending deliveries.", "phase": 9}, {"id": "evict", "x": 210, "y": 325, "w": 130, "h": 60, "label": "Eviction", "sub": "maxmemory", "desc": "When the byte budget is full, removes live keys (sampled LRU/LFU) to admit new data. Different from expiry.", "phase": 3}, {"id": "persist", "x": 400, "y": 325, "w": 150, "h": 60, "label": "AOF / RDB", "sub": "durability", "desc": "Every write is appended to a log (and/or snapshotted) under an fsync policy so state can be rebuilt after a crash.", "phase": 4}, {"id": "repl", "x": 595, "y": 325, "w": 150, "h": 60, "label": "Replication", "sub": "offsets \u00b7 backlog", "desc": "Each write gets a byte offset in an ordered stream that replicas consume; a bounded backlog allows partial resync.", "phase": 5}, {"id": "replicas", "x": 830, "y": 325, "w": 150, "h": 60, "label": "Replicas", "sub": "follow the stream", "desc": "Copies that apply the primary's writes asynchronously. Candidates for promotion on failure.", "phase": 5}, {"id": "sentinel", "x": 830, "y": 90, "w": 150, "h": 64, "label": "Sentinels", "sub": "detect \u00b7 promote", "desc": "Monitor the primary, agree it is down by quorum, elect a leader, promote the most up-to-date replica and fence the old primary.", "phase": 7}], "edges": [{"from": "client", "to": "cluster", "label": "which node?", "kind": "ctl"}, {"from": "cluster", "to": "resp", "label": "route", "kind": "ctl"}, {"from": "client", "to": "resp", "label": "RESP bytes", "kind": "data"}, {"from": "resp", "to": "loop", "label": "frames", "kind": "data"}, {"from": "loop", "to": "tx", "label": "queue", "kind": "ctl"}, {"from": "loop", "to": "ks", "label": "reads / writes", "kind": "data"}, {"from": "exp", "to": "ks", "label": "deadline", "kind": "ctl"}, {"from": "evict", "to": "ks", "label": "evicts", "kind": "ctl"}, {"from": "ks", "to": "streams", "label": "type", "kind": "ctl"}, {"from": "ks", "to": "persist", "label": "every write", "kind": "data"}, {"from": "ks", "to": "repl", "label": "write stream", "kind": "data"}, {"from": "repl", "to": "replicas", "label": "stream", "kind": "data"}, {"from": "sentinel", "to": "replicas", "label": "monitor", "kind": "ctl"}, {"from": "sentinel", "to": "loop", "label": "PING \u00b7 fence", "kind": "ctl", "bend": 110}], "flow": [{"n": "client", "t": "A client sends SET k v."}, {"n": "cluster", "t": "In cluster mode, CRC16(k) mod 16384 picks the node that owns the slot."}, {"n": "resp", "t": "The bytes complete a RESP frame."}, {"n": "loop", "t": "The single executor runs the command to completion: atomic."}, {"n": "ks", "t": "The typed value is written to the keyspace (and any TTL recorded)."}, {"n": "persist", "t": "The write is appended to the AOF under the fsync policy."}, {"n": "repl", "t": "The same write gets a replication offset."}, {"n": "replicas", "t": "Replicas apply it later (asynchronously): this gap is what failover can lose."}]};
-const OVN=Object.fromEntries(OVS.nodes.map(n=>[n.id,n]));
-const OV={sel:null,k:-1};
-function ovAnchor(n,tx,ty){const cx=n.x+n.w/2,cy=n.y+n.h/2,dx=tx-cx,dy=ty-cy;if(!dx&&!dy)return[cx,cy];const s=Math.min((n.w/2)/Math.abs(dx||1e-9),(n.h/2)/Math.abs(dy||1e-9));return[cx+dx*s,cy+dy*s]}
-function ovGeom(e){
-  const a=OVN[e.from],b=OVN[e.to],ca=[a.x+a.w/2,a.y+a.h/2],cb=[b.x+b.w/2,b.y+b.h/2];let c=null;
-  if(e.bend){const mx=(ca[0]+cb[0])/2,my=(ca[1]+cb[1])/2,dx=cb[0]-ca[0],dy=cb[1]-ca[1],L=Math.hypot(dx,dy)||1;c=[mx-dy/L*e.bend,my+dx/L*e.bend]}
-  const p0=ovAnchor(a,...(c||cb)),p1=ovAnchor(b,...(c||ca));
-  const mid=c?[0.25*p0[0]+0.5*c[0]+0.25*p1[0],0.25*p0[1]+0.5*c[1]+0.25*p1[1]]:[(p0[0]+p1[0])/2,(p0[1]+p1[1])/2];
-  return{p0,p1,c,mid};
-}
-function ovRender(){
-  const el=document.getElementById('ovView');if(!el)return;
-  const flow=OVS.flow,k=OV.k,act=new Set(),actE=new Set();
-  if(k>=0){for(let i=0;i<=Math.min(k,flow.length-1);i++)act.add(flow[i].n);for(let i=1;i<=k&&i<flow.length;i++){actE.add(flow[i-1].n+'>'+flow[i].n);actE.add(flow[i].n+'>'+flow[i-1].n)}}
-  const sel=OV.sel,rel=new Set();if(sel){rel.add(sel);OVS.edges.forEach(e=>{if(e.from===sel)rel.add(e.to);if(e.to===sel)rel.add(e.from)})}
-  const curPh=typeof cur==='number'?cur:-1;
-  let s=`<svg viewBox="0 0 ${OVS.w} ${OVS.h}" style="max-height:${OVS.h*1.1}px"><defs><marker id="ovar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="#8a94a6"/></marker><marker id="ovara" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="var(--acc)"/></marker></defs>`;
-  (OVS.groups||[]).forEach(g=>{s+=`<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${g.x+12}" y="${g.y+17}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${esc(g.label)}</text>`});
-  OVS.edges.forEach(e=>{
-    const g=ovGeom(e),on=actE.has(e.from+'>'+e.to),dim=sel&&!(e.from===sel||e.to===sel),hl=sel&&(e.from===sel||e.to===sel);
-    const d=g.c?`M${g.p0[0]},${g.p0[1]} Q${g.c[0]},${g.c[1]} ${g.p1[0]},${g.p1[1]}`:`M${g.p0[0]},${g.p0[1]} L${g.p1[0]},${g.p1[1]}`;
-    s+=`<g style="${dim?'opacity:.2':''}"><path d="${d}" class="ove ${e.kind||'data'} ${on||hl?'act':''}" marker-end="url(#${on||hl?'ovara':'ovar'})"/>${on?`<path d="${d}" class="ove flow act" style="stroke-width:5;opacity:.5"/>`:''}
-      <text x="${g.mid[0]}" y="${g.mid[1]-5}" text-anchor="middle" style="font-size:10.5px;fill:${hl||on?'var(--acc)':'var(--mut)'};paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(e.label)}</text></g>`;
-  });
-  OVS.nodes.forEach(n=>{
-    const ph=n.phase,cls=['ovn',sel===n.id?'sel':'',ph!==undefined&&ph===curPh?'cur':'',act.has(n.id)?'act':''].join(' '),dim=sel&&!rel.has(n.id);
-    s+=`<g class="${cls}" data-node="${n.id}" style="${dim?'opacity:.3':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${ph!==undefined?pc(ph):'var(--card)'}"/>
-      <text x="${n.x+10}" y="${n.y+22}" font-weight="700" style="font-size:12.5px">${esc(n.label)}</text><text x="${n.x+10}" y="${n.y+40}" style="font-size:10.5px;fill:var(--mut)">${esc(n.sub||'')}</text>
-      ${ph!==undefined?`<text x="${n.x+n.w-8}" y="${n.y+n.h-8}" text-anchor="end" style="font-size:10px;font-weight:700;fill:var(--mut)">phase ${ph+1}</text>`:''}</g>`;
-  });
-  s+='</svg>';
-  el.innerHTML=s;
-  const cap=document.getElementById('ovCap');
-  if(cap)cap.innerHTML=k>=0?`<b>Step ${Math.min(k,flow.length-1)+1}/${flow.length}:</b> ${esc(flow[Math.min(k,flow.length-1)].t)}`:(sel?'':'Click a component to see how it connects to the others.');
-  ovInfo();
-}
-function ovInfo(){
-  const el=document.getElementById('ovInfo');if(!el)return;const sel=OV.sel&&OVN[OV.sel];
-  // phase-to-phase dependencies derived from the edges
-  const pairs=new Map();OVS.edges.forEach(e=>{const a=OVN[e.from].phase,b=OVN[e.to].phase;if(a!==undefined&&b!==undefined&&a!==b){const key=a+'>'+b;if(!pairs.has(key))pairs.set(key,[]);pairs.get(key).push(e.label)}});
-  const dep=[...pairs.entries()].sort((x,y)=>x[0].split('>')[0]-y[0].split('>')[0]).map(([k,l])=>{const[a,b]=k.split('>').map(Number);return`<span class="chip" style="background:${pc(a)}">${a+1}. ${esc(PHASES[a].t)}</span> <span class="mono">→ ${esc(short(l.join(' / '),34))} →</span> <span class="chip" style="background:${pc(b)}">${b+1}. ${esc(PHASES[b].t)}</span>`}).join('<br>');
-  let card='';
-  if(sel){
-    const ins=OVS.edges.filter(e=>e.to===sel.id),outs=OVS.edges.filter(e=>e.from===sel.id);
-    card=`<div class="box" style="margin-top:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="font-size:15px">${esc(sel.label)}</b><span class="note" style="margin:0">${esc(sel.sub||'')}</span>${sel.phase!==undefined?`<button class="primary" data-go="${sel.phase}">Go to phase ${sel.phase+1}: ${esc(PHASES[sel.phase].t)} ›</button>`:''}</div>
-      <div style="margin:6px 0">${esc(sel.desc||'')}</div>
-      <div class="g2"><div><b style="font-size:12px">Receives</b>${ins.map(e=>`<div class="row"><span style="color:var(--mut)">${esc(OVN[e.from].label)}</span> ─ ${esc(e.label)} ▸</div>`).join('')||'<div class="note">nothing: it is where requests enter.</div>'}</div>
-      <div><b style="font-size:12px">Sends</b>${outs.map(e=>`<div class="row">▸ ${esc(e.label)} ─ <span style="color:var(--mut)">${esc(OVN[e.to].label)}</span></div>`).join('')||'<div class="note">nothing: it is an endpoint.</div>'}</div></div></div>`;
-  }
-  el.innerHTML=card+`<details class="dd" style="margin-top:8px"><summary>How the phases depend on each other</summary><div style="line-height:2.1;margin-top:6px">${dep||'<span class="note">no cross-phase edges</span>'}</div></details>`;
-}
-function jumpPhase(k){stopAll();showPhase(k);const t=document.getElementById('phaseSec');if(t&&t.scrollIntoView)t.scrollIntoView({behavior:'smooth',block:'start'})}
-document.getElementById('ovView').addEventListener('click',e=>{const n=e.target.closest('[data-node]');if(n){OV.k=-1;OV.sel=OV.sel===n.dataset.node?null:n.dataset.node;ovRender()}});
-document.getElementById('ovInfo').addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g)jumpPhase(+g.dataset.go)});
-document.getElementById('ovTrace').onclick=()=>{stopAll();OV.sel=null;OV.k=0;animate(p=>{OV.k=Math.min(OVS.flow.length-1,Math.floor(p*OVS.flow.length));ovRender()},OVS.flow.length*1300)};
-document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.sel=null;ovRender()};
 
 /* =========================================================
    INIT
@@ -1164,148 +1061,9 @@ const SIMM={
  detail(id,st){if(id[0]==='r')return[`role ${st.role[id]}`,`replication offset ${st.off[id]}`,...Object.entries(st.kv[id]).map(([k,v])=>`${k} = ${v}`)];if(id==='aof')return st.aof;return SIMM.lines(id,st)}
 };
 
-/* =========================================================
-   LIVE CLUSTER SIMULATION (shared framework)
-   events on a timeline; packets travel between nodes; state is replayed up to time T
-   ========================================================= */
-function sHash(s){let h=2166136261;s=String(s);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h>>>0}
-const sEsc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const sShort=(s,n)=>{s=String(s);return s.length>n?s.slice(0,n-1)+'…':s};
-const E=(t,d,from,to,msg,kind,fx,cause)=>({t,d,from,to,msg,kind,fx:fx||[],cause:cause||''});
-const SIM={n:0,set:{},run:null,T:0,play:false,sel:null,selNode:null,speed:1,last:null};
-const SIMCOL={write:'#2f6fed',ack:'#1a9b5a',read:'#e25a1c',data:'#e25a1c',repl:'#9b4fd0',ctl:'#6b7280',fail:'#d64545',info:'#c9a400',sched:'#0f9d8a',watch:'#8a6fd0',ctrl:'#6b7280',trunc:'#d64545'};
-function simParse(text){return text.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#')).map(l=>{const p=l.split(/\s+/);return{t:Number(p[0])||0,op:(p[1]||'').toUpperCase(),args:p.slice(2),raw:l}}).sort((a,b)=>a.t-b.t)}
-function simRun(){
-  const acts=simParse(document.getElementById('simAct').value);
-  try{SIM.run=SIMM.run(acts,SIM.n,SIM.set);SIM.run.events.sort((a,b)=>a.t-b.t||a.d-b.d)}catch(e){SIM.run={events:[],end:0,err:e.message};console.error(e)}
-  SIM.end=Math.max(1000,(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0))+600);
-  const sl=document.getElementById('simT');sl.max=SIM.end;if(SIM.T>SIM.end)SIM.T=SIM.end;
-}
-function simStateAt(T){const st=SIMM.init(SIM.n,SIM.set);for(const e of SIM.run.events){if(e.t+e.d<=T)e.fx.forEach(f=>SIMM.apply(st,f))}return st}
-function simDraw(){
-  const svg=document.getElementById('simSvg');if(!svg||!SIM.run)return;
-  const T=SIM.T,topo=SIMM.topo(SIM.n),st=simStateAt(T),byId=Object.fromEntries(topo.nodes.map(n=>[n.id,n]));
-  const W=topo.w||900,H=topo.h||430;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
-  const active=SIM.run.events.filter(e=>e.t<=T&&T<e.t+e.d),recent=SIM.run.events.filter(e=>e.t+e.d<=T&&T-(e.t+e.d)<450);
-  const hot=new Set([...active.flatMap(e=>[e.from,e.to]),...recent.map(e=>e.to)]);
-  let s='<defs><marker id="simar" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0L9,4.5L0,9z" fill="#8a94a6"/></marker></defs>';
-  (topo.zones||[]).forEach(z=>{s+=`<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${z.x+12}" y="${z.y+17}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${sEsc(z.label)}</text>`});
-  topo.edges.forEach(([a,b])=>{const A=byId[a],B=byId[b];if(!A||!B)return;s+=`<line x1="${A.x+A.w/2}" y1="${A.y+A.h/2}" x2="${B.x+B.w/2}" y2="${B.y+B.h/2}" stroke="var(--line)" stroke-width="1.5"/>`});
-  topo.nodes.forEach(n=>{
-    const status=(st.status&&st.status[n.id])||'up',down=status==='down',isHot=hot.has(n.id),sel=SIM.selNode===n.id;
-    const lines=SIMM.lines(n.id,st)||[];
-    s+=`<g class="simn" data-id="${n.id}" style="cursor:pointer;${down?'opacity:.55':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${down?'var(--p5)':n.c||'var(--card)'}" stroke="${sel?'var(--acc)':isHot?'var(--acc2)':'var(--line)'}" stroke-width="${sel||isHot?3.5:1.8}"/>
-      <text x="${n.x+9}" y="${n.y+17}" font-weight="700" style="font-size:12.5px">${sEsc(n.label)}${down?' ✕':''}</text>${n.badge&&(n.label.length*7.6+String(typeof n.badge==='function'?n.badge(st):n.badge).length*5.8<n.w)?`<text x="${n.x+n.w-8}" y="${n.y+17}" text-anchor="end" style="font-size:10px;fill:var(--mut)">${sEsc(typeof n.badge==='function'?n.badge(st):n.badge)}</text>`:''}
-      ${lines.slice(0,Math.floor((n.h-24)/13)).map((l,i)=>`<text x="${n.x+9}" y="${n.y+32+i*13}" style="font-size:10.5px;${/^!/.test(l)?'fill:var(--bad)':''}">${sEsc(sShort(String(l).replace(/^!/,''),Math.floor((n.w-14)/6.3)))}</text>`).join('')}</g>`;
-  });
-  active.forEach(e=>{const A=byId[e.from],B=byId[e.to];if(!A||!B)return;const f=Math.min(1,(T-e.t)/Math.max(1,e.d)),ax=A.x+A.w/2,ay=A.y+A.h/2,bx=B.x+B.w/2,by=B.y+B.h/2;
-    if(e.from===e.to){s+=`<text x="${A.x+A.w/2}" y="${A.y-6}" text-anchor="middle" style="font-size:10.5px;fill:${SIMCOL[e.kind]||'#6b7280'};font-weight:700">${sEsc(sShort(e.msg,30))}</text>`;return}
-    const col=SIMCOL[e.kind]||'#6b7280';s+=`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${col}" stroke-width="2.5" opacity=".35"/><circle cx="${ax+(bx-ax)*f}" cy="${ay+(by-ay)*f}" r="7" fill="${col}" stroke="#fff" stroke-width="1.5"/><text x="${ax+(bx-ax)*f}" y="${ay+(by-ay)*f-11}" text-anchor="middle" style="font-size:10px;fill:${col};font-weight:700;paint-order:stroke;stroke:var(--card);stroke-width:3px">${sEsc(sShort(e.msg,26))}</text>`});
-  svg.innerHTML=s;
-  document.getElementById('simTv').textContent=(T/1000).toFixed(2)+' s / '+(SIM.end/1000).toFixed(1)+' s';
-  document.getElementById('simT').value=T;
-  // log
-  const evs=SIM.run.events,upTo=evs.filter(e=>e.t<=T),lastI=upTo.length-1;
-  document.getElementById('simLog').innerHTML=evs.map((e,i)=>`<div class="simev ${i===lastI?'cur':''} ${e.t>T?'fut':''}" data-i="${i}"><span class="simtag" style="background:${SIMCOL[e.kind]||'#6b7280'}">${sEsc(e.kind)}</span> <span class="mono">${(e.t/1000).toFixed(2)}s</span> ${sEsc(e.from)}${e.from===e.to?'':' → '+sEsc(e.to)}: ${sEsc(e.msg)}</div>`).join('')||'<div class="note">No actions yet.</div>';
-  const cur=document.querySelector('#simLog .cur');if(cur&&SIM.play)cur.scrollIntoView({block:'nearest'});
-  // inspector
-  const insp=document.getElementById('simInsp');
-  if(SIM.selNode){const det=SIMM.detail?SIMM.detail(SIM.selNode,st):SIMM.lines(SIM.selNode,st);insp.innerHTML=`<b>${sEsc(byId[SIM.selNode].label)}</b> at ${(T/1000).toFixed(2)}s<pre>${sEsc((det||[]).join('\n')||'(empty)')}</pre>`}
-  else if(SIM.sel!=null&&evs[SIM.sel]){const e=evs[SIM.sel];insp.innerHTML=`<b>${sEsc(e.msg)}</b><div class="note">${sEsc(e.from)} → ${sEsc(e.to)} · ${(e.t/1000).toFixed(2)}s (+${e.d} ms) · ${sEsc(e.kind)}</div>${e.cause?`<div class="caption" style="margin-top:6px"><b>Why:</b> ${sEsc(e.cause)}</div>`:''}<div class="note">state changes: ${e.fx.length?sEsc(e.fx.map(f=>SIMM.fxText?SIMM.fxText(f):f.op).join('; ')):'none (message only)'}</div>`}
-  else insp.innerHTML='<div class="note">Click a node to inspect its data, or click an event in the log to see why it happened.</div>';
-}
-function simTick(now){
-  if(!SIM.play){SIM.last=null;return}
-  if(SIM.last==null)SIM.last=now;const dt=now-SIM.last;SIM.last=now;SIM.T=Math.min(SIM.end,SIM.T+dt*SIM.speed);simDraw();
-  if(SIM.T>=SIM.end){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}
-  requestAnimationFrame(simTick);
-}
-function simBuildControls(){
-  const m=SIMM,nr=m.nodeRange;
-  const sc=document.getElementById('simScn');sc.innerHTML=m.scenarios.map((s,i)=>`<option value="${i}">${sEsc(s.name)}</option>`).join('');
-  const nn=document.getElementById('simN');nn.innerHTML=Array.from({length:nr[1]-nr[0]+1},(_,i)=>`<option value="${nr[0]+i}" ${nr[0]+i===nr[2]?'selected':''}>${nr[0]+i}</option>`).join('');document.getElementById('simNL').textContent=m.nodeLabel;
-  document.getElementById('simSet').innerHTML=(m.settings||[]).map(s=>`<label>${sEsc(s.label)} <select data-set="${s.id}">${s.opts.map(o=>`<option ${o===s.def?'selected':''}>${sEsc(o)}</option>`).join('')}</select></label>`).join('');
-  SIM.set=Object.fromEntries((m.settings||[]).map(s=>[s.id,s.def]));
-  document.getElementById('simOp').innerHTML=m.menu.map((o,i)=>`<option value="${i}">${sEsc(o.label)}</option>`).join('');
-  simArgs();
-}
-function simArgs(){const o=SIMM.menu[+document.getElementById('simOp').value];document.getElementById('simArgs').innerHTML=o.args.map((a,i)=>`<input type="text" data-a="${i}" value="${sEsc(a.d)}" placeholder="${sEsc(a.n)}" style="width:${a.w||80}px">`).join('')}
-function simLoadScenario(i){const s=SIMM.scenarios[i];document.getElementById('simAct').value=s.acts.join('\n');document.getElementById('simDesc').textContent=s.desc;SIM.T=0;SIM.sel=null;SIM.selNode=null;simRun();simDraw()}
-function simInit(){
-  if(!document.getElementById('simSvg'))return;
-  SIM.n=SIMM.nodeRange[2];simBuildControls();simLoadScenario(0);
-  document.getElementById('simScn').onchange=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simLoadScenario(+e.target.value)};
-  document.getElementById('simN').onchange=e=>{SIM.n=+e.target.value;SIM.T=0;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simRun();simDraw()};
-  document.getElementById('simSet').onchange=e=>{const t=e.target.closest('[data-set]');if(t){SIM.set[t.dataset.set]=t.value;simRun();simDraw()}};
-  document.getElementById('simOp').onchange=simArgs;
-  document.getElementById('simAdd').onclick=()=>{const o=SIMM.menu[+document.getElementById('simOp').value],vals=[...document.querySelectorAll('#simArgs input')].map(i=>i.value.trim()||'-');
-    const ta=document.getElementById('simAct'),t=Math.round(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0)+300);ta.value=(ta.value.trim()?ta.value.trim()+'\n':'')+`${t} ${o.op} ${vals.join(' ')}`.trim();SIM.T=Math.max(0,t-200);simRun();simDraw()};
-  document.getElementById('simAct').onchange=()=>{simRun();simDraw()};
-  document.getElementById('simPlay').onclick=()=>{if(SIM.play){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}if(SIM.T>=SIM.end)SIM.T=0;SIM.play=true;SIM.last=null;document.getElementById('simPlay').textContent='⏸ Pause';requestAnimationFrame(simTick)};
-  document.getElementById('simReset').onclick=()=>{SIM.play=false;SIM.T=0;document.getElementById('simPlay').textContent='▶ Play';simDraw()};
-  document.getElementById('simStep').onclick=()=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const nx=SIM.run.events.find(e=>e.t+e.d>SIM.T+1);SIM.T=nx?nx.t+nx.d:SIM.end;SIM.sel=nx?SIM.run.events.indexOf(nx):null;SIM.selNode=null;simDraw()};
-  document.getElementById('simSpeed').onchange=e=>{SIM.speed=+e.target.value};
-  document.getElementById('simT').oninput=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';SIM.T=+e.target.value;simDraw()};
-  document.getElementById('simLog').onclick=e=>{const d=e.target.closest('.simev');if(!d)return;const i=+d.dataset.i;SIM.sel=i;SIM.selNode=null;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const ev=SIM.run.events[i];SIM.T=ev.t+ev.d;simDraw()};
-  document.getElementById('simSvg').onclick=e=>{const g=e.target.closest('.simn');if(g){SIM.selNode=SIM.selNode===g.dataset.id?null:g.dataset.id;SIM.sel=null;simDraw()}};
-}
+Lab.sim(SIMM);})();
 
-window.simInit=simInit;window.__sim={SIM,simDraw,simRun};})();
-/* ===== overview: packets travelling along the connections ===== */
-(function(){
-const _ovr=ovRender;
-function pt(g,f){if(g.c){const u=1-f;return[u*u*g.p0[0]+2*u*f*g.c[0]+f*f*g.p1[0],u*u*g.p0[1]+2*u*f*g.c[1]+f*f*g.p1[1]]}return[g.p0[0]+(g.p1[0]-g.p0[0])*f,g.p0[1]+(g.p1[1]-g.p0[1])*f]}
-function findEdge(a,b){let e=OVS.edges.find(x=>x.from===a&&x.to===b);if(e)return{e,rev:false};e=OVS.edges.find(x=>x.from===b&&x.to===a);return e?{e,rev:true}:null}
-ovRender=function(){
-  _ovr();
-  if(OV.k<0||OV.kf==null)return;const svg=document.querySelector('#ovView svg');if(!svg)return;
-  const flow=OVS.flow,i=Math.min(flow.length-1,Math.floor(OV.kf)),f=OV.kf-Math.floor(OV.kf);let s='';
-  if(i>=1){const ed=findEdge(flow[i-1].n,flow[i].n);
-    if(ed){const g=ovGeom(ed.e),ff=Math.min(1,f*1.15),q=ed.rev?1-ff:ff;
-      for(let tr=3;tr>=1;tr--){const qq=ed.rev?Math.min(1,q+tr*.06):Math.max(0,q-tr*.06),p2=pt(g,qq);s+=`<circle cx="${p2[0]}" cy="${p2[1]}" r="${7-tr*1.4}" fill="var(--acc2)" opacity="${.5-tr*.12}"/>`}
-      const p=pt(g,q);s+=`<circle cx="${p[0]}" cy="${p[1]}" r="8" fill="var(--acc2)" stroke="#fff" stroke-width="2"/><text x="${p[0]}" y="${p[1]-13}" text-anchor="middle" style="font-size:11px;font-weight:700;fill:var(--acc2);paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(short(flow[i].t,44))}</text>`}}
-  svg.insertAdjacentHTML('beforeend',s);
-};
-const tr=document.getElementById('ovTrace');
-tr.onclick=()=>{stopAll();OV.sel=null;OV.k=0;OV.kf=0;animate(p=>{OV.kf=Math.min(OVS.flow.length-.001,p*OVS.flow.length);OV.k=Math.floor(OV.kf);ovRender()},OVS.flow.length*1500)};
-document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.kf=null;OV.sel=null;ovRender()};
-document.getElementById('ovView').addEventListener('click',e=>{if(e.target.closest('[data-node]'))OV.kf=null},true);
-})();
-
-/* ===== accordion: one drop-down per phase + detail (how / pros / cons / failure modes / watch) ===== */
-(function(){
-const g=id=>document.getElementById(id),esc2=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const sec=g('phaseSec'),nav=g('nav'),barNav=g('prev').parentElement;
-const stage=document.createElement('div');stage.id='stage';
-const det=document.createElement('div');det.id='phDetail';
-stage.append(g('blurb'),g('phCtl'),barNav,g('phView'),det);
-nav.style.display='none';
-const acc=document.createElement('div');acc.id='acc';nav.after(acc);
-acc.innerHTML=PHASES.map((ph,i)=>`<details class="acc" data-i="${i}" style="--pc:var(--p${i%8})"><summary><span class="accn">${i+1}</span><span class="acct"><b>${esc2(ph.t)}</b><small>${esc2(ph.s)}${ph.f?' · '+esc2(ph.f):''}</small></span><span class="accg">${typeof DETAIL!=='undefined'&&DETAIL[i]?'pros · cons · failures':''}</span></summary><div class="accb"></div></details>`).join('');
-const items=[...acc.children];
-function renderDetail(k){
-  const d=typeof DETAIL!=='undefined'&&DETAIL[k];if(!d){det.innerHTML='';return}
-  const li=a=>'<ul>'+a.map(x=>`<li>${esc2(x)}</li>`).join('')+'</ul>';
-  det.innerHTML=`<h3 style="margin-top:16px">Deep dive: ${esc2(PHASES[k].t)}</h3>
-  <details class="dd" open><summary>How it works</summary><div class="ddb">${esc2(d.how)}</div></details>
-  <details class="dd" open><summary>Pros and cons</summary><div class="ddb pc"><div class="pro"><b>✓ Pros</b>${li(d.pros)}</div><div class="con"><b>✗ Cons</b>${li(d.cons)}</div></div></details>
-  <details class="dd"><summary>Failure modes (${d.fails.length})</summary><div class="ddb"><table class="fm"><tr><th>Failure mode</th><th>What you see</th><th>Mitigation</th></tr>${d.fails.map(f=>`<tr><td><b>${esc2(f.m)}</b></td><td>${esc2(f.s)}</td><td>${esc2(f.x)}</td></tr>`).join('')}</table></div></details>
-  <details class="dd"><summary>What to watch</summary><div class="ddb">${li(d.watch)}</div></details>`;
-}
-function place(k){
-  items.forEach((d,i)=>{d.open=i===k});
-  items[k].querySelector('.accb').appendChild(stage);
-}
-const _sp=showPhase;
-showPhase=function(k,p=1){place(k);_sp(k,p);renderDetail(k)};
-acc.addEventListener('click',e=>{const s=e.target.closest('summary');if(!s||!s.parentElement.classList.contains('acc'))return;e.preventDefault();
-  const d=s.parentElement,i=+d.dataset.i;
-  if(d.open){d.open=false;stopAll();return}
-  stopAll();showPhase(i);setTimeout(()=>d.scrollIntoView({behavior:'smooth',block:'start'}),30)});
-window.__accReady=true;
-})();
-
-showPhase(typeof cur==="number"&&cur>=0?cur:0);simInit();
+Lab.start({phases:PHASES,detail:DETAIL,ovs:OVS,ctl:ctlHTML,state:()=>S});
 </script>
 </body>
 </html>

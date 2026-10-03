@@ -4,62 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Postgres Internals End-to-End</title>
+<link rel="stylesheet" href="../../assets/lab.css">
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2230;--mut:#667085;--line:#d9dee7;--acc:#336791;--acc2:#e25a1c;--ok:#1a9b5a;--bad:#d64545;
---p0:#dbe9ff;--p1:#ffe6cf;--p2:#d9f4e3;--p3:#f1defa;--p4:#fff3b8;--p5:#ffd9de;--p6:#d6f2f2;--p7:#e6e6e6;
---t0:#2f6fed;--t1:#e25a1c;--t2:#1a9b5a;--t3:#9b4fd0;--t4:#c9a400;--t5:#d6456b;--t6:#12a1a1;--t7:#6b7280}
-@media(prefers-color-scheme:dark){:root{--bg:#10141c;--card:#181e29;--ink:#e8ecf3;--mut:#93a0b5;--line:#2b3445;--acc:#6ea8dc;--acc2:#ff7a3d;--ok:#43c783;--bad:#ff6b6b;
---p0:#1f3556;--p1:#53361c;--p2:#1d4630;--p3:#44274f;--p4:#524a17;--p5:#552630;--p6:#17454a;--p7:#3a3f48}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
-header,main{max-width:1180px;margin:auto;padding:0 16px}
-header{padding-top:24px}
-h1{margin:0 0 4px;font-size:25px}h1 span{color:var(--acc)}
-header p{margin:0;color:var(--mut)}
-section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-top:16px}
-section>h2{margin:0 0 6px;font-size:17px}
-section>h2 em{font-style:normal;background:var(--acc);color:#fff;border-radius:6px;padding:1px 8px;font-size:12px;margin-right:8px;vertical-align:2px}
-h3{font-size:14px;margin:14px 0 6px}
-button,select,input[type=text],textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 10px}
-button{cursor:pointer}button:hover{border-color:var(--acc)}
-button.primary{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
-button.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
-button:disabled{opacity:.45;cursor:default}
-.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
-label{color:var(--mut);font-size:13px}
-.mono,code,pre,textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
-textarea{width:100%;resize:vertical}
-pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;margin:0;max-height:320px;white-space:pre}
-.note{font-size:13px;color:var(--mut);margin:6px 0 0}
-.ok{color:var(--ok)}.bad{color:var(--bad)}
-.box{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--bg);min-width:0}
-.chips{display:flex;flex-wrap:wrap;gap:4px}
-.chip{font-family:ui-monospace,monospace;font-size:11.5px;border:1px solid var(--line);border-radius:5px;padding:1px 7px;background:var(--card)}
-.tag{display:inline-block;font-size:10.5px;padding:0 6px;border-radius:5px;background:var(--acc);color:#fff;margin-left:4px;font-weight:400}
-.tag.r{background:var(--bad)}.tag.g{background:var(--ok)}.tag.o{background:var(--acc2)}.tag.m{background:var(--t7)}
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.g2>div{min-width:0;overflow-x:auto}
+:root{--acc:#336791;--acc2:#e25a1c}
+@media(prefers-color-scheme:dark){:root{--acc:#6ea8dc;--acc2:#ff7a3d}}
 @media(max-width:820px){.g2{grid-template-columns:1fr}}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
-table{border-collapse:collapse;width:100%;font-size:12.5px}td,th{border:1px solid var(--line);padding:3px 7px;text-align:left;vertical-align:top}
-td.n,th.n{text-align:right}
-svg{display:block;width:100%}
-svg text{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;fill:var(--ink)}
-.jobgrid{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:10px}
-.jobgrid>span,.jobgrid>label{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
-.nv{flex:1;min-width:112px;border:1.5px solid var(--line);border-radius:10px;padding:6px 8px;cursor:pointer;background:var(--bg);font-size:12px;line-height:1.3}
-.nv b{display:block;font-size:12.5px}.nv small{color:var(--mut)}
-.nv.act{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 12%,var(--card))}
-.nv.done b::after{content:" ✓";color:var(--ok)}
-.blurb{padding:10px 12px;border-left:5px solid var(--acc);background:var(--bg);border-radius:8px;margin:6px 0 10px;font-size:14px}
-.blurb .ft{color:var(--mut);font-size:12px;margin-top:3px}
-.caption{margin:8px 0;padding:9px 12px;border-radius:8px;background:var(--bg);border-left:5px solid var(--acc);font-size:14.5px;min-height:44px}
-.caption.bad{border-left-color:var(--bad)}.caption.good{border-left-color:var(--ok)}
-.row{display:block;padding:2px 6px;margin:2px 0;border-radius:5px;border:1px solid var(--line);background:var(--bg);font-family:ui-monospace,monospace;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.big{font-size:28px;font-weight:700}
-.bar2{height:14px;border-radius:4px;display:inline-block;vertical-align:middle}
-.lrow{display:flex;align-items:center;gap:6px;margin:4px 0}.lrow>b{min-width:80px;font-size:12px;color:var(--mut)}
 .pg{border:2px solid var(--line);border-radius:8px;padding:6px;background:var(--card);min-width:0}
 .pg.hit{border-color:var(--ok)}.pg.miss{border-color:var(--bad)}.pg.dirty{background:color-mix(in srgb,var(--acc2) 12%,var(--card))}
 .pg h5{margin:0 0 4px;font-size:11px;color:var(--mut)}
@@ -70,98 +19,159 @@ svg text{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;fill:var(--in
 .op.act{border-color:var(--acc2);background:color-mix(in srgb,var(--acc2) 10%,var(--card))}
 .op b{font-size:12.5px}.op small{color:var(--mut);margin-left:6px}
 .ln{border-left:2px solid var(--line);margin-left:14px;padding-left:10px}
-.ovn{cursor:pointer}.ovn rect{stroke:var(--line);stroke-width:1.5;transition:opacity .2s}
-.ovn.sel rect{stroke:var(--acc);stroke-width:3.5}.ovn.cur rect{stroke:var(--ink);stroke-width:3}
-.ovn.act rect{stroke:var(--acc);stroke-width:4}
-.ove{fill:none;stroke:#8a94a6;stroke-width:1.8}.ove.ctl{stroke-dasharray:6 4}.ove.async{stroke-dasharray:2 4;stroke:var(--bad)}.ove.act{stroke:var(--acc);stroke-width:3.5}
-@keyframes flow{to{stroke-dashoffset:-20}}.flow{stroke-dasharray:6 4;animation:flow .6s linear infinite}
-.ove.flow{animation:flow .6s linear infinite}
-details.dd{border:1px solid var(--line);border-radius:10px;padding:8px 14px;margin-top:10px;background:var(--bg)}
-details.dd summary{cursor:pointer;font-weight:600}
-.simgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:900px){.simgrid{grid-template-columns:1fr}}.simgrid>div{min-width:0}
-.simlog{max-height:210px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:4px}.simev{font-size:12px;padding:2px 6px;border-radius:5px;cursor:pointer;border:1px solid transparent}.simev:hover{border-color:var(--line)}.simev.cur{background:color-mix(in srgb,var(--acc) 16%,var(--card));border-color:var(--acc)}.simev.fut{opacity:.45}
-.simtag{display:inline-block;color:#fff;font-size:10px;border-radius:4px;padding:0 5px}
-#acc{display:flex;flex-direction:column;gap:8px;margin-top:10px}
-details.acc{border:1px solid var(--line);border-radius:12px;background:var(--bg);overflow:hidden}
-details.acc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 14px;background:color-mix(in srgb,var(--pc) 55%,var(--card))}
-details.acc>summary::-webkit-details-marker{display:none}
-details.acc>summary::after{content:'▾';margin-left:auto;color:var(--mut);transition:transform .15s}
-details.acc:not([open])>summary::after{transform:rotate(-90deg)}
-details.acc[open]{border-color:var(--acc2);box-shadow:0 0 0 1px var(--acc2)}
-.accn{flex:none;width:26px;height:26px;border-radius:50%;background:var(--card);border:2px solid var(--acc2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
-.acct{display:flex;flex-direction:column;min-width:0}.acct small{color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.accg{font-size:11px;color:var(--mut);margin-left:auto;padding-right:6px;white-space:nowrap}@media(max-width:700px){.accg{display:none}}
-.accb{padding:12px 14px;background:var(--card)}
-.ddb{padding:8px 4px 4px;line-height:1.6}.ddb ul{margin:4px 0 0;padding-left:18px}.ddb li{margin:3px 0}
-.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:700px){.pc{grid-template-columns:1fr}}
-.pc .pro,.pc .con{border-radius:8px;padding:8px 12px;background:var(--bg);border-left:4px solid var(--ok)}.pc .con{border-left-color:var(--bad)}
-table.fm{width:100%;border-collapse:collapse;font-size:13px}table.fm th,table.fm td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}table.fm th{background:var(--bg);font-size:12px}
-@media(max-width:700px){table.fm{display:block;overflow-x:auto}}
-
+.qpanel{margin-top:12px}
+.qpanel textarea{margin-top:8px}
+.hscroll{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
+.hscroll>svg{display:block}
+.view .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+#phView .row{white-space:normal;overflow:visible}
+.view table.wrap{display:table;white-space:normal;width:100%}
+.tup.unc{opacity:.6;border-style:dashed;border-color:var(--mut)}
 </style>
 </head>
 <body>
-<header>
-  <h1><span>Postgres</span> Internals · End-to-End</h1>
-  <p>Your data becomes a table. A real mini-engine parses and binds your SQL, stores rows on slotted pages through a buffer pool, runs iterator plans with B-tree indexes, versions rows with MVCC, logs changes in a WAL, vacuums, plans by cost, spills to disk, checkpoints, and compares isolation levels.</p>
-</header>
-<main>
-
-<section>
-  <h2><em>1</em>Your table &amp; query</h2>
-  <div class="bar">
-    <input type="file" id="file" accept=".csv,.json,.jsonl,.ndjson">
-    <button data-sample="orders">Orders CSV</button><button data-sample="people">People CSV</button><button data-sample="events">Events JSONL</button>
-    <label>Format <select id="fmt"><option value="auto">auto-detect</option><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="json">JSON array</option></select></label>
-  </div>
-  <textarea id="src" rows="4" spellcheck="false"></textarea>
-  <div class="note" id="srcInfo"></div>
+<div id="dataSlot" hidden>
+<div class="sample-row"><span class="lbl">Every chapter runs on one table <b>t</b>:</span>
+  <button data-sample="orders">Orders (CSV)</button><button data-sample="people">People (CSV)</button><button data-sample="events">Events (JSONL)</button></div>
+<div class="qpanel" id="qpanel">
   <div class="jobgrid">
-    <label>Example query <select id="qsel"></select></label>
-    <label>Index on t.<select id="idxc"></select></label>
-    <span class="note" style="margin:0" id="catInfo"></span>
+    <label>Query <select id="qsel"></select></label>
+    <label>B-tree index on t.<select id="idxc"></select></label>
+    <span class="note" style="margin:0" id="statLine"></span>
   </div>
-  <textarea id="sql" rows="2" spellcheck="false"></textarea>
-  <div class="bar">
-    <button class="primary" id="playAll">▶ Play all 11 phases</button>
-    <button id="pauseBtn" disabled>⏸ Pause</button>
-    <label>Speed <input type="range" id="speed" min="0.25" max="4" step="0.25" value="1"> <b id="speedV">1×</b></label>
-    <span class="note" id="statLine"></span>
-  </div>
-</section>
-
-<section>
-  <h2><em>◎</em>Architecture overview <span class="note" style="font-weight:400">components and how they connect · colors match the phases below</span></h2>
-  <div class="bar"><button class="primary" id="ovTrace">▶ Trace a query through the system</button><button id="ovClear">Clear</button><span class="note" id="ovCap"></span></div>
-  <div id="ovView"></div>
-  <div class="chips" style="margin-top:6px"><span class="chip">solid = data flow</span><span class="chip">dashed = control / metadata</span><span class="chip" style="border-color:var(--bad)">dotted = events / async</span></div>
-  <div id="ovInfo"></div>
-</section>
-
-<section id="simSec">
-  <h2><em>▶</em>Live cluster simulation <span class="note" style="font-weight:400">watch inserts, updates and deletes travel between the nodes · edit the actions or inject failures</span></h2>
-  <div class="bar"><label>Scenario <select id="simScn"></select></label><label><span id="simNL">nodes</span> <select id="simN"></select></label><span id="simSet" class="bar" style="margin:0"></span>
-    <button class="primary" id="simPlay">▶ Play</button><button id="simStep">Step ›</button><button id="simReset">⏮</button><label>Speed <select id="simSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label></div>
-  <div class="note" id="simDesc" style="margin:0 0 6px"></div>
-  <svg id="simSvg" style="width:100%;border:1px solid var(--line);border-radius:10px;background:var(--bg)"></svg>
-  <div class="bar"><input type="range" id="simT" min="0" max="1000" value="0" step="10" style="flex:1"><span class="mono" id="simTv"></span></div>
-  <div id="simInsp" class="box" style="margin:8px 0"></div>
-  <div class="simgrid"><div><h3 style="margin-top:0">Actions <span class="note" style="font-weight:400">(time in ms, then op and arguments)</span></h3><textarea id="simAct" rows="7" spellcheck="false"></textarea>
-    <div class="bar"><select id="simOp"></select><span id="simArgs" class="bar" style="margin:0"></span><button id="simAdd">＋ add action</button></div></div>
-   <div><h3 style="margin-top:0">Event log <span class="note" style="font-weight:400">(click an event to see why)</span></h3><div id="simLog" class="simlog"></div></div></div>
-</section>
-
-<section id="phaseSec">
-  <h2><em>2</em>Inside the database, phase by phase</h2>
-  <div class="nav" id="nav"></div>
-  <div class="blurb" id="blurb"></div>
-  <div class="bar" id="phCtl"></div>
-  <div class="bar"><button id="prev">‹ Prev</button><button class="primary" id="anim">▶ Animate this phase</button><button id="nextB">Next ›</button></div>
-  <div id="phView"></div>
-</section>
-</main>
-
+  <textarea id="sql" rows="2" spellcheck="false" aria-label="SQL query"></textarea>
+</div>
+<details class="mydata"><summary>Use your own data (CSV, JSONL or JSON, up to 300 rows)</summary>
+  <div class="bar"><input type="file" id="file" accept=".csv,.json,.jsonl,.ndjson"><label>Format <select id="fmt"><option value="auto">auto-detect</option><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="json">JSON array</option></select></label></div>
+  <textarea id="src" rows="5" spellcheck="false" aria-label="Table data"></textarea>
+  <div class="note" id="srcInfo"></div>
+  <p class="note">A low-cardinality text column also becomes a small dimension table <b>d</b>, so you can try joins.</p>
+</details>
+</div>
+<script src="../../assets/lab.js"></script>
 <script>
+const STORY={
+ system:'PostgreSQL',
+ title:'Build <span>PostgreSQL</span> from scratch',
+ lead:'Start from a real production problem. Watch the obvious fix break. Then rebuild, one piece at a time, the design PostgreSQL actually uses, running on your own table and your own SQL.',
+ problem:{
+  scene:[
+   'You run the <b>orders database</b> of a marketplace: 2,000 transactions per second at checkout, a finance team running 10-minute reports on the same tables, and a server that will one day lose power in the middle of a write.',
+   'Product asks for one thing: <i>"Let us ask any question in SQL, answer it fast, and never lose or half-apply a paid order."</i> Your job is to build the engine underneath.'],
+  musts:[
+   '<b>Speaks SQL.</b> Users say <i>what</i> they want, the engine decides <i>how</i>, and a bad query fails before it touches any data.',
+   '<b>Fast on data bigger than RAM.</b> A point lookup reads a handful of pages, not the whole table.',
+   '<b>Committed means durable.</b> An acknowledged COMMIT survives <code>kill -9</code> or a power cut; half-done work disappears.',
+   '<b>Readers never block writers.</b> The 10-minute report must not stall checkout, and it must see one consistent picture.',
+   '<b>Bounded resources.</b> Memory per query, disk for old row versions, disk for old logs: all stay under control.'],
+  naive:{title:'Your first instinct: a JSON file and one big lock',text:'Load the table into memory, run each query as a loop in application code, hold one lock per transaction and rewrite the file on COMMIT. It works for the demo, then:',
+   breaks:['The table outgrows RAM, and every query reads the entire file.','A crash halfway through rewriting the file leaves it <b>corrupt</b>: committed orders are gone.','The finance report holds the lock for 10 minutes: <b>checkout stops</b>.']},
+  quest:'Rebuild the core of PostgreSQL in 11 chapters. Each one starts from a problem, shows the naive fix failing, then the design PostgreSQL uses, running live on your table.'},
+ overview:{title:'The whole engine on one page',lead:'Before the details, follow one query through the engine. Press <b>Trace a request</b> to watch a SQL statement travel from the client to the pages and the log, or tap a component to see what it receives and sends. Colors match the chapters.'},
+ chapters:[
+  {ask:'A user types <code>SELECT t.nope FROM t</code>. When should the engine notice the mistake?',
+   why:'If you only notice while reading rows, a typo on a 50 GB table fails after minutes of I/O, or silently returns nothing on an empty table. The engine must know every table, column and type <b>before</b> it reads data.',
+   v0:{name:'Evaluate the SQL text row by row',code:"for row in readAll('t'):\n  if eval(whereText, row): emit(row)",breaks:'An unknown column shows up only when a row is evaluated (never, on an empty table). <code>amount = \'abc\'</code> is compared with whatever coercion your language happens to do. And there is no place to decide <i>how</i> to run the query.'},
+   design:'Separate understanding a query from running it: once every name is resolved against the catalog, the engine knows the query is meaningful before it spends any I/O.',
+   predict:{q:'Pick the query <b>Error: unknown column</b> (<code>SELECT t.nope FROM t</code>). Where does it fail?',opts:['In the tokenizer: <code>nope</code> is not a keyword','In the executor, at the first row it reads','In the binder, before any page is read'],ans:2,why:'The text is valid syntax, so tokenizing and parsing succeed. The binder looks <code>nope</code> up in the catalog and fails. PostgreSQL does the same: the grammar checks syntax only, then parse analysis resolves names against <code>pg_class</code> and <code>pg_attribute</code> and raises <i>column t.nope does not exist</i>.'},
+   build:{steps:['<b>Catalog:</b> a map <code>table → [(column, type)]</code>. In PostgreSQL it is itself stored in tables (<code>pg_class</code>, <code>pg_attribute</code>, <code>pg_type</code>).','<b>Tokenizer and parser:</b> turn text into an AST. Only syntax errors can happen here.','<b>Binder:</b> resolve each name to exactly one <code>(table, column, type)</code>; reject unknown, ambiguous and ill-typed expressions.','<b>Logical plan:</b> a tree of Scan, Filter, Join, Aggregate, Sort, Project and Limit. Still no data read.'],
+    code:'ast = parse(tokenize(sql))              // syntax only\nfor ref in ast.columnRefs:\n  hits = catalog.lookup(ref, ast.from)\n  if hits.count != 1: error("unknown or ambiguous")\n  ref.bind(hits[0])                     // now it has a type\ncheckTypes(ast)\nreturn logicalTree(ast)                 // Scan → Filter → … → Limit',
+    rule:'No row is read until <b>every name is bound to exactly one typed column</b>.'}},
+  {ask:'Where does row 17 physically live, and how do we avoid going to disk every time we need it?',
+   why:'A disk read costs around 100 µs on an SSD, about a thousand times more than RAM. Rows need a stable address an index can point to, and hot pages must stay in memory within a fixed budget.',
+   v0:{name:'One file per table, read it whole',code:"rows = parse(readFile('t.json'))\nrows[17].amount = 99\nwriteFile('t.json', rows)",breaks:'Every query reads the entire file and every update rewrites it. A row has no stable address, so an index has nothing to point to.'},
+   design:'Make the page, not the row, the unit of storage and caching: a fixed-size block is what disks read cheaply and what memory can hold a fixed number of, and a slot indirection gives each row an address that never moves.',
+   predict:{q:'Set <b>Buffer frames</b> to 2 and <b>Access pattern</b> to <b>two full scans</b>. The table has more pages than the pool. With this LRU pool, how many reads of the second scan are hits?',opts:['None: each page was evicted just before it is needed again','About half of them','All of them: the pages were just read'],ans:0,why:'LRU evicts exactly the page the scan will need next (sequential flooding), so the hit rate is 0%. PostgreSQL uses clock-sweep with usage counts instead, and gives large sequential scans a small private ring buffer, so one big scan cannot push everybody else’s hot pages out of <code>shared_buffers</code>.'},
+   build:{steps:['<b>Slotted page</b> (8 kB in PostgreSQL, 256 B here): a header, a slot array growing forward, tuples growing backward from the end.','<b>Row ID</b> = <code>(page, slot)</code>. A tuple may move inside its page; the slot keeps the address stable. PostgreSQL calls it the <code>ctid</code>.','<b>Buffer pool:</b> N frames, a table <code>pageId → frame</code>, a pin count and a dirty bit per frame.','<b>Eviction:</b> pick an unpinned victim (LRU or clock-sweep); if it is dirty, write it back first (after flushing its log, chapter 6).'],
+    code:'get(pageId):\n  if f = table[pageId]: f.pin++; return f          // hit\n  v = pickVictim(frames where pin == 0)            // LRU or clock\n  if v.dirty: disk.write(v.pageId, v.data)\n  v.data = disk.read(pageId); table[pageId] = v\n  v.pin = 1; return v                              // caller unpins later',
+    rule:'A <b>pinned page is never evicted</b>, and a dirty page is written back before its frame is reused.'}},
+  {ask:'How do you run <code>… ORDER BY amount LIMIT 5</code> without holding the whole table in memory?',
+   why:'A plan can combine scans, joins, sorts and limits in any shape. Materialising every intermediate result costs as much memory as the table, and the first row arrives only at the very end.',
+   v0:{name:'Every step returns a full array',code:'rows = scan(t)\nrows = rows.filter(where)\nrows = rows.sort(byAmount)\nreturn rows.slice(0, 5)',breaks:'Each step holds all of its rows at once, and <code>LIMIT 1</code> on a billion-row scan still reads all billion rows.'},
+   design:'Invert control: the consumer pulls one row at a time from its child, so memory follows the few blocking operators instead of the size of the table, and a LIMIT simply stops pulling.',
+   predict:{q:'Pick <b>Filter + sort + limit</b> (<code>… ORDER BY … LIMIT 5</code>). How many rows does the Sort operator pull from its child?',opts:['Exactly 5: LIMIT stops it early','Every row that passes the filter','Every row of the table, matching or not'],ans:1,why:'Sort is <b>blocking</b>: the smallest row might be the last one it reads, so it consumes its whole input before emitting anything. The filter below it streams, so only matching rows reach it; LIMIT saves work only above the Sort. PostgreSQL behaves the same, and switches to a cheaper top-N heapsort when a LIMIT sits on top.'},
+   build:{steps:['One interface for every operator: <code>open()</code>, <code>next() → row or null</code>, <code>close()</code>.','<b>Scan</b> walks pages through the buffer pool; <b>Filter</b>, <b>Project</b> and <b>Limit</b> wrap one child and stream.','<b>Sort</b> and <b>Aggregate</b> drain their child on the first <code>next()</code>, then emit.','<b>Nested-loop join</b> re-opens its inner child for every outer row: count those loops.','Keep per-operator counters (rows in and out, pages, loops). That is your EXPLAIN ANALYZE.'],
+    code:'Filter.next():\n  while (r = child.next()) != null:\n    if pred(r): return r\n  return null\nLimit.next():\n  if n == k: return null                // stop pulling\n  n++; return child.next()\nrun(root): while (r = root.next()) != null: send(r)',
+    rule:'Operators talk only through <code>next()</code>, so <b>any plan shape returns the same rows</b> as the logical query.'}},
+  {ask:'Find the order with <code>amount = 99</code> among 10 million rows without reading every page.',
+   why:'A full scan of 10 million rows reads about 100,000 pages. A B-tree answers the same point query in 3 or 4 page reads, and keeps doing so while rows keep arriving.',
+   v0:{name:'A sorted array of (key, row ID)',code:'i = binarySearch(index, key)        // fast lookup\nindex.insertAt(i, (key, rid))       // shifts half the array',breaks:'Lookups are fast, but every insert shifts half the array. On disk that means rewriting half of the index pages for each INSERT.'},
+   design:'Keep the order but give up contiguity: a tree of pages stays sorted while each change touches only one root-to-leaf path, so a lookup or an insert costs a few page reads whatever the table size.',
+   predict:{q:'Keep the index on <b>amount</b> (Orders sample), set <b>Probe value</b> to <code>0</code> and <b>Operator</b> to <code>&gt;=</code>, so every row matches. Which reads fewer pages?',opts:['The index scan: an index is always faster','They read the same number of pages','The sequential scan'],ans:2,why:'The index scan reads its tree pages and then fetches every heap page anyway, one matching row at a time. One sequential pass is cheaper. In PostgreSQL those heap fetches are random I/O, which is why the planner prefers a sequential or bitmap scan when a predicate is not selective (chapter 8).'},
+   build:{steps:['A node is one page: sorted keys plus child pointers (internal) or row IDs (leaf); each leaf links to its right sibling.','<b>Search:</b> from the root, binary-search each node and follow one child: one page read per level.','<b>Insert:</b> add to the leaf; if it overflows, split it in half and insert the separator into the parent, recursively. A root split adds one level.','<b>Range scan:</b> find the first leaf, then follow sibling links until a key passes the upper bound.','Every index hit still fetches the heap tuple and checks whether it is visible (chapter 5).'],
+    code:'insert(k, rid):\n  node = descendToLeaf(root, k); node.add(k, rid)\n  while node.overflows():\n    (right, sep) = node.splitHalf()\n    parent = node.parent or newRoot(node)\n    parent.add(sep, right)\n    node = parent',
+    rule:'Keys stay <b>sorted inside and across leaves</b>, and every leaf sits at the same depth.'}},
+  {ask:'The finance report reads a row while checkout updates it. Who has to wait?',
+   why:'With one copy per row, either the report blocks checkout for 10 minutes, or it reads a half-updated, inconsistent picture of the books.',
+   v0:{name:'One copy per row, protected by a lock',code:'lock(row)            // held until COMMIT\nrow.amount = 50\n...\ncommit(); unlock(row)',breaks:'Every reader of that row waits until the writer commits, and a long report holding read locks stalls every update. ROLLBACK also needs an undo copy you never kept.'},
+   design:'Keep several copies: if a writer never modifies the version a reader is looking at, readers and writers never have to wait for each other.',
+   predict:{q:'Scenario <b>snapshot reads</b>: A reads row 0, B updates row 0 and commits, then A reads row 0 again in the same transaction (one snapshot per transaction, as in REPEATABLE READ). What does A see?',opts:['The old value: its snapshot was taken before B committed','The new value: B has committed','Nothing yet: A blocks until B finishes'],ans:0,why:'A’s snapshot fixes which transactions count as committed for A, so B’s new version stays invisible to A, and nobody waited. PostgreSQL behaves this way under REPEATABLE READ. Under its default, READ COMMITTED, every statement takes a fresh snapshot, so the second read would see B’s value (chapter 11).'},
+   build:{steps:['Each transaction gets an increasing <b>txid</b> and a status: in progress, committed or aborted (PostgreSQL keeps it in <code>pg_xact</code>).','INSERT writes a tuple with <code>xmin = me</code>; DELETE sets <code>xmax = me</code>; UPDATE is DELETE + INSERT.','A <b>snapshot</b> is <code>(xmax, in-progress txids)</code>: anything at or above xmax, or in the list, is not committed for me.','A writer that finds the row already updated by an in-progress transaction waits for it, then follows its outcome.'],
+    code:'visible(t, snap):\n  if not committedFor(t.xmin, snap): return t.xmin == me\n  if t.xmax == 0: return true\n  return t.xmax != me and not committedFor(t.xmax, snap)\ncommittedFor(x, s) = status[x] == COMMITTED\n                     and x < s.xmax and x not in s.inProgress',
+    rule:'A snapshot never changes: <b>a version is visible if its creator committed before the snapshot and its deleter did not</b>.'}},
+  {ask:'The power fails right after we answered COMMIT. Is the paid order still there?',
+   why:'Writing every changed page at COMMIT means many random writes per transaction, and a crash in the middle leaves some pages new and some old. We need durability for the price of one sequential write per commit.',
+   v0:{name:'Write every dirty page at COMMIT',code:"for page in tx.dirtyPages:\n  disk.write(page)\nfsync(); reply('COMMIT')",breaks:'Ten scattered page writes per commit cap throughput, and a crash after page 3 of 10 leaves a <b>half-applied transaction</b> on disk with nothing to repair it.'},
+   design:'Treat the log as the source of truth and the data pages as a lazily written cache of it: only the sequential log has to be durable at COMMIT.',
+   predict:{q:'Set <b>Crash after</b> to step 4. Page 0 was written to disk at step 4 and already holds T3’s update, but T3 never committed. After recovery, is T3’s change visible?',opts:['Yes: it is on the page on disk','No: there is no COMMIT record for T3, so its version stays invisible','Only if T3’s WAL record survived the crash'],ans:1,why:'Visibility comes from commit status, not from what happens to be on a page. PostgreSQL recovery is redo-only: it replays the WAL, and a transaction without a COMMIT record counts as aborted, so its tuple versions are never visible (VACUUM removes them later).'},
+   build:{steps:['Give every change a log record with an increasing <b>LSN</b> (log sequence number), and stamp the page with the LSN of its latest change.','<b>Write-ahead rule:</b> before a dirty page is written, flush the log up to that page’s LSN.','<b>Commit rule:</b> append a COMMIT record and fsync the log up to it before replying to the client.','<b>Recovery:</b> read the log from the redo point, stop at the first record whose checksum fails (a torn tail), and redo a record only if <code>record.lsn &gt; page.lsn</code>.'],
+    code:'change(page, rec): rec.lsn = log.append(rec); page.lsn = rec.lsn\nevict(page): log.flush(upTo = page.lsn); disk.write(page)\ncommit(tx): log.flush(upTo = log.append(COMMIT(tx))); reply("COMMIT")\nrecover():\n  for rec in log.from(redoPoint) while checksumOk(rec):\n    if rec.lsn > page(rec).lsn: redo(rec)     // idempotent',
+    rule:'<b>Log before data, log before OK:</b> no page write and no COMMIT reply ever gets ahead of the durable log.'}},
+  {ask:'Every UPDATE leaves an old version behind. When is it safe to throw one away?',
+   why:'A table updated 1,000 times per second collects 86 million dead versions a day. Left alone, the table and its indexes bloat and every scan slows down.',
+   v0:{name:'Delete the old version as soon as the update commits',code:'commit(tx):\n  for t in tx.oldVersions: heap.remove(t)',breaks:'The 10-minute report started before the update, and its snapshot still needs the old version. Removing it makes the report <b>miss the row</b> or read a version it should not see.'},
+   design:'The oldest observer, not the moment of the commit, decides when a version becomes garbage.',
+   predict:{q:'Keep <b>long-running open transaction</b> ticked: a transaction that began before all the updates is still open. How many dead versions can VACUUM remove?',opts:['All of them: they were all overwritten','None of them','Only those on the first page'],ans:1,why:'Every dead version was deleted by a transaction newer than the open one, so its snapshot may still need any of them. In PostgreSQL, a session idle in transaction or a long report that holds an old snapshot or txid holds the horizon back the same way, and the table bloats until it ends. Untick the box and VACUUM reclaims them all.'},
+   build:{steps:['<b>Horizon</b> = the oldest txid that is still running or still visible to some snapshot.','A version is removable if its deleter (<code>xmax</code>) committed before the horizon, or its creator (<code>xmin</code>) aborted.','Remove the index entries first, then free the heap slots, and record free space per page so INSERT can reuse it.','Run it in the background (autovacuum), triggered by the number of dead tuples per table. Also <b>freeze</b> very old tuples: PostgreSQL txids are 32-bit and wrap around.'],
+    code:'horizon = min(xmin of every running transaction and snapshot)\nfor t in heap:\n  if aborted(t.xmin) or\n     (t.xmax != 0 and committed(t.xmax) and t.xmax < horizon):\n    removeIndexEntries(t); free(t.slot)\nfreeSpaceMap.update(pages)',
+    rule:'<b>Never remove a version that any snapshot can still see.</b>'}},
+  {ask:'One SQL query can run as a scan, an index lookup, a hash join or a nested loop. Which?',
+   why:'On a large table the wrong choice is the difference between 5 ms and 5 minutes, and the right choice depends on how many rows actually match.',
+   v0:{name:'Fixed rule: use an index whenever one matches',code:'if index exists on where.column:\n  plan = IndexScan\nelse:\n  plan = SeqScan',breaks:'A predicate matching half the table goes through the index and pays one random heap read per row: far slower than reading every page once.'},
+   design:'Turn plan choice into arithmetic: if you can estimate how many rows each step produces, you can price every equivalent plan and let the numbers, not fixed rules, decide.',
+   predict:{q:'With the index on <b>amount</b> (Orders sample), pick <b>Point lookup</b> (<code>amount = v</code>, one row), then <b>Filter + sort + limit</b> (<code>amount &gt;= median</code>, half the rows). Which access path wins each?',opts:['Index Scan for the point lookup, Seq Scan for the half-table filter','Index Scan for both: there is an index','Seq Scan for both: scans are always cheaper'],ans:0,why:'The cost of an index scan grows with the number of matching rows (one heap fetch each); a sequential scan costs the same whatever matches. The two lines cross, and the planner picks the cheaper side. PostgreSQL weighs <code>random_page_cost</code> against <code>seq_page_cost</code> the same way; its pages are 8 kB, so the crossover appears on bigger tables than in this 256-byte-page model.'},
+   build:{steps:['<b>ANALYZE:</b> sample rows and store, per column, the row count, null fraction, number of distinct values, most common values and a histogram.','<b>Selectivity:</b> <code>=</code> uses the common values or 1/ndv; ranges use the histogram; AND multiplies (assuming independence).','<b>Cost model:</b> sequential pages, random pages and per-row CPU, each with a weight.','<b>Search:</b> enumerate access paths, join methods and join orders (dynamic programming), keep the cheapest.','<b>Feedback:</b> print estimated next to actual rows. A 10× gap means stale or skewed statistics.'],
+    code:'rows(pred)      = stats.rows * selectivity(pred, stats)\ncost(SeqScan)   = pages * seq_page_cost + stats.rows * cpu_cost\ncost(IndexScan) = height + matches * random_page_cost + matches * cpu_cost\nplan = argmin(cost, candidatePlans(query))',
+    rule:'Planning may change <b>speed, never results</b>: every candidate plan returns the same rows.'}},
+  {ask:'<code>ORDER BY</code> over 50 GB with 64 MB of memory. Does the query crash?',
+   why:'A query runs alongside hundreds of others. If every sort or hash join takes as much memory as its input, the server runs out of RAM.',
+   v0:{name:'Load the whole input into memory',code:'rows = child.readAll()     // 50 GB\nrows.sort(byKey)\nreturn rows',breaks:'The backend grows until the operating system’s out-of-memory killer ends it, and in PostgreSQL that makes the server restart every connection and run crash recovery.'},
+   design:'Make every big operation decomposable: split the input into pieces that each fit in memory and finish them one by one from disk, so a fixed budget handles any input size.',
+   predict:{q:'Set <b>work_mem</b> to 40 rows (one run, all in memory), then back to 6 (six runs in temp files). What happens to the sorted output?',opts:['The query fails: not enough memory','Some rows come out of order','Nothing: it is identical, only now built from runs in temp files'],ans:2,why:'Each chunk that fits is sorted and written as a run, then a k-way merge produces exactly the same order. Only the cost changes (temp-file I/O). PostgreSQL reports it in EXPLAIN ANALYZE as <code>Sort Method: external merge  Disk: …</code>.'},
+   build:{steps:['<b>External sort:</b> read <code>work_mem</code> worth of rows, sort them, write a run; repeat until the input ends.','<b>Merge</b> up to F runs at a time with a min-heap until one run remains.','<b>Hash join:</b> build a hash table on the smaller input, probe it with the larger one.','If the build side does not fit, <b>partition</b> both inputs by <code>hash(key) mod P</code> into temp files, then join each pair of partitions in memory.','Delete the temp files on success, on error and on cancel.'],
+    code:'runs = [writeRun(sort(chunk)) for chunk in child.chunks(work_mem)]\nwhile len(runs) > 1:\n  runs = [kWayMerge(g) for g in groups(runs, fanIn)]\n// hash join that spills\nfor r in build: buildPart[hash(r.key) % P].write(r)   // same for probe\nfor i in 0..P-1: joinInMemory(buildPart[i], probePart[i])',
+    rule:'Spilling changes <b>where</b> rows wait, never <b>which</b> rows come out, and each operator stays within its memory budget.'}},
+  {ask:'The WAL grows forever. After a crash, do we replay a year of log?',
+   why:'Recovery time is downtime. Replaying from the very first record makes every restart take hours, and no WAL file can ever be deleted.',
+   v0:{name:'Keep all WAL and replay it from the start',code:'recover():\n  for rec in log.from(0): redo(rec)',breaks:'Restart time grows with the age of the database, and the WAL fills the disk because no file is ever safe to remove.'},
+   design:'Recovery only needs the log written since the last moment every page was known to be on disk, so create such moments on purpose.',
+   predict:{q:'Compare <b>Checkpoint every</b> 3 records with <b>never</b> in the table below the timeline. What do frequent checkpoints buy, and what do they cost?',opts:['Less to replay after a crash, paid for with more page writes','Less to replay and fewer page writes: a pure win','Nothing: replay always starts at the beginning of the log'],ans:0,why:'Frequent checkpoints keep the redo point close, so a crash replays little WAL and old segments can be recycled, but hot pages get written again and again. PostgreSQL adds a second cost: the first change to a page after each checkpoint logs a full-page image, so WAL volume grows too. That is why <code>checkpoint_timeout</code> and <code>max_wal_size</code> are tuned, not minimised.'},
+   build:{steps:['Note the current LSN as the <b>redo point</b>.','Flush every page that was dirty at that moment (PostgreSQL spreads this over time to avoid an I/O spike).','Append a checkpoint record that names the redo point, fsync it, then update the control file that tells recovery where to start.','Recycle WAL segments that end before the redo point, unless a replica or the archiver still needs them.'],
+    code:'checkpoint():\n  redo = log.currentLsn()\n  for page in bufferPool.dirtyPages(): flush(page)   // WAL first\n  log.append(CHECKPOINT(redo)); log.flush()\n  controlFile.write(redo)                             // atomic\n  recycle(segments ending before redo, unless still needed)',
+    rule:'WAL is deleted only after <b>every change it holds is in the data files</b> and no replica or archive still needs it.'}},
+  {ask:'Two transactions touch the same rows at once. What may each see, and what if each waits for the other?',
+   why:'Running transactions one at a time is correct but slow; anything faster allows anomalies. And as soon as writers wait for locks, two of them can wait for each other forever.',
+   v0:{name:'Lock rows as you touch them, wait as long as it takes',code:'A: lock(r1) ... lock(r2)    // waits for B\nB: lock(r2) ... lock(r1)    // waits for A',breaks:'A waits for B and B waits for A: <b>both wait forever</b>, holding locks every other transaction needs. Pick the <b>deadlock</b> history to watch it.'},
+   design:'Concurrency correctness is a contract, not one rule: name the anomalies each level allows, and treat waiting as something that can fail, because a cycle of waiters never ends by itself.',
+   predict:{q:'History <b>lost update</b>, isolation <b>Read Committed</b>. A runs <code>UPDATE … SET val = val + 10</code> and commits; then B runs <code>SET val = val + 20</code> on the same row (it started at 100). What happens to B?',opts:['B overwrites A’s change: the +10 is lost','B fails with a serialization error','B adds 20 on top of A’s committed value: 130'],ans:2,why:'Under READ COMMITTED an UPDATE works on the newest committed version of the row (waiting first if a writer is still in progress), so <code>val + 20</code> is computed from 110. Switch to <b>Repeatable Read</b>: the row changed after B’s snapshot, so PostgreSQL aborts B with <i>could not serialize access</i> and the application retries. This protects only updates written as <code>val = val + 20</code>; reading in the app and then writing <code>SET val = 120</code> still loses A’s change.'},
+   build:{steps:['<b>READ COMMITTED:</b> a new snapshot per statement; an UPDATE that meets a row changed by a committed transaction re-checks it on the newest version.','<b>REPEATABLE READ:</b> one snapshot per transaction; updating a row changed after that snapshot raises a serialization failure.','<b>Row locks:</b> a writer waits for the transaction that last updated the row to finish.','<b>Deadlock detector:</b> when a wait lasts longer than <code>deadlock_timeout</code> (1 s by default), build the wait-for graph; if it has a cycle, abort a transaction in it.','SERIALIZABLE (SSI in PostgreSQL) also tracks read/write dependencies to stop write skew. This model leaves it out.'],
+    code:'onLockWait(me):\n  sleep(deadlock_timeout)\n  if me.stillWaiting and cycleInWaitForGraph(me):\n    abort(me)            // releases my locks; the others proceed',
+    rule:'Each level shows <b>only its documented anomalies</b>, and every wait-for cycle is broken by aborting a transaction in it.'}}
+ ],
+ milestones:[
+  {t:'Catalog, parser and binder',test:'<code>SELECT t.nope FROM t</code> fails before a single page is read; equivalent queries produce equal logical plans.'},
+  {t:'Slotted pages and a buffer pool',test:'After a restart every row is found again at its <code>(page, slot)</code>; a pinned page is never evicted; hit and miss counters match a hand-worked trace.'},
+  {t:'Iterator executor',test:'Every query returns the same bag of rows as a brute-force oracle; <code>LIMIT 1</code> over a huge scan reads one page.'},
+  {t:'B-tree index',test:'After 100,000 random inserts (thousands of splits), index scans and sequential scans return identical rows for random predicates.'},
+  {t:'Transactions and MVCC',test:'Uncommitted rows are invisible to others; a REPEATABLE READ reader gets the same answer before and after concurrent commits.'},
+  {t:'WAL and crash recovery',test:'<code>kill -9</code> right after COMMIT loses nothing; before COMMIT shows nothing; a truncated last log record is ignored.'},
+  {t:'VACUUM and checkpoints',test:'Dead versions are reclaimed only after the oldest snapshot ends; recovery replays only from the last checkpoint; no needed WAL segment is ever removed.'},
+  {t:'Planner, spill and isolation',test:'Plans change with selectivity but results never do; a sort with a tiny <code>work_mem</code> equals the in-memory sort; a deadlock aborts exactly one transaction.'}],
+ capstone:{title:'Put it together: a primary and its standbys',lead:'Everything from the chapters on one server, plus streaming replication: the primary writes WAL and the standbys replay it. Play a scenario, scrub the timeline, tap any server or event to see why it happened, then crash the primary and switch <code>synchronous_commit</code>.'}
+};
+</script>
+<script>
+Lab.mount(STORY);
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const J=x=>{try{return JSON.stringify(x)}catch{return String(x)}};
@@ -238,7 +248,7 @@ function bindQuery(ast,cat){
     else if(s.agg){const arg=s.arg==='*'?null:resolve(s.arg);if(arg&&arg.type==='text'&&['SUM','AVG'].includes(s.agg))throw{msg:`function ${s.agg.toLowerCase()}(text) does not exist`};out.sel.push({agg:s.agg,arg,label:s.agg.toLowerCase()+'('+(s.arg||'')+')'})}
     else{const c=resolve(s.col);out.sel.push({col:c,label:s.col})}});
   ast.preds.forEach(p=>{const l=resolve(p.l);let r;if(p.r.t==='id')r={col:resolve(p.r.v)};else r={lit:p.r.v,ltype:p.r.t==='num'?'integer':'text'};
-    if(r.lit!==undefined&&l.type!==r.ltype)throw{msg:`operator does not exist: ${l.type} ${p.op} ${r.ltype}`};out.preds.push({l,op:p.op,r})});
+    if(r.lit!==undefined&&l.type!==r.ltype)throw{msg:l.type==='integer'?`invalid input syntax for type integer: "${p.r.v}"`:`operator does not exist: ${l.type} ${p.op} ${r.ltype}`};out.preds.push({l,op:p.op,r})});
   if(ast.join){const l=resolve(ast.join.l),r=resolve(ast.join.r);if(l.type!==r.type)throw{msg:`join columns have different types (${l.type} vs ${r.type})`};out.join={l,r}}
   if(ast.group)out.group=resolve(ast.group);if(ast.order)out.order={col:resolve(ast.order.col),desc:ast.order.desc};
   if(out.hasAgg){const plain=out.sel.filter(s=>!s.agg);if(plain.length&&(!out.group||plain.some(s=>s.col.alias!==out.group.alias||s.col.name!==out.group.name)))throw{msg:`column "${plain[0].label}" must appear in the GROUP BY clause or be used in an aggregate function`}}
@@ -473,9 +483,6 @@ function build(){
 }
 
 /* ================= player ================= */
-let gen=0,paused=false,speed=1,cur=0,playingAll=false;
-function animate(draw,dur){const g=++gen;let el=0,last=null;return new Promise(res=>{function frame(now){if(g!==gen){res(false);return}if(last===null)last=now;const dt=now-last;last=now;if(!paused)el+=dt*speed;const p=Math.min(1,el/dur);draw(p);if(p<1)requestAnimationFrame(frame);else res(true)}requestAnimationFrame(frame)})}
-const sleep=ms=>new Promise(r=>setTimeout(r,ms/speed));
 const needQ=()=>S.qerr?`<div class="box bad">The current SQL has an error: ${esc(S.qerr)}. Fix the query or pick an example.</div>`:'';
 
 /* =========================================================
@@ -517,7 +524,7 @@ function draw2(p){
   <h3>Heap file: ${h.pages.length} slotted pages of ${PAGE} B (header · slot array · free space · tuples growing from the end)</h3><div class="grid">${pages}</div>
   <h3>Buffer pool: ${OPT.frames} frame(s)</h3><div class="grid" style="grid-template-columns:repeat(${Math.min(OPT.frames,4)},1fr)">${frames}</div>
   <div class="chips" style="margin-top:8px"><span class="chip ok">hits ${hit}</span><span class="chip bad">misses ${miss}</span><span class="chip">evictions ${ev}</span><span class="chip">dirty flushes ${fl}</span><span class="chip">hit rate ${(hit/Math.max(1,hit+miss)*100).toFixed(0)}%</span></div>
-  <div class="note">A row is addressed by a stable row ID (page, slot). Pages are read through a fixed number of frames: a finite cache can thrash when a scan is bigger than the pool (try 2 frames with “two sequential scans”). Dirty pages must be written before their frame is reused.</div>`;
+  <div class="note">A row is addressed by a stable row ID (page, slot). Pages are read through a fixed number of frames: a finite cache can thrash when a scan is bigger than the pool (try 2 frames with “two full scans”). Dirty pages must be written before their frame is reused.</div>`;
 }
 
 /* =========================================================
@@ -547,10 +554,10 @@ function draw4(p){
   const lv=tr.levels(),W=900,rows=lv.length,H=rows*62+10;
   const probe=OPT.ikey===''?entries[Math.floor(entries.length/2)][0]:(isNaN(Number(OPT.ikey))?OPT.ikey:Number(OPT.ikey));
   const look=(S.cfg.idx===col||true)?tr.find(probe):{rids:[],path:[]},pathSet=new Set(look.path);
-  let sv=`<svg viewBox="0 0 ${W} ${H}" style="max-height:${H}px">`;
+  let sv=`<div class="hscroll"><svg viewBox="0 0 ${W} ${H}" style="max-height:${H}px;min-width:${Math.max(560,Math.max(...lv.map(l=>l.length))*58)}px">`;
   lv.forEach((nodes,li)=>{const y=6+li*62,w=Math.min(190,(W-20)/nodes.length-8);nodes.forEach((n,i)=>{const x=10+(W-20)*(i+0.5)/nodes.length-w/2;n._x=x+w/2;n._y=y;
     sv+=`<g><rect x="${x}" y="${y}" width="${w}" height="34" rx="6" fill="${pathSet.has(n.id)&&p>=0.7?'var(--p4)':n.leaf?'var(--p2)':'var(--p0)'}" stroke="${pathSet.has(n.id)&&p>=0.7?'var(--acc2)':'var(--line)'}" stroke-width="${pathSet.has(n.id)&&p>=0.7?3:1.5}"/><text x="${x+5}" y="${y+14}" style="font-size:9px;fill:var(--mut)">${n.leaf?'leaf':'internal'} #${n.id}</text><text x="${x+5}" y="${y+28}" style="font-size:10.5px">${esc(short(n.keys.join(' | '),Math.floor(w/6.4)))}</text></g>`})});
-  lv.forEach((nodes,li)=>{if(li===0)return;lv[li-1].forEach(par=>{if(par.leaf)return;par.kids.forEach(ch=>{sv+=`<line x1="${par._x}" y1="${par._y+34}" x2="${ch._x}" y2="${ch._y}" stroke="var(--mut)"/>`})})});sv+='</svg>';
+  lv.forEach((nodes,li)=>{if(li===0)return;lv[li-1].forEach(par=>{if(par.leaf)return;par.kids.forEach(ch=>{sv+=`<line x1="${par._x}" y1="${par._y+34}" x2="${ch._x}" y2="${ch._y}" stroke="var(--mut)"/>`})})});sv+='</svg></div>';
   // cost comparison for predicate col OP probe
   const full=new BT(OPT.fan);entries.forEach(([kv,rid])=>full.insert(kv,rid));
   const op=OPT.iop,lo=op==='>='||op==='>'?probe:null,hi=op==='<='||op==='<'?probe:null,rr=op==='='?full.find(probe):full.range(lo,hi,op!=='>',op!=='<');const rids=op==='='?rr.rids:rr.rids,nodes=op==='='?rr.path.length:rr.visited.length;
@@ -559,7 +566,7 @@ function draw4(p){
   return`<div class="caption">Building a B+tree on <b>${esc(col)}</b> (max ${OPT.fan-1} keys per node): inserted ${p>=1?entries.length:k}/${entries.length} keys, <b>${splitCt}</b> page split(s), height <b>${tr.height()}</b>. Internal nodes route; leaves hold (key → row ID) and are chained for range scans.</div>${sv}
   <div class="g2"><div><h3>Lookup <span class="mono">${esc(col)} = ${esc(probe)}</span> (highlighted path)</h3><div class="chips">${look.path.map(id=>`<span class="chip">node #${id}</span>`).join(' → ')}</div><div class="note">${look.rids.length} row ID(s): ${look.rids.slice(0,6).map(r=>'('+r+')').join(' ')} — root-to-leaf in ${look.path.length} page reads instead of scanning ${h.pages.length} heap pages.</div></div>
   <div><h3>Index scan vs sequential scan: <span class="mono">${esc(col)} ${esc(op)} ${esc(probe)}</span></h3><table><tr><th></th><th class="n">index pages</th><th class="n">heap pages</th><th class="n">total I/O</th></tr><tr><td>Index scan</td><td class="n">${nodes}</td><td class="n">${heapPages}</td><td class="n"><b>${nodes+heapPages}</b></td></tr><tr><td>Seq scan</td><td class="n">0</td><td class="n">${h.pages.length}</td><td class="n"><b>${h.pages.length}</b></td></tr></table>
-   <div class="note">${rids.length} of ${entries.length} rows match. Selective predicates favour the index; when many rows match, the random heap fetches cost more than one sequential pass. The index scan still re-checks each heap tuple's visibility (phase 5).</div></div></div>`;
+   <div class="note">${rids.length} of ${entries.length} rows match. Selective predicates favour the index; when many rows match, the random heap fetches cost more than one sequential pass. The index scan still re-checks each heap tuple's visibility (chapter 5).</div></div></div>`;
 }
 
 /* =========================================================
@@ -570,9 +577,9 @@ function mvTable(){
   return{key,val,rows:t.rows.slice(0,4).map((r,i)=>({[key]:r[key],val:val?r[val]:100*(i+1)}))};
 }
 const MVSC={
-  snap:{title:'A snapshot never sees later commits',steps:[['A','BEGIN'],['A','SELECT',0],['B','BEGIN'],['B','UPDATE',0,50],['B','COMMIT'],['A','SELECT',0],['A','COMMIT'],['A','BEGIN'],['A','SELECT',0],['A','COMMIT']],verdict:'A read the old version for its whole transaction, even after B committed; readers never blocked and writers never waited. A new transaction sees the new version.'},
+  snap:{title:'A snapshot never sees later commits',steps:[['A','BEGIN'],['A','SELECT',0],['B','BEGIN'],['B','UPDATE',0,50],['B','COMMIT'],['A','SELECT',0],['A','COMMIT'],['A','BEGIN'],['A','SELECT',0],['A','COMMIT']],verdict:'A read the old version for its whole transaction, even after B committed; readers never blocked and writers never waited. A new transaction sees the new version. (One snapshot per transaction, as in REPEATABLE READ; under READ COMMITTED, the default, the second SELECT would already see B\'s value: chapter 11.)'},
   rollback:{title:'Rollback leaves a dead, invisible version',steps:[['A','BEGIN'],['A','UPDATE',1,70],['B','BEGIN'],['B','SELECT',1],['A','ROLLBACK'],['B','SELECT',1],['B','COMMIT']],verdict:'While A was open, B saw the old row; after ROLLBACK the version A wrote is aborted and permanently invisible (vacuum can remove it later).'},
-  conflict:{title:'Write-write conflict: first updater wins',steps:[['A','BEGIN'],['B','BEGIN'],['A','UPDATE',2,10],['B','UPDATE',2,20],['A','COMMIT'],['B','ROLLBACK']],verdict:'B tried to update a row A had already changed: B waited for A, and once A committed B had to abort (its snapshot is older than A\'s commit). Readers still never block.'},
+  conflict:{title:'Write-write conflict: first updater wins',steps:[['A','BEGIN'],['B','BEGIN'],['A','UPDATE',2,10],['B','UPDATE',2,20],['A','COMMIT'],['B','ROLLBACK']],verdict:'B tried to update a row A had already changed: B waited for A, and once A committed B had to abort (its snapshot is older than A\'s commit). That is the REPEATABLE READ rule; under READ COMMITTED B would redo its update on A\'s new version (chapter 11). Readers still never block.'},
   delete:{title:'Insert and delete are versions too',steps:[['A','BEGIN'],['B','BEGIN'],['B','DELETE',3],['B','INSERT'],['B','COMMIT'],['A','SELECT*'],['A','COMMIT'],['C','BEGIN'],['C','SELECT*'],['C','COMMIT']],verdict:'A\'s snapshot still sees the deleted row and not the inserted one (no phantom, no missing row); a later transaction sees the new state.'},
 };
 function runMV(name){
@@ -612,7 +619,7 @@ function draw5(p){
   <div class="g2"><div><table><tr><th>#</th><th>session</th><th>statement</th><th>result</th></tr>${R.frames.slice(0,k).map((x,i)=>`<tr style="${i===k-1?'background:var(--p0)':''}"><td>${i+1}</td><td><b>${x.s}</b></td><td class="mono">${esc(x.a)}${x.k!==undefined?' #'+x.k:''}</td><td class="mono">${esc(short(x.reply,70))}</td></tr>`).join('')}</table></div>
   <div><h3 style="margin-top:0">Heap tuples (versions)</h3><table><tr><th>rid</th><th>row</th><th>xmin</th><th>xmax</th><th>A sees</th><th>B sees</th></tr>${f.tuples.map(t=>`<tr style="${t.st==='aborted'?'opacity:.5':''}"><td>(${t.rid})</td><td class="mono">${esc(short(J(t.row),30))}</td><td>${t.xmin} <small>${t.st[0]}</small></td><td>${t.xmax||'-'}${t.sx?' <small>'+t.sx[0]+'</small>':''}</td><td>${t.visA?'<b class="ok">✔</b>':''}</td><td>${t.visB?'<b class="ok">✔</b>':''}</td></tr>`).join('')}</table><div class="note">c = committed, a = aborted/active</div></div></div>
   ${p>=1?`<div class="caption good">${esc(R.sc.verdict)}</div>`:''}
-  <div class="note">An update never overwrites a row: it stamps the old version with <b>xmax</b> and adds a new version with <b>xmin</b>. A snapshot (the set of transactions visible at its start) decides which version each reader sees, so readers don't block writers. Dead versions accumulate until VACUUM (phase 7).</div>`;
+  <div class="note">An update never overwrites a row: it stamps the old version with <b>xmax</b> and adds a new version with <b>xmin</b>. A snapshot (the set of transactions visible at its start) decides which version each reader sees, so readers don't block writers. Dead versions accumulate until VACUUM (chapter 7).</div>`;
 }
 
 /* =========================================================
@@ -656,14 +663,14 @@ function walSim(crashAt,torn){
 }
 function draw6(p){
   const k=OPT.walCrash,W=walSim(k,OPT.torn),show=Math.ceil(clamp(p/0.6,0,1)*W.log.length),rp=p>=0.6;
-  const pgBox=(t,lbl)=>`<div class="box"><b>${lbl}</b> <span class="note">pageLSN ${t.lsn}</span><div>${t.tup.map(x=>`<span class="tup ${x.xmax?'dead':'live'}" title="xmin ${x.xmin} xmax ${x.xmax}">${esc(x.row[W.mt.key])}:${x.row.val} <small>x${x.xmin}</small></span>`).join('')}</div></div>`;
+  const pgBox=(t,lbl)=>`<div class="box"><b>${lbl}</b> <span class="note">pageLSN ${t.lsn}</span><div>${t.tup.map(x=>`<span class="tup ${x.xmin!==1&&!W.committed.has(x.xmin)?'unc':x.xmax&&W.committed.has(x.xmax)?'dead':'live'}" title="xmin ${x.xmin} xmax ${x.xmax}${x.xmin!==1&&!W.committed.has(x.xmin)?' (no COMMIT record: invisible)':''}">${esc(x.row[W.mt.key])}:${x.row.val} <small>x${x.xmin}</small></span>`).join('')}</div></div>`;
   return`<div class="caption">Crash after step ${k}/${W.ops.length}. WAL flushed up to LSN <b>${W.flushed}</b> of ${W.wal.length}; acknowledged commits: ${W.acked.length?W.acked.map(x=>'xid '+x).join(', '):'none'}. ${OPT.torn?'<span class="bad">The in-flight WAL record (never flushed, never acknowledged) is torn mid-write and is rejected on replay.</span>':''}</div>
   <div class="g2"><div><h3 style="margin-top:0">Before the crash</h3>${W.log.slice(0,show).map((l,i)=>`<div class="row"><b>${l.who}</b> ${esc(l.op)} · ${esc(l.note)}</div>`).join('')||'<div class="note">…</div>'}</div>
   <div><h3 style="margin-top:0">Log vs pages</h3><table><tr><th>LSN</th><th>xid</th><th>record</th><th>on disk?</th></tr>${W.wal.map(r=>`<tr><td>${r.lsn}</td><td>${r.xid}</td><td class="mono">${r.type}${r.type==='UPDATE'?' → '+esc(J(r.row)):''}</td><td>${r.lsn<=W.flushed?'<span class="ok">flushed</span>':'<span class="bad">lost</span>'}</td></tr>`).join('')||'<tr><td colspan="4">no records</td></tr>'}</table></div></div>
   ${rp?`<h3>Recovery after restart</h3><div class="g2"><div>${pgBox(W.disk[0],'page 0 as found on disk (stale)')}<div class="note">The data page on disk may miss changes: pages are written lazily, only the log is forced at commit.</div></div>
   <div>${pgBox(W.rec[0],'page 0 after replay')}<div class="note">Validated ${W.nValid}/${W.total} WAL record(s) (torn tail ignored), redid ${W.redone}, skipped ${W.skipped} already on the page (pageLSN check makes replay idempotent). Committed xids found in the log: {${[...W.committed].join(', ')||'-'}}.</div></div></div>
   <div class="caption ${W.ok?'good':'bad'}">Recovered visible state: ${W.after.map(x=>esc(x.k)+'='+x.v).join(', ')}. ${W.ok?'<b class="ok">Every acknowledged commit survived and uncommitted work (xid 3) stayed invisible ✔</b>':'<b class="bad">Mismatch with acknowledged commits ✘</b>'}</div>`:''}
-  <div class="note">Rule 1: a change is logged <i>before</i> its page may be written (log-before-data). Rule 2: COMMIT is acknowledged only after its log record is on disk. Dirty pages can be flushed whenever; after a crash the log is validated, replayed, and a torn last record is rejected. Transactions without a COMMIT record never become visible.</div>`;
+  <div class="note">Rule 1: a change is logged <i>before</i> its page may be written (log-before-data). Rule 2: COMMIT is acknowledged only after its log record is on disk. Dirty pages can be flushed whenever; after a crash the log is validated, replayed, and a torn last record is rejected. Transactions without a COMMIT record never become visible (dashed versions above).</div>`;
 }
 
 /* =========================================================
@@ -676,7 +683,7 @@ function vacSim(){
   for(let i=0;i<OPT.vn;i++){const x=mv.begin(),live=mv.all().filter(t=>!t.dead&&!t.xmax);const t=live[Math.floor(rnd()*live.length)];mv.update(x,t,{...t.row,val:t.row.val+1});mv.commit(x)}
   const before=mv.stats(),hz=mv.horizon();const pagesBefore=mv.pages.map(pg=>({no:pg.no,tup:pg.tuples.map(t=>({rid:t.rid,dead:t.dead||mv.status[t.xmin]==='aborted'||(t.xmax&&mv.status[t.xmax]==='committed'),xmin:t.xmin,xmax:t.xmax,row:t.row})),used:pg.used}));
   const vb=JSON.stringify(pagesBefore),res=mv.vacuum(hz),after=mv.stats();
-  const pagesAfter=mv.pages.map(pg=>({no:pg.no,tup:pg.tuples.map(t=>({rid:t.rid,dead:t.dead||false,gone:t.dead,xmin:t.xmin,xmax:t.xmax,row:t.row})),used:pg.used}));
+  const pagesAfter=mv.pages.map(pg=>({no:pg.no,tup:pg.tuples.map(t=>({rid:t.rid,dead:t.dead||mv.status[t.xmin]==='aborted'||!!(t.xmax&&mv.status[t.xmax]==='committed'),gone:t.dead,xmin:t.xmin,xmax:t.xmax,row:t.row})),used:pg.used}));
   const blocked=mv.all().filter(t=>!t.dead&&t.xmax&&mv.status[t.xmax]==='committed').length;
   return{before,after,hz,res,pagesBefore,pagesAfter,reader,blocked,nextx:mv.xid+1};
 }
@@ -685,7 +692,7 @@ function draw7(p){
   const pg=pages.map(x=>`<div class="pg"><h5>page ${x.no} · used ${x.used}/${PAGE} B</h5><div class="pgbar"><i style="width:${x.used/PAGE*100}%;background:var(--t1)"></i></div>${x.tup.map(t=>`<span class="tup ${t.gone?'dead':t.dead?'dead':'live'}" title="xmin ${t.xmin} xmax ${t.xmax}" style="${t.gone?'opacity:.2':''}">${t.gone?'free':'('+t.rid+')'}</span>`).join('')}</div>`).join('');
   return`<div class="caption">${['After '+OPT.vn+' updates every old version stays in the heap: dead versions (struck through) bloat the pages.','VACUUM computes the visibility horizon = oldest transaction that may still need an old version: <b>'+V.hz+'</b>'+(V.reader?` (a long-running transaction <b>${V.reader}</b> pins it)`:' (no open transaction: the horizon is the next txid '+V.nextx+')')+'.','VACUUM removes only versions invisible to every snapshot ≥ the horizon: removed <b>'+V.res.removed+'</b> version(s), reclaimed <b>'+V.res.bytes+' B</b>, '+V.blocked+' dead version(s) still retained.'][phase]}</div>
   <div class="grid">${pg}</div>
-  <div class="chips" style="margin-top:8px"><span class="chip">live tuples ${V.before.live}</span><span class="chip bad">dead tuples ${phase>=2?V.after.dead+V.blocked:V.before.dead}</span><span class="chip">dead bytes ${phase>=2?V.after.deadB:V.before.deadB}</span><span class="chip">pages ${V.after.pages}</span><span class="chip">horizon ${V.hz}</span></div>
+  <div class="chips" style="margin-top:8px"><span class="chip">live tuples ${V.before.live}</span><span class="chip bad">dead tuples ${phase>=2?V.after.dead:V.before.dead}</span><span class="chip">dead bytes ${phase>=2?V.after.deadB:V.before.deadB}</span><span class="chip">pages ${V.after.pages}</span><span class="chip">horizon ${V.hz}</span></div>
   <div class="note">${OPT.vlong?'<b class="bad">A long-running transaction holds the horizon back, so VACUUM cannot reclaim anything newer than its snapshot.</b> Turn the checkbox off and vacuum again.':'With no old snapshots, every dead version is safe to remove and its slot becomes reusable space.'} MVCC trades readers-don't-block-writers for dead versions; VACUUM is the garbage collector, and it must never remove a version some snapshot can still see.</div>`;
 }
 
@@ -753,15 +760,15 @@ function ckSim(K,n,seg){
 function draw10(p){
   const n=43,seg=8,cur=ckSim(OPT.ckK,n,seg),cfgs=[3,8,20,0].map(k=>[k,ckSim(k,n,seg)]);
   const k=p>=1?n:Math.ceil(p*n),sim=ckSim(OPT.ckK,k,seg);
-  const W=640,xs=i=>10+i/n*W;let tl=`<svg viewBox="0 0 680 100"><line x1="10" x2="650" y1="50" y2="50" stroke="var(--line)" stroke-width="2"/>`;
+  const W=640,xs=i=>10+i/n*W;let tl=`<div class="hscroll"><svg viewBox="0 0 680 100" style="min-width:600px"><line x1="10" x2="650" y1="50" y2="50" stroke="var(--line)" stroke-width="2"/>`;
   for(let i=1;i<=Math.min(k,n);i++)tl+=`<circle cx="${xs(i)}" cy="50" r="2.5" fill="${i>sim.redo?'var(--bad)':'var(--ok)'}"/>`;
   if(OPT.ckK>0)for(let i=OPT.ckK;i<=k;i+=OPT.ckK)tl+=`<path d="M${xs(i)},22 l6,8 l-6,8 l-6,-8z" fill="var(--acc)"><title>checkpoint at LSN ${i}</title></path>`;
   for(let i=0;i<=n;i+=seg)tl+=`<line x1="${xs(i)}" x2="${xs(i)}" y1="60" y2="76" stroke="var(--mut)"/><text x="${xs(i)+2}" y="88" style="font-size:9px;fill:var(--mut)">seg ${i/seg}</text>`;
-  tl+=`<line x1="${xs(sim.redo)}" x2="${xs(sim.redo)}" y1="12" y2="70" stroke="var(--acc2)" stroke-width="2"/><text x="${xs(sim.redo)+3}" y="12" style="fill:var(--acc2);font-size:10px">redo start LSN ${sim.redo}</text></svg>`;
+  tl+=`<line x1="${xs(sim.redo)}" x2="${xs(sim.redo)}" y1="12" y2="70" stroke="var(--acc2)" stroke-width="2"/><text x="${xs(sim.redo)+3}" y="12" style="fill:var(--acc2);font-size:10px">redo start LSN ${sim.redo}</text></svg></div>`;
   const row=(lbl,s,on)=>`<tr style="${on?'background:var(--p0)':''}"><td><b>${lbl}</b></td><td class="n">${s.flushes}</td><td class="n ${s.replay>20?'bad':''}">${s.replay}</td><td class="n">${s.keep}/${s.segs}</td></tr>`;
   return`<div class="caption">${k} WAL records written so far (dots: green = already reflected in pages, red = must be replayed after a crash now). A checkpoint flushes all dirty pages and records a durable <b>redo start position</b>; WAL before it is no longer needed.</div>${tl}
   <div class="chips" style="margin:6px 0"><span class="chip">crash now → replay <b>${sim.replay}</b> record(s)</span><span class="chip">WAL segments retained ${sim.keep}/${sim.segs}</span><span class="chip">page flushes by checkpoints ${sim.flushes}</span></div>
-  <table><tr><th>checkpoint every</th><th class="n">page writes (I/O)</th><th class="n">records to replay</th><th class="n">WAL segments kept</th></tr>${cfgs.map(([kk,s])=>row(kk?kk+' records':'never',s,kk===OPT.ckK)).join('')}</table>
+  <table class="wrap"><tr><th>checkpoint every</th><th class="n">page writes (I/O)</th><th class="n">records to replay</th><th class="n">WAL segments kept</th></tr>${cfgs.map(([kk,s])=>row(kk?kk+' records':'never',s,kk===OPT.ckK)).join('')}</table>
   <div class="note">Frequent checkpoints shorten recovery and let old WAL segments be recycled, but they write more pages (and repeatedly rewrite hot pages). Rare checkpoints make writes cheaper and recovery slower, and WAL keeps growing. A segment may only be retired once everything in it is safely in pages (and not needed by an active snapshot/replica).</div>`;
 }
 
@@ -791,7 +798,7 @@ function runIso(sc,level){
   if(sc==='skew'){begin('A');begin('B');const a=cnt('A',100),b=cnt('B',100);if(a>=2)upd('A','x',v=>v-100,"UPDATE x (on duty ≥2, so I may leave)");if(b>=2)upd('B','y',v=>v-100,"UPDATE y (on duty ≥2, so I may leave)");com('A');com('B');
     const sn=mv.snapshot(0),left=mv.all().filter(t=>mv.visible(t,sn)&&t.row.val>=100).length;verdict=left<2?`Both transactions saw 3 people on duty, each removed a <i>different</i> row and both committed: <b class="bad">write skew</b> (only ${left} left). Neither level prevents it here: it needs SERIALIZABLE (SSI), which this model omits.`:'No skew.'}
   if(sc==='lost'){begin('A');begin('B');sel('A','x');sel('B','x');upd('A','x',v=>v+10,"UPDATE SET val=val+10 WHERE k='x'");com('A');upd('B','x',v=>v+20,"UPDATE SET val=val+20 WHERE k='x'");com('B');const sn=mv.snapshot(0),t=find('A','x',sn);
-    verdict=level==='rc'?`B's UPDATE waited for A, then re-read the newest row and added 20 to 110: final <b>${t.row.val}</b> — <b class="ok">no lost update</b>.`:`Under Repeatable Read B could not update a row changed after its snapshot: <b class="bad">it aborts</b> (serialization failure) and must retry. Final ${t.row.val}.`}
+    verdict=level==='rc'?`B's UPDATE worked on the newest committed row and added 20 to 110: final <b>${t.row.val}</b>, <b class="ok">no lost update</b> (had A still been open, B would have waited for it).`:`Under Repeatable Read B could not update a row changed after its snapshot: <b class="bad">it aborts</b> (serialization failure) and must retry. Final ${t.row.val}.`}
   return{trace,verdict};
 }
 function deadlockSim(){
@@ -805,13 +812,13 @@ function draw11(p){
     const node=(x,y,l,dead)=>`<circle cx="${x}" cy="${y}" r="26" fill="${dead?'var(--p5)':'var(--p0)'}" stroke="var(--line)" stroke-width="2"/><text x="${x}" y="${y+4}" text-anchor="middle" font-weight="700">${l}${dead?' ✕':''}</text>`;
     const sv=`<svg viewBox="0 0 400 160" style="max-height:180px"><defs><marker id="dm" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="var(--bad)"/></marker></defs>${node(110,80,'A',false)}${node(290,80,'B',res)}${edges.map(([f,t],i)=>`<path d="M${f==='A'?136:264},${70+(i?20:0)} Q200,${i?140:20} ${f==='A'?264:136},${70+(i?20:0)}" fill="none" stroke="var(--bad)" stroke-width="2" marker-end="url(#dm)"/>`).join('')}<text x="200" y="${edges.length>1?85:15}" text-anchor="middle" style="fill:var(--bad)">${edges.length>1?'wait-for cycle':''}</text></svg>`;
     return`<div class="caption ${det?'bad':''}">Deadlock: two transactions lock two rows in opposite order. ${det?'The deadlock detector finds the cycle in the wait-for graph (after deadlock_timeout) and aborts one victim, releasing its locks.':''}</div>
-    <div class="g2"><div><table><tr><th>session</th><th>statement</th><th>result</th></tr>${ev.slice(0,k).map(e=>`<tr><td><b>${e[0]}</b></td><td class="mono">${e[1]}</td><td>${e[2]}</td></tr>`).join('')}</table>${det?`<div class="caption ${res?'good':'bad'}" style="margin-top:8px">${res?'<b>B is chosen as the victim and aborted</b> (ERROR: deadlock detected). A acquires r2 and commits; B can retry. Without detection both would wait forever.':'detecting…'}</div>`:''}</div><div>${sv}<div class="note">Edges mean “waits for”. A cycle can never resolve by waiting, so one transaction must abort. A simple alternative is a lock timeout, which also breaks the cycle but aborts on any long wait.</div></div></div>`;
+    <div class="g2"><div><table><tr><th>session</th><th>statement</th><th>result</th></tr>${ev.slice(0,k).map(e=>`<tr><td><b>${e[0]}</b></td><td class="mono">${e[1]}</td><td>${e[2]}</td></tr>`).join('')}</table>${det?`<div class="caption ${res?'good':'bad'}" style="margin-top:8px">${res?'<b>B is aborted as the victim</b> (ERROR: deadlock detected). A acquires r2 and commits; B can retry. In PostgreSQL the victim is the waiter whose <code>deadlock_timeout</code> check finds the cycle. Without detection both would wait forever.':'detecting…'}</div>`:''}</div><div>${sv}<div class="note">Edges mean “waits for”. A cycle can never resolve by waiting, so one transaction must abort. A simple alternative is a lock timeout, which also breaks the cycle but aborts on any long wait.</div></div></div>`;
   }
   const rcR=runIso(OPT.isc,'rc'),rrR=runIso(OPT.isc,'rr'),R=OPT.iso==='rc'?rcR:rrR,k=p>=1?R.trace.length:Math.max(1,Math.ceil(p*R.trace.length));
   const titles={nonrep:'Non-repeatable read',phantom:'Phantom read',skew:'Write skew (doctors on call)',lost:'Lost update'};
   return`<div class="caption">${titles[OPT.isc]} under <b>${OPT.iso==='rc'?'Read Committed (new snapshot per statement)':'Repeatable Read (one snapshot per transaction)'}</b>.</div>
   <div class="g2"><div><table><tr><th>#</th><th>session</th><th>statement</th><th>result</th></tr>${R.trace.slice(0,k).map((t,i)=>`<tr style="${i===k-1?'background:var(--p0)':''}"><td>${i+1}</td><td><b>${t[0]}</b></td><td class="mono">${esc(t[1])}</td><td class="mono">${esc(String(t[2]))}</td></tr>`).join('')}</table></div>
-  <div>${p>=1?`<div class="caption ${/bad/.test(R.verdict)?'bad':'good'}">${R.verdict}</div>`:''}<h3>Same history, both levels</h3><table><tr><th>level</th><th>outcome</th></tr><tr><td><b>Read Committed</b></td><td>${rcR.verdict}</td></tr><tr><td><b>Repeatable Read</b></td><td>${rrR.verdict}</td></tr></table></div></div>
+  <div>${p>=1?`<div class="caption ${/bad/.test(R.verdict)?'bad':'good'}">${R.verdict}</div>`:''}<h3>Same history, both levels</h3><table class="wrap"><tr><th>level</th><th>outcome</th></tr><tr><td><b>Read Committed</b></td><td>${rcR.verdict}</td></tr><tr><td><b>Repeatable Read</b></td><td>${rrR.verdict}</td></tr></table></div></div>
   <div class="note">Stronger isolation removes anomalies but can add aborts and waits. Repeatable Read stops non-repeatable reads and phantoms (snapshot) but turns a lost-update race into an error; write skew survives both levels without serializable isolation.</div>`;
 }
 
@@ -824,7 +831,7 @@ const PHASES=[
  {t:'Transactions & MVCC',s:'versions · snapshots',f:'F05',dur:7000,draw:draw5,b:'Updates create new row versions stamped with xmin/xmax. A snapshot decides which version each transaction sees, so readers do not block writers; conflicting writers wait or abort.'},
  {t:'WAL & recovery',s:'log before page',f:'F06',dur:7000,draw:draw6,b:'Changes are logged before pages may be written and COMMIT is acknowledged only after its log record is durable. After a crash the log is validated and replayed; torn tails and uncommitted work are ignored.'},
  {t:'VACUUM',s:'dead versions · horizon',f:'F07',dur:6000,draw:draw7,b:'Dead versions are reclaimed only when no snapshot can still see them. The oldest open transaction sets the horizon, so a long-running one blocks cleanup and causes bloat.'},
- {t:'Planner & statistics',s:'cost · estimates',f:'F08',dur:5000,draw:draw8,b:'ANALYZE summarises each table. The planner estimates selectivity and cost for each access path and join method, then compares its estimates with the actual rows. Stale or skewed statistics lead to wrong plans.'},
+ {t:'Planner & statistics',live:true,s:'cost · estimates',f:'F08',dur:5000,draw:draw8,b:'ANALYZE summarises each table. The planner estimates selectivity and cost for each access path and join method, then compares its estimates with the actual rows. Stale or skewed statistics lead to wrong plans.'},
  {t:'Sort & hash join',s:'work_mem · spill',f:'F09',dur:7000,draw:draw9,b:'Under a memory budget a sort spills sorted runs and merges them, and a hash join partitions both inputs to temporary files. Temp files are cleaned up on success or failure.'},
  {t:'Checkpoint & WAL',s:'recovery time',f:'F10',dur:6000,draw:draw10,b:'A checkpoint flushes dirty pages and records where recovery may start, letting old WAL be recycled. Frequency trades write I/O against recovery time and WAL size.'},
  {t:'Isolation & deadlocks',s:'anomalies · wait-for',f:'F11',dur:7000,draw:draw11,b:'The same history behaves differently under Read Committed and Repeatable Read. Locks create waits; a wait-for cycle is a deadlock that the detector resolves by aborting a victim.'},
@@ -833,14 +840,16 @@ function ctlHTML(k){
   if(!S||S.error)return'';
   const sel=(key,opts,val)=>`<select data-opt="${key}">${opts.map(([v,l])=>`<option value="${v}" ${String(v)===String(val)?'selected':''}>${esc(l)}</option>`).join('')}</select>`;
   const rng=(key,min,max,step,val,suf='')=>`<input type="range" data-opt="${key}" min="${min}" max="${max}" step="${step}" value="${val}" style="width:120px"> ${val}${suf}`;
-  if(k===0)return`<span class="note">Edit the SQL above or pick an example. Try an invalid column, an ambiguous column after a join, or comparing text with a number.</span>`;
+  const qPick=()=>EX?`<label>Query <select data-q>${EX.q.map((x,i)=>`<option value="${i}" ${String(i)===$('#qsel').value?'selected':''}>${esc(x[0])}</option>`).join('')}</select></label>`:'';
+  const idxPick=()=>`<label>Index on t.<select data-idx>${[...$('#idxc').options].map(o=>`<option value="${esc(o.value)}" ${o.value===$('#idxc').value?'selected':''}>${esc(o.value)}</option>`).join('')}</select></label>`;
+  if(k===0)return`${qPick()}<span class="note">Or edit the SQL in the <a href="#qpanel">query panel</a> at the top: try an unknown column, an ambiguous column after a join, or comparing a number with text.</span>`;
   if(k===1)return`<label>Buffer frames ${rng('frames',2,8,1,OPT.frames)}</label><label>Access pattern ${sel('pat',[['query','your query'],['seq2','two full scans'],['random','hot random reads'],['upd','scan with updates']],OPT.pat)}</label>`;
-  if(k===2)return`<label>Buffer frames ${rng('frames',2,8,1,OPT.frames)}</label><label>work_mem ${rng('wm',2,40,1,OPT.wm,' rows')}</label>`;
-  if(k===3){return`<label>Fan-out ${sel('fan',[3,4,5,6].map(x=>[x,x]),OPT.fan)}</label><label>Probe value <input type="text" data-opt="ikey" value="${esc(OPT.ikey)}" style="width:90px" placeholder="auto"></label><label>Operator ${sel('iop',['=','>=','<=','>','<'].map(x=>[x,x]),OPT.iop)}</label><span class="note">The index column is chosen in the panel above.</span>`}
-  if(k===4)return`<label>Scenario ${sel('mvsc',[['snap','snapshot reads'],['rollback','rollback'],['conflict','write conflict'],['delete','insert + delete']],OPT.mvsc)}</label>`;
+  if(k===2)return`${qPick()}<label>Buffer frames ${rng('frames',2,8,1,OPT.frames)}</label><label>work_mem ${rng('wm',2,40,1,OPT.wm,' rows')}</label>`;
+  if(k===3){return`${idxPick()}<label>Probe value <input type="text" data-opt="ikey" value="${esc(OPT.ikey)}" style="width:90px" placeholder="auto"></label><label>Operator ${sel('iop',['=','>=','<=','>','<'].map(x=>[x,x]),OPT.iop)}</label><label>Fan-out ${sel('fan',[3,4,5,6].map(x=>[x,x]),OPT.fan)}</label>`}
+  if(k===4)return`<label>Scenario ${sel('mvsc',[['snap','snapshot reads'],['rollback','rollback'],['conflict','write conflict'],['delete','insert + delete']],OPT.mvsc)}</label><span class="note">Snapshots here last a whole transaction (REPEATABLE READ style).</span>`;
   if(k===5)return`<label>Crash after step ${sel('walCrash',[...Array(9).keys()].map(i=>[i,i===0?'before anything':'step '+i]),OPT.walCrash)}</label><label><input type="checkbox" data-opt="torn" ${OPT.torn?'checked':''}> torn last WAL record</label>`;
   if(k===6)return`<label>Updates ${rng('vn',2,24,1,OPT.vn)}</label><label><input type="checkbox" data-opt="vlong" ${OPT.vlong?'checked':''}> long-running open transaction</label>`;
-  if(k===7)return`<label><input type="checkbox" data-opt="stale" ${OPT.stale?'checked':''}> stale statistics</label><span class="note">Index choice is in the panel above; edit the WHERE clause to see plan changes.</span>`;
+  if(k===7)return`${qPick()}${idxPick()}<label><input type="checkbox" data-opt="stale" ${OPT.stale?'checked':''}> stale statistics</label>`;
   if(k===8)return`<label>work_mem ${rng('wm',2,40,1,OPT.wm,' rows')}</label>`;
   if(k===9)return`<label>Checkpoint every ${sel('ckK',[[3,'3 records'],[8,'8 records'],[20,'20 records'],[0,'never']],OPT.ckK)}</label>`;
   if(k===10)return`<label>History ${sel('isc',[['nonrep','non-repeatable read'],['phantom','phantom'],['skew','write skew'],['lost','lost update'],['deadlock','deadlock']],OPT.isc)}</label>${OPT.isc==='deadlock'?'':`<label>Isolation ${sel('iso',[['rc','Read Committed'],['rr','Repeatable Read']],OPT.iso)}</label>`}`;
@@ -852,23 +861,11 @@ $('#phCtl').addEventListener('change',e=>{
   OPT[key]=BOOLOPT.includes(key)?t.checked:STROPT.includes(key)?t.value:+t.value;
   stopAll();rebuild(false);
 });
-$('#phCtl').addEventListener('input',e=>{});
+$('#phCtl').addEventListener('change',e=>{const q=e.target.closest('[data-q]'),ix=e.target.closest('[data-idx]');
+  if(q){$('#qsel').value=q.value;$('#sql').value=EX.q[+q.value][1];stopAll();rebuild(false)}
+  else if(ix){$('#idxc').value=ix.value;stopAll();rebuild(false)}});
 
 /* ================= render / wiring ================= */
-function renderNav(){$('#nav').innerHTML=PHASES.map((ph,i)=>`<div class="nv ${i===cur?'act':''} ${i<cur?'done':''}" data-ph="${i}"><b>${i+1}. ${ph.t}</b><small>${ph.s} · ${ph.f}</small></div>`).join('')}
-function showPhase(k,p=1){cur=k;renderNav();ovRender();const ph=PHASES[k];$('#blurb').innerHTML=`${ph.b}<div class="ft">Reimplementation feature: ${ph.f}</div>`;$('#phCtl').innerHTML=ctlHTML(k);paintView(p);$('#prev').disabled=k===0;$('#nextB').disabled=k===PHASES.length-1}
-function paintView(p=1){
-  if(!S||S.error){$('#phView').innerHTML=`<div class="box bad">${esc(S?S.error:'')}</div>`;return}
-  try{$('#phView').innerHTML=PHASES[cur].draw(p)}catch(e){$('#phView').innerHTML=`<div class="box bad">Render error: ${esc(e.message)}</div>`;console.error(e)}
-}
-function stopAll(){gen++;playingAll=false;paused=false;$('#pauseBtn').disabled=true;$('#pauseBtn').textContent='⏸ Pause'}
-$('#nav').onclick=e=>{const n=e.target.closest('[data-ph]');if(!n)return;stopAll();showPhase(+n.dataset.ph)};
-$('#prev').onclick=()=>{stopAll();showPhase(Math.max(0,cur-1))};
-$('#nextB').onclick=()=>{stopAll();showPhase(Math.min(PHASES.length-1,cur+1))};
-$('#anim').onclick=()=>{stopAll();animate(p=>paintView(p),PHASES[cur].dur)};
-$('#playAll').onclick=async()=>{if(!S||S.error)return;stopAll();playingAll=true;$('#pauseBtn').disabled=false;for(let k=0;k<PHASES.length;k++){showPhase(k,0);const ok=await animate(p=>paintView(p),PHASES[k].dur);if(!ok)return;await sleep(500);if(!playingAll)return}playingAll=false;$('#pauseBtn').disabled=true};
-$('#pauseBtn').onclick=()=>{paused=!paused;$('#pauseBtn').textContent=paused?'▶ Resume':'⏸ Pause'};
-$('#speed').oninput=e=>{speed=+e.target.value;$('#speedV').textContent=speed+'×'};
 function fillSel(sel,opts,keep,pref){const old=keep?$(sel).value:null;$(sel).innerHTML=opts.map(o=>`<option>${esc(o)}</option>`).join('');$(sel).value=opts.includes(old)?old:(opts.includes(pref)?pref:opts[0])}
 function exampleQueries(ds){
   const cols=ds.columns,num=cols.filter(c=>ds.rows.every(r=>r[c]==null||typeof r[c]==='number')),txt=cols.filter(c=>!num.includes(c)),key=cols[0];
@@ -909,63 +906,8 @@ $('#file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileR
 /* =========================================================
    ARCHITECTURE OVERVIEW (components + relationships)
    ========================================================= */
-const OVS={"w": 1000, "h": 410, "groups": [], "nodes": [{"id": "client", "x": 10, "y": 70, "w": 120, "h": 56, "label": "Client", "sub": "SQL text", "desc": "Sends a SQL statement and receives rows or an error."}, {"id": "parser", "x": 180, "y": 70, "w": 150, "h": 60, "label": "Parser \u00b7 binder", "sub": "SQL \u2192 logical plan", "desc": "Tokenizes and parses SQL, binds names and types against the catalog, and builds a logical relational tree before any data is read.", "phase": 0}, {"id": "planner", "x": 370, "y": 70, "w": 150, "h": 60, "label": "Planner", "sub": "stats \u00b7 cost", "desc": "Uses table statistics to estimate selectivity and costs, then picks access paths and join methods.", "phase": 7}, {"id": "executor", "x": 560, "y": 70, "w": 150, "h": 60, "label": "Executor", "sub": "iterator operators", "desc": "A tree of operators that pull rows one at a time: scan, filter, join, aggregate, sort, project, limit.", "phase": 2}, {"id": "sort", "x": 790, "y": 70, "w": 170, "h": 60, "label": "Sort / Hash join", "sub": "work_mem \u00b7 spill", "desc": "Blocking operators that stay within a memory budget by spilling sorted runs or hash partitions to temp files.", "phase": 8}, {"id": "index", "x": 370, "y": 190, "w": 150, "h": 60, "label": "B-tree index", "sub": "key \u2192 row ID", "desc": "Ordered pages mapping keys to row IDs for point and range access, split as they grow.", "phase": 3}, {"id": "heap", "x": 560, "y": 190, "w": 150, "h": 60, "label": "Heap + buffer pool", "sub": "slotted pages", "desc": "Rows live on fixed-size slotted pages addressed by (page, slot), read through a small pool of in-memory frames.", "phase": 1}, {"id": "mvcc", "x": 790, "y": 190, "w": 170, "h": 60, "label": "MVCC", "sub": "snapshots \u00b7 xmin/xmax", "desc": "Each update creates a new row version; a snapshot decides which version a transaction sees, so readers do not block writers.", "phase": 4}, {"id": "vacuum", "x": 180, "y": 320, "w": 150, "h": 60, "label": "VACUUM", "sub": "dead versions", "desc": "Reclaims row versions no snapshot can still see, bounded by the oldest open transaction (the horizon).", "phase": 6}, {"id": "checkpoint", "x": 370, "y": 320, "w": 150, "h": 60, "label": "Checkpoint", "sub": "bound recovery", "desc": "Flushes dirty pages and records where WAL replay may start, so old WAL can be recycled.", "phase": 9}, {"id": "wal", "x": 560, "y": 320, "w": 150, "h": 60, "label": "WAL", "sub": "log before page", "desc": "Every change is logged before its page may be written, and COMMIT waits for the log to be durable; recovery replays it.", "phase": 5}, {"id": "iso", "x": 790, "y": 320, "w": 170, "h": 60, "label": "Isolation \u00b7 locks", "sub": "anomalies \u00b7 deadlocks", "desc": "Read Committed vs Repeatable Read snapshots, lock waits and deadlock detection.", "phase": 10}], "edges": [{"from": "client", "to": "parser", "label": "SQL", "kind": "data"}, {"from": "parser", "to": "planner", "label": "plan", "kind": "ctl"}, {"from": "planner", "to": "executor", "label": "plan", "kind": "data"}, {"from": "executor", "to": "sort", "label": "spill", "kind": "data"}, {"from": "executor", "to": "index", "label": "index scan", "kind": "data"}, {"from": "executor", "to": "heap", "label": "seq scan", "kind": "data"}, {"from": "index", "to": "heap", "label": "row IDs", "kind": "data"}, {"from": "executor", "to": "mvcc", "label": "visibility", "kind": "ctl"}, {"from": "mvcc", "to": "iso", "label": "policy", "kind": "ctl"}, {"from": "heap", "to": "wal", "label": "log first", "kind": "data"}, {"from": "wal", "to": "checkpoint", "label": "redo", "kind": "ctl"}, {"from": "checkpoint", "to": "heap", "label": "flush", "kind": "ctl"}, {"from": "vacuum", "to": "heap", "label": "prune", "kind": "ctl"}, {"from": "heap", "to": "planner", "label": "stats", "kind": "ctl"}], "flow": [{"n": "client", "t": "The client sends a SQL statement."}, {"n": "parser", "t": "It is parsed and bound against the catalog into a logical plan."}, {"n": "planner", "t": "The planner uses statistics to choose scans and joins."}, {"n": "executor", "t": "The executor runs the plan as pulled iterators."}, {"n": "index", "t": "An index scan finds row IDs without reading every page."}, {"n": "heap", "t": "The heap pages are fetched through the buffer pool."}, {"n": "mvcc", "t": "Each tuple version is checked against the transaction snapshot."}, {"n": "wal", "t": "Writes are logged to the WAL before pages change."}, {"n": "checkpoint", "t": "Checkpoints flush pages and bound recovery work."}]};
-const OVN=Object.fromEntries(OVS.nodes.map(n=>[n.id,n]));
-const OV={sel:null,k:-1};
-function ovAnchor(n,tx,ty){const cx=n.x+n.w/2,cy=n.y+n.h/2,dx=tx-cx,dy=ty-cy;if(!dx&&!dy)return[cx,cy];const s=Math.min((n.w/2)/Math.abs(dx||1e-9),(n.h/2)/Math.abs(dy||1e-9));return[cx+dx*s,cy+dy*s]}
-function ovGeom(e){
-  const a=OVN[e.from],b=OVN[e.to],ca=[a.x+a.w/2,a.y+a.h/2],cb=[b.x+b.w/2,b.y+b.h/2];let c=null;
-  if(e.bend){const mx=(ca[0]+cb[0])/2,my=(ca[1]+cb[1])/2,dx=cb[0]-ca[0],dy=cb[1]-ca[1],L=Math.hypot(dx,dy)||1;c=[mx-dy/L*e.bend,my+dx/L*e.bend]}
-  const p0=ovAnchor(a,...(c||cb)),p1=ovAnchor(b,...(c||ca));
-  const mid=c?[0.25*p0[0]+0.5*c[0]+0.25*p1[0],0.25*p0[1]+0.5*c[1]+0.25*p1[1]]:[(p0[0]+p1[0])/2,(p0[1]+p1[1])/2];
-  return{p0,p1,c,mid};
-}
-function ovRender(){
-  const el=document.getElementById('ovView');if(!el)return;
-  const flow=OVS.flow,k=OV.k,act=new Set(),actE=new Set();
-  if(k>=0){for(let i=0;i<=Math.min(k,flow.length-1);i++)act.add(flow[i].n);for(let i=1;i<=k&&i<flow.length;i++){actE.add(flow[i-1].n+'>'+flow[i].n);actE.add(flow[i].n+'>'+flow[i-1].n)}}
-  const sel=OV.sel,rel=new Set();if(sel){rel.add(sel);OVS.edges.forEach(e=>{if(e.from===sel)rel.add(e.to);if(e.to===sel)rel.add(e.from)})}
-  const curPh=typeof cur==='number'?cur:-1;
-  let s=`<svg viewBox="0 0 ${OVS.w} ${OVS.h}" style="max-height:${OVS.h*1.1}px"><defs><marker id="ovar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="#8a94a6"/></marker><marker id="ovara" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="var(--acc)"/></marker></defs>`;
-  (OVS.groups||[]).forEach(g=>{s+=`<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${g.x+12}" y="${g.y+g.h-10}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${esc(g.label)}</text>`});
-  OVS.edges.forEach(e=>{
-    const g=ovGeom(e),on=actE.has(e.from+'>'+e.to),dim=sel&&!(e.from===sel||e.to===sel),hl=sel&&(e.from===sel||e.to===sel);
-    const d=g.c?`M${g.p0[0]},${g.p0[1]} Q${g.c[0]},${g.c[1]} ${g.p1[0]},${g.p1[1]}`:`M${g.p0[0]},${g.p0[1]} L${g.p1[0]},${g.p1[1]}`;
-    s+=`<g style="${dim?'opacity:.2':''}"><path d="${d}" class="ove ${e.kind||'data'} ${on||hl?'act':''}" marker-end="url(#${on||hl?'ovara':'ovar'})"/>${on?`<path d="${d}" class="ove flow act" style="stroke-width:5;opacity:.5"/>`:''}
-      <text x="${g.mid[0]}" y="${g.mid[1]-5}" text-anchor="middle" style="font-size:10.5px;fill:${hl||on?'var(--acc)':'var(--mut)'};paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(e.label)}</text></g>`;
-  });
-  OVS.nodes.forEach(n=>{
-    const ph=n.phase,cls=['ovn',sel===n.id?'sel':'',ph!==undefined&&ph===curPh?'cur':'',act.has(n.id)?'act':''].join(' '),dim=sel&&!rel.has(n.id);
-    s+=`<g class="${cls}" data-node="${n.id}" style="${dim?'opacity:.3':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${ph!==undefined?pc(ph):'var(--card)'}"/>
-      <text x="${n.x+10}" y="${n.y+22}" font-weight="700" style="font-size:12.5px">${esc(n.label)}</text><text x="${n.x+10}" y="${n.y+40}" style="font-size:10.5px;fill:var(--mut)">${esc(n.sub||'')}</text>
-      ${ph!==undefined?`<text x="${n.x+n.w-8}" y="${n.y+n.h-8}" text-anchor="end" style="font-size:10px;font-weight:700;fill:var(--mut)">phase ${ph+1}</text>`:''}</g>`;
-  });
-  s+='</svg>';
-  el.innerHTML=s;
-  const cap=document.getElementById('ovCap');
-  if(cap)cap.innerHTML=k>=0?`<b>Step ${Math.min(k,flow.length-1)+1}/${flow.length}:</b> ${esc(flow[Math.min(k,flow.length-1)].t)}`:(sel?'':'Click a component to see how it connects to the others.');
-  ovInfo();
-}
-function ovInfo(){
-  const el=document.getElementById('ovInfo');if(!el)return;const sel=OV.sel&&OVN[OV.sel];
-  // phase-to-phase dependencies derived from the edges
-  const pairs=new Map();OVS.edges.forEach(e=>{const a=OVN[e.from].phase,b=OVN[e.to].phase;if(a!==undefined&&b!==undefined&&a!==b){const key=a+'>'+b;if(!pairs.has(key))pairs.set(key,[]);pairs.get(key).push(e.label)}});
-  const dep=[...pairs.entries()].sort((x,y)=>x[0].split('>')[0]-y[0].split('>')[0]).map(([k,l])=>{const[a,b]=k.split('>').map(Number);return`<span class="chip" style="background:${pc(a)}">${a+1}. ${esc(PHASES[a].t)}</span> <span class="mono">→ ${esc(short(l.join(' / '),34))} →</span> <span class="chip" style="background:${pc(b)}">${b+1}. ${esc(PHASES[b].t)}</span>`}).join('<br>');
-  let card='';
-  if(sel){
-    const ins=OVS.edges.filter(e=>e.to===sel.id),outs=OVS.edges.filter(e=>e.from===sel.id);
-    card=`<div class="box" style="margin-top:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="font-size:15px">${esc(sel.label)}</b><span class="note" style="margin:0">${esc(sel.sub||'')}</span>${sel.phase!==undefined?`<button class="primary" data-go="${sel.phase}">Go to phase ${sel.phase+1}: ${esc(PHASES[sel.phase].t)} ›</button>`:''}</div>
-      <div style="margin:6px 0">${esc(sel.desc||'')}</div>
-      <div class="g2"><div><b style="font-size:12px">Receives</b>${ins.map(e=>`<div class="row"><span style="color:var(--mut)">${esc(OVN[e.from].label)}</span> ─ ${esc(e.label)} ▸</div>`).join('')||'<div class="note">nothing: it is where requests enter.</div>'}</div>
-      <div><b style="font-size:12px">Sends</b>${outs.map(e=>`<div class="row">▸ ${esc(e.label)} ─ <span style="color:var(--mut)">${esc(OVN[e.to].label)}</span></div>`).join('')||'<div class="note">nothing: it is an endpoint.</div>'}</div></div></div>`;
-  }
-  el.innerHTML=card+`<details class="dd" style="margin-top:8px"><summary>How the phases depend on each other</summary><div style="line-height:2.1;margin-top:6px">${dep||'<span class="note">no cross-phase edges</span>'}</div></details>`;
-}
-function jumpPhase(k){stopAll();showPhase(k);const t=document.getElementById('phaseSec');if(t&&t.scrollIntoView)t.scrollIntoView({behavior:'smooth',block:'start'})}
-document.getElementById('ovView').addEventListener('click',e=>{const n=e.target.closest('[data-node]');if(n){OV.k=-1;OV.sel=OV.sel===n.dataset.node?null:n.dataset.node;ovRender()}});
-document.getElementById('ovInfo').addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g)jumpPhase(+g.dataset.go)});
-document.getElementById('ovTrace').onclick=()=>{stopAll();OV.sel=null;OV.k=0;animate(p=>{OV.k=Math.min(OVS.flow.length-1,Math.floor(p*OVS.flow.length));ovRender()},OVS.flow.length*1300)};
-document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.sel=null;ovRender()};
+const OVS={"w": 1000, "h": 410, "groups": [], "nodes": [{"id": "client", "x": 10, "y": 70, "w": 120, "h": 56, "label": "Client", "sub": "SQL text", "desc": "Sends a SQL statement and receives rows or an error."}, {"id": "parser", "x": 180, "y": 70, "w": 150, "h": 60, "label": "Parser \u00b7 binder", "sub": "SQL \u2192 logical plan", "desc": "Tokenizes and parses SQL, binds names and types against the catalog, and builds a logical relational tree before any data is read.", "phase": 0}, {"id": "planner", "x": 370, "y": 70, "w": 150, "h": 60, "label": "Planner", "sub": "stats \u00b7 cost", "desc": "Uses table statistics to estimate selectivity and costs, then picks access paths and join methods.", "phase": 7}, {"id": "executor", "x": 560, "y": 70, "w": 150, "h": 60, "label": "Executor", "sub": "iterator operators", "desc": "A tree of operators that pull rows one at a time: scan, filter, join, aggregate, sort, project, limit.", "phase": 2}, {"id": "sort", "x": 790, "y": 70, "w": 170, "h": 60, "label": "Sort / Hash join", "sub": "work_mem \u00b7 spill", "desc": "Blocking operators that stay within a memory budget by spilling sorted runs or hash partitions to temp files.", "phase": 8}, {"id": "index", "x": 370, "y": 190, "w": 150, "h": 60, "label": "B-tree index", "sub": "key \u2192 row ID", "desc": "Ordered pages mapping keys to row IDs for point and range access, split as they grow.", "phase": 3}, {"id": "heap", "x": 560, "y": 190, "w": 150, "h": 60, "label": "Heap + buffer pool", "sub": "slotted pages", "desc": "Rows live on fixed-size slotted pages addressed by (page, slot), read through a small pool of in-memory frames.", "phase": 1}, {"id": "mvcc", "x": 790, "y": 190, "w": 170, "h": 60, "label": "MVCC", "sub": "snapshots \u00b7 xmin/xmax", "desc": "Each update creates a new row version; a snapshot decides which version a transaction sees, so readers do not block writers.", "phase": 4}, {"id": "vacuum", "x": 180, "y": 320, "w": 150, "h": 60, "label": "VACUUM", "sub": "dead versions", "desc": "Reclaims row versions no snapshot can still see, bounded by the oldest open transaction (the horizon).", "phase": 6}, {"id": "checkpoint", "x": 370, "y": 320, "w": 150, "h": 60, "label": "Checkpoint", "sub": "bound recovery", "desc": "Flushes dirty pages and records where WAL replay may start, so old WAL can be recycled.", "phase": 9}, {"id": "wal", "x": 560, "y": 320, "w": 150, "h": 60, "label": "WAL", "sub": "log before page", "desc": "Every change is logged before its page may be written, and COMMIT waits for the log to be durable; recovery replays it.", "phase": 5}, {"id": "iso", "x": 790, "y": 320, "w": 170, "h": 60, "label": "Isolation \u00b7 locks", "sub": "anomalies \u00b7 deadlocks", "desc": "Read Committed vs Repeatable Read snapshots, lock waits and deadlock detection.", "phase": 10}], "edges": [{"from": "client", "to": "parser", "label": "SQL", "kind": "data"}, {"from": "parser", "to": "planner", "label": "plan", "kind": "ctl"}, {"from": "planner", "to": "executor", "label": "plan", "kind": "data"}, {"from": "executor", "to": "sort", "label": "spill", "kind": "data"}, {"from": "executor", "to": "index", "label": "index scan", "kind": "data"}, {"from": "executor", "to": "heap", "label": "seq scan", "kind": "data"}, {"from": "index", "to": "heap", "label": "row IDs", "kind": "data"}, {"from": "executor", "to": "mvcc", "label": "visibility", "kind": "ctl"}, {"from": "mvcc", "to": "iso", "label": "policy", "kind": "ctl"}, {"from": "heap", "to": "wal", "label": "log first", "kind": "data"}, {"from": "wal", "to": "checkpoint", "label": "redo", "kind": "ctl"}, {"from": "checkpoint", "to": "heap", "label": "flush", "kind": "ctl"}, {"from": "vacuum", "to": "heap", "label": "prune", "kind": "ctl"}, {"from": "heap", "to": "planner", "label": "stats", "kind": "ctl", "bend": -45}], "flow": [{"n": "client", "t": "The client sends a SQL statement."}, {"n": "parser", "t": "It is parsed and bound against the catalog into a logical plan."}, {"n": "planner", "t": "The planner uses statistics to choose scans and joins."}, {"n": "executor", "t": "The executor runs the plan as pulled iterators."}, {"n": "index", "t": "An index scan finds row IDs without reading every page."}, {"n": "heap", "t": "The heap pages are fetched through the buffer pool."}, {"n": "mvcc", "t": "Each tuple version is checked against the transaction snapshot."}, {"n": "wal", "t": "Writes are logged to the WAL before pages change."}, {"n": "checkpoint", "t": "Checkpoints flush pages and bound recovery work."}]};
+OVS.groupLabelBottom=true;
 
 
 /* ================= init ================= */
@@ -1155,148 +1097,9 @@ const SIMM={
  detail(id,st){if(id==='cli')return[];const H=st.heap[id]||[];return[`role: ${st.role[id]}`,`WAL records ${st.log[id].length}, flushed to lsn ${st.fl[id]}`,`heap tuples ${H.length} (${H.filter(t=>t.xmax).length} dead)`,...H.map(t=>`id=${t.id} v=${t.v} xmin=${t.xmin} xmax=${t.xmax||'-'}${t.xmax?'  (dead, VACUUM can reclaim)':''}`)]}
 };
 
-/* =========================================================
-   LIVE CLUSTER SIMULATION (shared framework)
-   events on a timeline; packets travel between nodes; state is replayed up to time T
-   ========================================================= */
-function sHash(s){let h=2166136261;s=String(s);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h>>>0}
-const sEsc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const sShort=(s,n)=>{s=String(s);return s.length>n?s.slice(0,n-1)+'…':s};
-const E=(t,d,from,to,msg,kind,fx,cause)=>({t,d,from,to,msg,kind,fx:fx||[],cause:cause||''});
-const SIM={n:0,set:{},run:null,T:0,play:false,sel:null,selNode:null,speed:1,last:null};
-const SIMCOL={write:'#2f6fed',ack:'#1a9b5a',read:'#e25a1c',data:'#e25a1c',repl:'#9b4fd0',ctl:'#6b7280',fail:'#d64545',info:'#c9a400',sched:'#0f9d8a',watch:'#8a6fd0',ctrl:'#6b7280',trunc:'#d64545'};
-function simParse(text){return text.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#')).map(l=>{const p=l.split(/\s+/);return{t:Number(p[0])||0,op:(p[1]||'').toUpperCase(),args:p.slice(2),raw:l}}).sort((a,b)=>a.t-b.t)}
-function simRun(){
-  const acts=simParse(document.getElementById('simAct').value);
-  try{SIM.run=SIMM.run(acts,SIM.n,SIM.set);SIM.run.events.sort((a,b)=>a.t-b.t||a.d-b.d)}catch(e){SIM.run={events:[],end:0,err:e.message};console.error(e)}
-  SIM.end=Math.max(1000,(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0))+600);
-  const sl=document.getElementById('simT');sl.max=SIM.end;if(SIM.T>SIM.end)SIM.T=SIM.end;
-}
-function simStateAt(T){const st=SIMM.init(SIM.n,SIM.set);for(const e of SIM.run.events){if(e.t+e.d<=T)e.fx.forEach(f=>SIMM.apply(st,f))}return st}
-function simDraw(){
-  const svg=document.getElementById('simSvg');if(!svg||!SIM.run)return;
-  const T=SIM.T,topo=SIMM.topo(SIM.n),st=simStateAt(T),byId=Object.fromEntries(topo.nodes.map(n=>[n.id,n]));
-  const W=topo.w||900,H=topo.h||430;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
-  const active=SIM.run.events.filter(e=>e.t<=T&&T<e.t+e.d),recent=SIM.run.events.filter(e=>e.t+e.d<=T&&T-(e.t+e.d)<450);
-  const hot=new Set([...active.flatMap(e=>[e.from,e.to]),...recent.map(e=>e.to)]);
-  let s='<defs><marker id="simar" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0L9,4.5L0,9z" fill="#8a94a6"/></marker></defs>';
-  (topo.zones||[]).forEach(z=>{s+=`<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${z.x+12}" y="${z.y+17}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${sEsc(z.label)}</text>`});
-  topo.edges.forEach(([a,b])=>{const A=byId[a],B=byId[b];if(!A||!B)return;s+=`<line x1="${A.x+A.w/2}" y1="${A.y+A.h/2}" x2="${B.x+B.w/2}" y2="${B.y+B.h/2}" stroke="var(--line)" stroke-width="1.5"/>`});
-  topo.nodes.forEach(n=>{
-    const status=(st.status&&st.status[n.id])||'up',down=status==='down',isHot=hot.has(n.id),sel=SIM.selNode===n.id;
-    const lines=SIMM.lines(n.id,st)||[];
-    s+=`<g class="simn" data-id="${n.id}" style="cursor:pointer;${down?'opacity:.55':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${down?'var(--p5)':n.c||'var(--card)'}" stroke="${sel?'var(--acc)':isHot?'var(--acc2)':'var(--line)'}" stroke-width="${sel||isHot?3.5:1.8}"/>
-      <text x="${n.x+9}" y="${n.y+17}" font-weight="700" style="font-size:12.5px">${sEsc(n.label)}${down?' ✕':''}</text>${n.badge&&(n.label.length*7.6+String(typeof n.badge==='function'?n.badge(st):n.badge).length*5.8<n.w)?`<text x="${n.x+n.w-8}" y="${n.y+17}" text-anchor="end" style="font-size:10px;fill:var(--mut)">${sEsc(typeof n.badge==='function'?n.badge(st):n.badge)}</text>`:''}
-      ${lines.slice(0,Math.floor((n.h-24)/13)).map((l,i)=>`<text x="${n.x+9}" y="${n.y+32+i*13}" style="font-size:10.5px;${/^!/.test(l)?'fill:var(--bad)':''}">${sEsc(sShort(String(l).replace(/^!/,''),Math.floor((n.w-14)/6.3)))}</text>`).join('')}</g>`;
-  });
-  active.forEach(e=>{const A=byId[e.from],B=byId[e.to];if(!A||!B)return;const f=Math.min(1,(T-e.t)/Math.max(1,e.d)),ax=A.x+A.w/2,ay=A.y+A.h/2,bx=B.x+B.w/2,by=B.y+B.h/2;
-    if(e.from===e.to){s+=`<text x="${A.x+A.w/2}" y="${A.y-6}" text-anchor="middle" style="font-size:10.5px;fill:${SIMCOL[e.kind]||'#6b7280'};font-weight:700">${sEsc(sShort(e.msg,30))}</text>`;return}
-    const col=SIMCOL[e.kind]||'#6b7280';s+=`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${col}" stroke-width="2.5" opacity=".35"/><circle cx="${ax+(bx-ax)*f}" cy="${ay+(by-ay)*f}" r="7" fill="${col}" stroke="#fff" stroke-width="1.5"/><text x="${ax+(bx-ax)*f}" y="${ay+(by-ay)*f-11}" text-anchor="middle" style="font-size:10px;fill:${col};font-weight:700;paint-order:stroke;stroke:var(--card);stroke-width:3px">${sEsc(sShort(e.msg,26))}</text>`});
-  svg.innerHTML=s;
-  document.getElementById('simTv').textContent=(T/1000).toFixed(2)+' s / '+(SIM.end/1000).toFixed(1)+' s';
-  document.getElementById('simT').value=T;
-  // log
-  const evs=SIM.run.events,upTo=evs.filter(e=>e.t<=T),lastI=upTo.length-1;
-  document.getElementById('simLog').innerHTML=evs.map((e,i)=>`<div class="simev ${i===lastI?'cur':''} ${e.t>T?'fut':''}" data-i="${i}"><span class="simtag" style="background:${SIMCOL[e.kind]||'#6b7280'}">${sEsc(e.kind)}</span> <span class="mono">${(e.t/1000).toFixed(2)}s</span> ${sEsc(e.from)}${e.from===e.to?'':' → '+sEsc(e.to)}: ${sEsc(e.msg)}</div>`).join('')||'<div class="note">No actions yet.</div>';
-  const cur=document.querySelector('#simLog .cur');if(cur&&SIM.play)cur.scrollIntoView({block:'nearest'});
-  // inspector
-  const insp=document.getElementById('simInsp');
-  if(SIM.selNode){const det=SIMM.detail?SIMM.detail(SIM.selNode,st):SIMM.lines(SIM.selNode,st);insp.innerHTML=`<b>${sEsc(byId[SIM.selNode].label)}</b> at ${(T/1000).toFixed(2)}s<pre>${sEsc((det||[]).join('\n')||'(empty)')}</pre>`}
-  else if(SIM.sel!=null&&evs[SIM.sel]){const e=evs[SIM.sel];insp.innerHTML=`<b>${sEsc(e.msg)}</b><div class="note">${sEsc(e.from)} → ${sEsc(e.to)} · ${(e.t/1000).toFixed(2)}s (+${e.d} ms) · ${sEsc(e.kind)}</div>${e.cause?`<div class="caption" style="margin-top:6px"><b>Why:</b> ${sEsc(e.cause)}</div>`:''}<div class="note">state changes: ${e.fx.length?sEsc(e.fx.map(f=>SIMM.fxText?SIMM.fxText(f):f.op).join('; ')):'none (message only)'}</div>`}
-  else insp.innerHTML='<div class="note">Click a node to inspect its data, or click an event in the log to see why it happened.</div>';
-}
-function simTick(now){
-  if(!SIM.play){SIM.last=null;return}
-  if(SIM.last==null)SIM.last=now;const dt=now-SIM.last;SIM.last=now;SIM.T=Math.min(SIM.end,SIM.T+dt*SIM.speed);simDraw();
-  if(SIM.T>=SIM.end){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}
-  requestAnimationFrame(simTick);
-}
-function simBuildControls(){
-  const m=SIMM,nr=m.nodeRange;
-  const sc=document.getElementById('simScn');sc.innerHTML=m.scenarios.map((s,i)=>`<option value="${i}">${sEsc(s.name)}</option>`).join('');
-  const nn=document.getElementById('simN');nn.innerHTML=Array.from({length:nr[1]-nr[0]+1},(_,i)=>`<option value="${nr[0]+i}" ${nr[0]+i===nr[2]?'selected':''}>${nr[0]+i}</option>`).join('');document.getElementById('simNL').textContent=m.nodeLabel;
-  document.getElementById('simSet').innerHTML=(m.settings||[]).map(s=>`<label>${sEsc(s.label)} <select data-set="${s.id}">${s.opts.map(o=>`<option ${o===s.def?'selected':''}>${sEsc(o)}</option>`).join('')}</select></label>`).join('');
-  SIM.set=Object.fromEntries((m.settings||[]).map(s=>[s.id,s.def]));
-  document.getElementById('simOp').innerHTML=m.menu.map((o,i)=>`<option value="${i}">${sEsc(o.label)}</option>`).join('');
-  simArgs();
-}
-function simArgs(){const o=SIMM.menu[+document.getElementById('simOp').value];document.getElementById('simArgs').innerHTML=o.args.map((a,i)=>`<input type="text" data-a="${i}" value="${sEsc(a.d)}" placeholder="${sEsc(a.n)}" style="width:${a.w||80}px">`).join('')}
-function simLoadScenario(i){const s=SIMM.scenarios[i];document.getElementById('simAct').value=s.acts.join('\n');document.getElementById('simDesc').textContent=s.desc;SIM.T=0;SIM.sel=null;SIM.selNode=null;simRun();simDraw()}
-function simInit(){
-  if(!document.getElementById('simSvg'))return;
-  SIM.n=SIMM.nodeRange[2];simBuildControls();simLoadScenario(0);
-  document.getElementById('simScn').onchange=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simLoadScenario(+e.target.value)};
-  document.getElementById('simN').onchange=e=>{SIM.n=+e.target.value;SIM.T=0;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simRun();simDraw()};
-  document.getElementById('simSet').onchange=e=>{const t=e.target.closest('[data-set]');if(t){SIM.set[t.dataset.set]=t.value;simRun();simDraw()}};
-  document.getElementById('simOp').onchange=simArgs;
-  document.getElementById('simAdd').onclick=()=>{const o=SIMM.menu[+document.getElementById('simOp').value],vals=[...document.querySelectorAll('#simArgs input')].map(i=>i.value.trim()||'-');
-    const ta=document.getElementById('simAct'),t=Math.round(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0)+300);ta.value=(ta.value.trim()?ta.value.trim()+'\n':'')+`${t} ${o.op} ${vals.join(' ')}`.trim();SIM.T=Math.max(0,t-200);simRun();simDraw()};
-  document.getElementById('simAct').onchange=()=>{simRun();simDraw()};
-  document.getElementById('simPlay').onclick=()=>{if(SIM.play){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}if(SIM.T>=SIM.end)SIM.T=0;SIM.play=true;SIM.last=null;document.getElementById('simPlay').textContent='⏸ Pause';requestAnimationFrame(simTick)};
-  document.getElementById('simReset').onclick=()=>{SIM.play=false;SIM.T=0;document.getElementById('simPlay').textContent='▶ Play';simDraw()};
-  document.getElementById('simStep').onclick=()=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const nx=SIM.run.events.find(e=>e.t+e.d>SIM.T+1);SIM.T=nx?nx.t+nx.d:SIM.end;SIM.sel=nx?SIM.run.events.indexOf(nx):null;SIM.selNode=null;simDraw()};
-  document.getElementById('simSpeed').onchange=e=>{SIM.speed=+e.target.value};
-  document.getElementById('simT').oninput=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';SIM.T=+e.target.value;simDraw()};
-  document.getElementById('simLog').onclick=e=>{const d=e.target.closest('.simev');if(!d)return;const i=+d.dataset.i;SIM.sel=i;SIM.selNode=null;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const ev=SIM.run.events[i];SIM.T=ev.t+ev.d;simDraw()};
-  document.getElementById('simSvg').onclick=e=>{const g=e.target.closest('.simn');if(g){SIM.selNode=SIM.selNode===g.dataset.id?null:g.dataset.id;SIM.sel=null;simDraw()}};
-}
+Lab.sim(SIMM);})();
 
-window.simInit=simInit;window.__sim={SIM,simDraw,simRun};})();
-/* ===== overview: packets travelling along the connections ===== */
-(function(){
-const _ovr=ovRender;
-function pt(g,f){if(g.c){const u=1-f;return[u*u*g.p0[0]+2*u*f*g.c[0]+f*f*g.p1[0],u*u*g.p0[1]+2*u*f*g.c[1]+f*f*g.p1[1]]}return[g.p0[0]+(g.p1[0]-g.p0[0])*f,g.p0[1]+(g.p1[1]-g.p0[1])*f]}
-function findEdge(a,b){let e=OVS.edges.find(x=>x.from===a&&x.to===b);if(e)return{e,rev:false};e=OVS.edges.find(x=>x.from===b&&x.to===a);return e?{e,rev:true}:null}
-ovRender=function(){
-  _ovr();
-  if(OV.k<0||OV.kf==null)return;const svg=document.querySelector('#ovView svg');if(!svg)return;
-  const flow=OVS.flow,i=Math.min(flow.length-1,Math.floor(OV.kf)),f=OV.kf-Math.floor(OV.kf);let s='';
-  if(i>=1){const ed=findEdge(flow[i-1].n,flow[i].n);
-    if(ed){const g=ovGeom(ed.e),ff=Math.min(1,f*1.15),q=ed.rev?1-ff:ff;
-      for(let tr=3;tr>=1;tr--){const qq=ed.rev?Math.min(1,q+tr*.06):Math.max(0,q-tr*.06),p2=pt(g,qq);s+=`<circle cx="${p2[0]}" cy="${p2[1]}" r="${7-tr*1.4}" fill="var(--acc2)" opacity="${.5-tr*.12}"/>`}
-      const p=pt(g,q);s+=`<circle cx="${p[0]}" cy="${p[1]}" r="8" fill="var(--acc2)" stroke="#fff" stroke-width="2"/><text x="${p[0]}" y="${p[1]-13}" text-anchor="middle" style="font-size:11px;font-weight:700;fill:var(--acc2);paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(short(flow[i].t,44))}</text>`}}
-  svg.insertAdjacentHTML('beforeend',s);
-};
-const tr=document.getElementById('ovTrace');
-tr.onclick=()=>{stopAll();OV.sel=null;OV.k=0;OV.kf=0;animate(p=>{OV.kf=Math.min(OVS.flow.length-.001,p*OVS.flow.length);OV.k=Math.floor(OV.kf);ovRender()},OVS.flow.length*1500)};
-document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.kf=null;OV.sel=null;ovRender()};
-document.getElementById('ovView').addEventListener('click',e=>{if(e.target.closest('[data-node]'))OV.kf=null},true);
-})();
-
-/* ===== accordion: one drop-down per phase + detail (how / pros / cons / failure modes / watch) ===== */
-(function(){
-const g=id=>document.getElementById(id),esc2=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const sec=g('phaseSec'),nav=g('nav'),barNav=g('prev').parentElement;
-const stage=document.createElement('div');stage.id='stage';
-const det=document.createElement('div');det.id='phDetail';
-stage.append(g('blurb'),g('phCtl'),barNav,g('phView'),det);
-nav.style.display='none';
-const acc=document.createElement('div');acc.id='acc';nav.after(acc);
-acc.innerHTML=PHASES.map((ph,i)=>`<details class="acc" data-i="${i}" style="--pc:var(--p${i%8})"><summary><span class="accn">${i+1}</span><span class="acct"><b>${esc2(ph.t)}</b><small>${esc2(ph.s)}${ph.f?' · '+esc2(ph.f):''}</small></span><span class="accg">${typeof DETAIL!=='undefined'&&DETAIL[i]?'pros · cons · failures':''}</span></summary><div class="accb"></div></details>`).join('');
-const items=[...acc.children];
-function renderDetail(k){
-  const d=typeof DETAIL!=='undefined'&&DETAIL[k];if(!d){det.innerHTML='';return}
-  const li=a=>'<ul>'+a.map(x=>`<li>${esc2(x)}</li>`).join('')+'</ul>';
-  det.innerHTML=`<h3 style="margin-top:16px">Deep dive: ${esc2(PHASES[k].t)}</h3>
-  <details class="dd" open><summary>How it works</summary><div class="ddb">${esc2(d.how)}</div></details>
-  <details class="dd" open><summary>Pros and cons</summary><div class="ddb pc"><div class="pro"><b>✓ Pros</b>${li(d.pros)}</div><div class="con"><b>✗ Cons</b>${li(d.cons)}</div></div></details>
-  <details class="dd"><summary>Failure modes (${d.fails.length})</summary><div class="ddb"><table class="fm"><tr><th>Failure mode</th><th>What you see</th><th>Mitigation</th></tr>${d.fails.map(f=>`<tr><td><b>${esc2(f.m)}</b></td><td>${esc2(f.s)}</td><td>${esc2(f.x)}</td></tr>`).join('')}</table></div></details>
-  <details class="dd"><summary>What to watch</summary><div class="ddb">${li(d.watch)}</div></details>`;
-}
-function place(k){
-  items.forEach((d,i)=>{d.open=i===k});
-  items[k].querySelector('.accb').appendChild(stage);
-}
-const _sp=showPhase;
-showPhase=function(k,p=1){place(k);_sp(k,p);renderDetail(k)};
-acc.addEventListener('click',e=>{const s=e.target.closest('summary');if(!s||!s.parentElement.classList.contains('acc'))return;e.preventDefault();
-  const d=s.parentElement,i=+d.dataset.i;
-  if(d.open){d.open=false;stopAll();return}
-  stopAll();showPhase(i);setTimeout(()=>d.scrollIntoView({behavior:'smooth',block:'start'}),30)});
-window.__accReady=true;
-})();
-
-showPhase(typeof cur==="number"&&cur>=0?cur:0);simInit();
+Lab.start({phases:PHASES,detail:DETAIL,ovs:OVS,ctl:ctlHTML,state:()=>S});
 </script>
 </body>
 </html>

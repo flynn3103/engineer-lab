@@ -3,123 +3,114 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Engineer Lab · Internals Playgrounds</title>
-<meta name="description" content="Interactive, in-browser playgrounds that show how Spark, ScyllaDB, Redis, Kafka, PostgreSQL and Kubernetes work internally.">
+<title>Engineer Lab · Learn systems by rebuilding them</title>
+<meta name="description" content="Interactive, problem-based tours of Spark, ScyllaDB, Redis, Kafka, PostgreSQL and Kubernetes. Meet a real problem, watch the naive fix break, then see how the real system is built.">
+<link rel="stylesheet" href="assets/lab.css">
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2230;--mut:#667085;--line:#d9dee7;--acc:#2f6fed}
-@media(prefers-color-scheme:dark){:root{--bg:#10141c;--card:#181e29;--ink:#e8ecf3;--mut:#93a0b5;--line:#2b3445;--acc:#6c9bff}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
-header,main,footer{max-width:1100px;margin:auto;padding:0 18px}
-header{padding-top:44px}
-h1{margin:0 0 8px;font-size:34px;letter-spacing:-.5px}
-h1 span{color:var(--acc)}
-.lead{margin:0;color:var(--mut);font-size:17px;max-width:760px}
-.steps{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0 6px}
-.step{flex:1;min-width:210px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px}
-.step b{display:block;margin-bottom:2px}
-.step i{font-style:normal;display:inline-block;width:22px;height:22px;border-radius:50%;background:var(--acc);color:#fff;text-align:center;font-size:12px;line-height:22px;margin-right:6px;font-weight:700}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px;margin:22px 0 40px}
-.card{background:var(--card);border:1px solid var(--line);border-top:5px solid var(--c);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px;transition:transform .15s,box-shadow .15s}
-.card:hover{transform:translateY(-3px);box-shadow:0 8px 24px #0002}
-.card h2{margin:0;font-size:21px;display:flex;align-items:center;gap:10px}
-.dot{width:14px;height:14px;border-radius:50%;background:var(--c);display:inline-block}
-.tag{font-size:12px;color:var(--mut);margin:0}
-.card p{margin:0;font-size:14.5px}
-.chips{display:flex;flex-wrap:wrap;gap:5px}
-.chip{font-size:11.5px;border:1px solid var(--line);border-radius:999px;padding:1px 9px;color:var(--mut);background:var(--bg)}
-.go{margin-top:auto;display:flex;flex-wrap:wrap;gap:8px}
-a.btn{display:inline-block;text-decoration:none;color:#fff;background:var(--c);padding:7px 14px;border-radius:9px;font-weight:600;font-size:14px}
-a.btn:hover{filter:brightness(1.1)}
-a.sec{display:inline-block;text-decoration:none;color:var(--ink);border:1px solid var(--line);padding:6px 11px;border-radius:9px;font-size:13px;background:var(--bg)}
-a.sec:hover{border-color:var(--c)}
-h3{margin:34px 0 0;font-size:18px}
-.what{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:12px}
-.what div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px}
-.what b{display:block}
-footer{padding-bottom:50px;color:var(--mut);font-size:13px}
-code{background:var(--card);border:1px solid var(--line);border-radius:5px;padding:0 5px}
+.hero{padding:44px 0 8px}
+.hero h1{font-size:clamp(30px,7vw,52px)}
+.flow3{display:grid;gap:12px;margin:26px 0 8px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));counter-reset:f}
+.flow3>div{counter-increment:f;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.flow3>div::before{content:counter(f);display:inline-flex;width:26px;height:26px;border-radius:50%;background:var(--brand,var(--acc));color:var(--on-brand,#fff);font-weight:700;font-size:13px;align-items:center;justify-content:center;margin-bottom:8px}
+.flow3 b{display:block;font-size:16px;margin-bottom:2px}
+.flow3 span{color:var(--mut);font-size:14.5px}
+.systems{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));margin:20px 0 10px}
+.sys{--c:var(--acc);display:flex;flex-direction:column;gap:10px;background:var(--card);border:1px solid var(--line);border-top:5px solid var(--c);border-radius:16px;padding:18px;text-decoration:none;color:inherit;box-shadow:var(--shadow);transition:transform .15s,box-shadow .15s}
+.sys:hover{transform:translateY(-3px);box-shadow:0 10px 28px #0002}
+.sys h2{font-size:21px;display:flex;align-items:center;gap:10px;margin:0}
+.sys h2 i{width:12px;height:12px;border-radius:50%;background:var(--c);display:inline-block}
+.sys .tag2{color:var(--mut);font-size:13px;margin:-6px 0 0}
+.sys .prob{font-size:16px;font-weight:600;line-height:1.4;margin:0}
+.sys .prob::before{content:"The problem  ";display:block;font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);font-weight:700;margin-bottom:2px}
+.sys p{margin:0;font-size:14.5px;color:var(--mut)}
+.sys p.prob{color:var(--ink)}
+.sys .meta{margin-top:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sys .go{margin-left:auto;background:var(--c);color:#fff;border-radius:10px;padding:8px 14px;font-weight:600;font-size:14px}
+.sys .chips{gap:5px}
+.more{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
+.more a{font-size:13px;text-decoration:none;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:5px 11px;background:var(--bg)}
+.more a:hover{border-color:var(--c)}
+.what{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin-top:12px}
+.what div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14.5px}
+.what b{display:block;margin-bottom:2px}
+@media(prefers-color-scheme:dark){.sys .go{color:#0e121a}}
 </style>
 </head>
 <body>
-<header>
-  <h1><span>Engineer Lab</span> · Internals Playgrounds</h1>
-  <p class="lead">Six interactive playgrounds that show <b>how popular systems work inside</b>. Bring your own data or manifest: each page runs a small real engine in your browser and animates every step. No backend, nothing to install.</p>
-  <div class="steps">
-    <div class="step"><b><i>1</i>Load your data</b>Paste or upload a CSV / JSON / JSONL (or a Kubernetes manifest) or use a sample.</div>
-    <div class="step"><b><i>2</i>Watch it live</b>An architecture overview with moving packets, plus a cluster simulation: pick the node count, then insert, update, delete and inject failures.</div>
-    <div class="step"><b><i>3</i>Open a phase</b>One drop-down per phase: animation and controls, plus how it works, pros and cons, failure modes and what to watch.</div>
-  </div>
-</header>
+<div class="wrap">
+  <header class="hero">
+    <div class="kick">Engineer Lab</div>
+    <h1>Learn how systems work by <span style="color:var(--acc)">rebuilding them</span></h1>
+    <p class="lead">Six interactive tours of real infrastructure. Each starts with a production problem, shows the obvious fix breaking, then reveals the design real systems use, running on your own data in the browser.</p>
+    <div class="flow3">
+      <div><b>Meet the problem</b><span>A concrete failure: a node dies mid-write, a 2 TB file does not fit in memory.</span></div>
+      <div><b>See the whole map</b><span>One diagram of the system. Trace a request through it, tap any part.</span></div>
+      <div><b>Rebuild it chapter by chapter</b><span>Naive attempt, real design, a playground you can break, and how you would implement it.</span></div>
+    </div>
+  </header>
 
-<main>
-  <div class="grid">
+  <main>
+    <div class="systems">
 
-    <article class="card" style="--c:#e25a1c">
-      <h2><span class="dot"></span>Apache Spark</h2>
-      <p class="tag">Distributed data processing</p>
-      <p>From a file to a result: partitions, lazy lineage, DAG stages, tasks and retries, shuffle, actions and events. Includes earlier RDD and planner deep dives.</p>
-      <div class="chips"><span class="chip">8 phases</span><span class="chip">RDD</span><span class="chip">DAGScheduler</span><span class="chip">shuffle</span><span class="chip">Parquet pushdown</span><span class="chip">AQE</span></div>
-      <div class="go">
-        <a class="btn" href="spark/visualize/04-spark-internals-end-to-end.html">Open end-to-end</a>
-        <a class="sec" href="spark/visualize/01-rdd-api-and-sources.html">RDD overview</a>
-        <a class="sec" href="spark/visualize/02-rdd-playground.html">RDD playground</a>
-        <a class="sec" href="spark/visualize/03-dag-planner-playground.html">DAG planner</a>
-      </div>
-    </article>
+      <a class="sys" style="--c:#e25a1c" href="spark/visualize/04-spark-internals-end-to-end.html">
+        <h2><i></i>Apache Spark</h2><p class="tag2">Distributed data processing</p>
+        <p class="prob">Turn 2 TB of order logs into a revenue-per-city report by 6 AM, when no single machine can finish in time.</p>
+        <p>Partitions, lazy lineage, DAG stages, tasks and retries, shuffle, actions.</p>
+        <div class="meta"><span class="chip">8 chapters</span><span class="go">Start the tour →</span></div>
+      </a>
 
-    <article class="card" style="--c:#2f6fed">
-      <h2><span class="dot"></span>ScyllaDB</h2>
-      <p class="tag">Wide-column store, leaderless</p>
-      <p>Token ring and replicas, consistency levels, commitlog → memtable → SSTable, Bloom filters, compaction strategies, tombstones, tablets, plus a Raft simulator.</p>
-      <div class="chips"><span class="chip">8 phases</span><span class="chip">token ring</span><span class="chip">QUORUM</span><span class="chip">STCS/LCS/TWCS</span><span class="chip">tablets</span><span class="chip">Raft</span></div>
-      <div class="go"><a class="btn" href="scylla/visualize/01-scylla-internals-end-to-end.html">Open playground</a></div>
-    </article>
+      <a class="sys" style="--c:#2f6fed" href="scylla/visualize/01-scylla-internals-end-to-end.html">
+        <h2><i></i>ScyllaDB</h2><p class="tag2">Wide-column store, leaderless</p>
+        <p class="prob">Keep accepting 30,000 orders a second while machines die and you add new ones.</p>
+        <p>Token ring, quorum, commit log and SSTables, compaction, tombstones, tablets, Raft.</p>
+        <div class="meta"><span class="chip">8 chapters</span><span class="go">Start the tour →</span></div>
+      </a>
 
-    <article class="card" style="--c:#d82c20">
-      <h2><span class="dot"></span>Redis</h2>
-      <p class="tag">In-memory data server</p>
-      <p>RESP and the single event loop, typed keyspace, TTL, eviction, AOF/RDB recovery, replication, transactions, Sentinel failover, cluster slots and streams.</p>
-      <div class="chips"><span class="chip">10 phases</span><span class="chip">event loop</span><span class="chip">AOF/RDB</span><span class="chip">failover</span><span class="chip">cluster</span><span class="chip">streams</span></div>
-      <div class="go"><a class="btn" href="redis/visualize/01-redis-internals-end-to-end.html">Open playground</a></div>
-    </article>
+      <a class="sys" style="--c:#d82c20" href="redis/visualize/01-redis-internals-end-to-end.html">
+        <h2><i></i>Redis</h2><p class="tag2">In-memory data server</p>
+        <p class="prob">Answer 50,000 requests a second (sessions, counters, leaderboards, job queues) in microseconds, and recover cleanly after a crash or a failover.</p>
+        <p>Event loop, typed keyspace, expiry, eviction, AOF and RDB, replication, failover, cluster slots, streams.</p>
+        <div class="meta"><span class="chip">10 chapters</span><span class="go">Start the tour →</span></div>
+      </a>
 
-    <article class="card" style="--c:#231f20">
-      <h2><span class="dot"></span>Apache Kafka</h2>
-      <p class="tag">Distributed event log</p>
-      <p>Partition logs and recovery, key routing, batching, consumer groups and rebalancing, retention and tiers, ISR and high watermark, idempotence, compaction, transactions, metadata quorum.</p>
-      <div class="chips"><span class="chip">11 phases</span><span class="chip">ISR / acks</span><span class="chip">exactly-once</span><span class="chip">compaction</span><span class="chip">KRaft-style quorum</span></div>
-      <div class="go"><a class="btn" href="kafka/visualize/01-kafka-internals-end-to-end.html">Open playground</a></div>
-    </article>
+      <a class="sys" style="--c:#4a5568" href="kafka/visualize/01-kafka-internals-end-to-end.html">
+        <h2><i></i>Apache Kafka</h2><p class="tag2">Distributed event log</p>
+        <p class="prob">Fan 50,000 order events a second out to twelve teams, in order, with no loss and no duplicates when a broker fails.</p>
+        <p>Partition logs, key routing, batching, consumer groups, replication and ISR, idempotence, compaction, transactions.</p>
+        <div class="meta"><span class="chip">11 chapters</span><span class="go">Start the tour →</span></div>
+      </a>
 
-    <article class="card" style="--c:#336791">
-      <h2><span class="dot"></span>PostgreSQL</h2>
-      <p class="tag">Relational database</p>
-      <p>SQL to logical plan, slotted pages and buffer pool, iterator executor, B-tree, MVCC, WAL and crash recovery, VACUUM, cost-based planner, spill, checkpoints, isolation and deadlocks.</p>
-      <div class="chips"><span class="chip">11 phases</span><span class="chip">MVCC</span><span class="chip">WAL</span><span class="chip">planner</span><span class="chip">isolation</span></div>
-      <div class="go"><a class="btn" href="postgres/visualize/01-postgres-internals-end-to-end.html">Open playground</a></div>
-    </article>
+      <a class="sys" style="--c:#336791" href="postgres/visualize/01-postgres-internals-end-to-end.html">
+        <h2><i></i>PostgreSQL</h2><p class="tag2">Relational database</p>
+        <p class="prob">Take 2,000 checkout transactions a second while finance runs 10-minute reports, and never lose a committed row to a power cut.</p>
+        <p>Pages and buffer pool, executor, B-tree, MVCC, WAL and recovery, VACUUM, planner, isolation.</p>
+        <div class="meta"><span class="chip">11 chapters</span><span class="go">Start the tour →</span></div>
+      </a>
 
-    <article class="card" style="--c:#326ce5">
-      <h2><span class="dot"></span>Kubernetes</h2>
-      <p class="tag">Container orchestration control plane</p>
-      <p>Paste a Deployment + Service: API server pipeline, etcd and watches, reconcile loops, scheduler, kubelet, kube-proxy, rolling updates, HPA and node failure.</p>
-      <div class="chips"><span class="chip">10 phases</span><span class="chip">controllers</span><span class="chip">scheduler</span><span class="chip">rolling update</span><span class="chip">self-healing</span></div>
-      <div class="go"><a class="btn" href="k8s/visualize/01-k8s-internals-end-to-end.html">Open playground</a></div>
-    </article>
+      <a class="sys" style="--c:#326ce5" href="k8s/visualize/01-k8s-internals-end-to-end.html">
+        <h2><i></i>Kubernetes</h2><p class="tag2">Container orchestration control plane</p>
+        <p class="prob">Keep 600 containers running on 120 machines through 50 deploys a day and a machine failing every other day, with no human in the loop.</p>
+        <p>API server, etcd and watches, controllers, scheduler, kubelet, services, rolling updates, autoscaling.</p>
+        <div class="meta"><span class="chip">10 chapters</span><span class="go">Start the tour →</span></div>
+      </a>
 
-  </div>
+    </div>
 
-  <h3>What these are (and are not)</h3>
-  <div class="what">
-    <div><b>Real mini-engines</b>Results come from small implementations running in your browser (parsers, planners, logs, simulators), not canned animations.</div>
-    <div><b>Learning models</b>Simplified on purpose: scaled timings, reduced protocols, no wire compatibility. Each page notes its limits.</div>
-    <div><b>Interactive</b>Change data, tuning and failure injection, then watch the invariant hold or break.</div>
-  </div>
-</main>
+    <div class="sec-h" style="margin-top:34px"><h2 style="font-size:20px">More Spark deep dives</h2></div>
+    <div class="more" style="--c:#e25a1c">
+      <a href="spark/visualize/01-rdd-api-and-sources.html">RDD API and sources</a>
+      <a href="spark/visualize/02-rdd-playground.html">RDD playground</a>
+      <a href="spark/visualize/03-dag-planner-playground.html">DAG planner playground</a>
+    </div>
 
-<footer>
-  <p>Part of <code>engineer-lab</code>. Everything runs client-side; your data never leaves the page.</p>
-</footer>
+    <div class="sec-h" style="margin-top:34px"><h2 style="font-size:20px">What these are (and are not)</h2></div>
+    <div class="what">
+      <div><b>Real mini-engines</b>Results come from small implementations running in your page (parsers, planners, logs, simulators), not canned animations.</div>
+      <div><b>Learning models</b>Simplified on purpose: scaled timings, reduced protocols, no wire compatibility.</div>
+      <div><b>Hands-on</b>Predict first, then play, scrub and break things. Works on a phone; your data never leaves the browser.</div>
+    </div>
+  </main>
+  <footer class="foot">Part of <b>engineer-lab</b>. Everything runs client-side.</footer>
+</div>
 </body>
 </html>

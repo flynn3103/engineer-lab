@@ -4,152 +4,159 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kubernetes Internals End-to-End</title>
+<link rel="stylesheet" href="../../assets/lab.css">
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2230;--mut:#667085;--line:#d9dee7;--acc:#326ce5;--acc2:#e25a1c;--ok:#1a9b5a;--bad:#d64545;
---p0:#dbe9ff;--p1:#ffe6cf;--p2:#d9f4e3;--p3:#f1defa;--p4:#fff3b8;--p5:#ffd9de;--p6:#d6f2f2;--p7:#e6e6e6;
---t0:#2f6fed;--t1:#e25a1c;--t2:#1a9b5a;--t3:#9b4fd0;--t4:#c9a400;--t5:#d6456b;--t6:#12a1a1;--t7:#6b7280}
-@media(prefers-color-scheme:dark){:root{--bg:#10141c;--card:#181e29;--ink:#e8ecf3;--mut:#93a0b5;--line:#2b3445;--acc:#6c9bff;--acc2:#ff7a3d;--ok:#43c783;--bad:#ff6b6b;
---p0:#1f3556;--p1:#53361c;--p2:#1d4630;--p3:#44274f;--p4:#524a17;--p5:#552630;--p6:#17454a;--p7:#3a3f48}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
-header,main{max-width:1180px;margin:auto;padding:0 16px}
-header{padding-top:24px}
-h1{margin:0 0 4px;font-size:25px}h1 span{color:var(--acc)}
-header p{margin:0;color:var(--mut)}
-section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-top:16px}
-section>h2{margin:0 0 6px;font-size:17px}
-section>h2 em{font-style:normal;background:var(--acc);color:#fff;border-radius:6px;padding:1px 8px;font-size:12px;margin-right:8px;vertical-align:2px}
-h3{font-size:14px;margin:14px 0 6px}
-button,select,input[type=text],textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 10px}
-button{cursor:pointer}button:hover{border-color:var(--acc)}
-button.primary{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
-button.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
-button:disabled{opacity:.45;cursor:default}
-.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
-label{color:var(--mut);font-size:13px}
-.mono,code,pre,textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
-textarea{width:100%;resize:vertical}
-pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;margin:0;max-height:320px;white-space:pre}
-.note{font-size:13px;color:var(--mut);margin:6px 0 0}
-.ok{color:var(--ok)}.bad{color:var(--bad)}
-.box{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--bg);min-width:0}
-.chips{display:flex;flex-wrap:wrap;gap:4px}
-.chip{font-family:ui-monospace,monospace;font-size:11.5px;border:1px solid var(--line);border-radius:5px;padding:1px 7px;background:var(--card)}
-.tag{display:inline-block;font-size:10.5px;padding:0 6px;border-radius:5px;background:var(--acc);color:#fff;margin-left:4px;font-weight:400}
-.tag.r{background:var(--bad)}.tag.g{background:var(--ok)}.tag.o{background:var(--acc2)}.tag.m{background:var(--t7)}
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.g2>div{min-width:0;overflow-x:auto}
+:root{--acc:#326ce5;--acc2:#e25a1c}
+@media(prefers-color-scheme:dark){:root{--acc:#6c9bff;--acc2:#ff7a3d}}
 @media(max-width:820px){.g2{grid-template-columns:1fr}}
-table{border-collapse:collapse;width:100%;font-size:12.5px}td,th{border:1px solid var(--line);padding:3px 7px;text-align:left;vertical-align:top}
-td.n,th.n{text-align:right}
-svg{display:block;width:100%}
-svg text{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;fill:var(--ink)}
-.jobgrid{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:10px}
-.jobgrid>span,.jobgrid>label{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
-.nv{flex:1;min-width:112px;border:1.5px solid var(--line);border-radius:10px;padding:6px 8px;cursor:pointer;background:var(--bg);font-size:12px;line-height:1.3}
-.nv b{display:block;font-size:12.5px}.nv small{color:var(--mut)}
-.nv.act{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 12%,var(--card))}
-.nv.done b::after{content:" ✓";color:var(--ok)}
-.blurb{padding:10px 12px;border-left:5px solid var(--acc);background:var(--bg);border-radius:8px;margin:6px 0 10px;font-size:14px}
-.blurb .ft{color:var(--mut);font-size:12px;margin-top:3px}
-.caption{margin:8px 0;padding:9px 12px;border-radius:8px;background:var(--bg);border-left:5px solid var(--acc);font-size:14.5px;min-height:44px}
-.caption.bad{border-left-color:var(--bad)}.caption.good{border-left-color:var(--ok)}
-.row{display:block;padding:2px 6px;margin:2px 0;border-radius:5px;border:1px solid var(--line);background:var(--bg);font-family:ui-monospace,monospace;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.big{font-size:28px;font-weight:700}
-.bar2{height:14px;border-radius:4px;display:inline-block;vertical-align:middle}
-.lrow{display:flex;align-items:center;gap:6px;margin:4px 0}.lrow>b{min-width:80px;font-size:12px;color:var(--mut)}
 .pod{display:inline-block;border:2px solid var(--line);border-radius:7px;padding:1px 6px;margin:2px;font-family:ui-monospace,monospace;font-size:10.5px;background:var(--card);vertical-align:top}
 .pod.ready{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,var(--card))}.pod.run{border-color:var(--t4)}
 .pod.pend{border-style:dashed;color:var(--mut)}.pod.term{border-color:var(--bad);text-decoration:line-through;opacity:.7}.pod.err{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,var(--card))}
 .node{border:2px solid var(--line);border-radius:10px;padding:8px;background:var(--bg);min-width:0}
 .node.dead{border-color:var(--bad);opacity:.75}
-.ovn{cursor:pointer}.ovn rect{stroke:var(--line);stroke-width:1.5;transition:opacity .2s}
-.ovn.sel rect{stroke:var(--acc);stroke-width:3.5}.ovn.cur rect{stroke:var(--ink);stroke-width:3}
-.ovn.act rect{stroke:var(--acc);stroke-width:4}
-.ove{fill:none;stroke:#8a94a6;stroke-width:1.8}.ove.ctl{stroke-dasharray:6 4}.ove.async{stroke-dasharray:2 4;stroke:var(--bad)}.ove.act{stroke:var(--acc);stroke-width:3.5}
-@keyframes flow{to{stroke-dashoffset:-20}}.flow{stroke-dasharray:6 4;animation:flow .6s linear infinite}
-.ove.flow{animation:flow .6s linear infinite}
-details.dd{border:1px solid var(--line);border-radius:10px;padding:8px 14px;margin-top:10px;background:var(--bg)}
-details.dd summary{cursor:pointer;font-weight:600}
-.simgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:900px){.simgrid{grid-template-columns:1fr}}.simgrid>div{min-width:0}
-.simlog{max-height:210px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:4px}.simev{font-size:12px;padding:2px 6px;border-radius:5px;cursor:pointer;border:1px solid transparent}.simev:hover{border-color:var(--line)}.simev.cur{background:color-mix(in srgb,var(--acc) 16%,var(--card));border-color:var(--acc)}.simev.fut{opacity:.45}
-.simtag{display:inline-block;color:#fff;font-size:10px;border-radius:4px;padding:0 5px}
-#acc{display:flex;flex-direction:column;gap:8px;margin-top:10px}
-details.acc{border:1px solid var(--line);border-radius:12px;background:var(--bg);overflow:hidden}
-details.acc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 14px;background:color-mix(in srgb,var(--pc) 55%,var(--card))}
-details.acc>summary::-webkit-details-marker{display:none}
-details.acc>summary::after{content:'▾';margin-left:auto;color:var(--mut);transition:transform .15s}
-details.acc:not([open])>summary::after{transform:rotate(-90deg)}
-details.acc[open]{border-color:var(--acc2);box-shadow:0 0 0 1px var(--acc2)}
-.accn{flex:none;width:26px;height:26px;border-radius:50%;background:var(--card);border:2px solid var(--acc2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
-.acct{display:flex;flex-direction:column;min-width:0}.acct small{color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.accg{font-size:11px;color:var(--mut);margin-left:auto;padding-right:6px;white-space:nowrap}@media(max-width:700px){.accg{display:none}}
-.accb{padding:12px 14px;background:var(--card)}
-.ddb{padding:8px 4px 4px;line-height:1.6}.ddb ul{margin:4px 0 0;padding-left:18px}.ddb li{margin:3px 0}
-.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:700px){.pc{grid-template-columns:1fr}}
-.pc .pro,.pc .con{border-radius:8px;padding:8px 12px;background:var(--bg);border-left:4px solid var(--ok)}.pc .con{border-left-color:var(--bad)}
-table.fm{width:100%;border-collapse:collapse;font-size:13px}table.fm th,table.fm td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}table.fm th{background:var(--bg);font-size:12px}
-@media(max-width:700px){table.fm{display:block;overflow-x:auto}}
-
+.view .row{white-space:normal;overflow-wrap:anywhere}
+.svgscroll.seq{border:1px solid var(--line);border-radius:10px;background:var(--bg);margin:6px 0 4px}
+.svgscroll.seq>svg{min-width:860px}
+.wide{overflow-x:auto;overscroll-behavior-x:contain}
+.wide>svg{min-width:600px}
+.view .node{margin-bottom:6px}
+.clusterbar{margin-top:10px}
+.view table.wrap{white-space:normal}.view table.wrap td{overflow-wrap:break-word}
+.wide>svg{max-height:none!important}
 </style>
 </head>
 <body>
-<header>
-  <h1><span>Kubernetes</span> Internals · End-to-End</h1>
-  <p>Paste a Deployment + Service manifest and watch a real in-browser control plane act on it: API server pipeline, etcd with watches, controllers, scheduler, kubelet, kube-proxy, rolling updates, autoscaling and node failure.</p>
-</header>
-<main>
-
-<section>
-  <h2><em>1</em>Your manifest &amp; cluster</h2>
-  <div class="bar">
-    <button data-sample="web">Web (nginx)</button><button data-sample="api">API (nodeSelector + big requests)</button><button data-sample="bad">Worker (bad image)</button>
-    <label>Worker nodes <select id="nn"><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
-    <label><input type="checkbox" id="taint"> taint last node (dedicated=gpu:NoSchedule)</label>
-  </div>
+<div id="dataSlot" hidden>
+<div class="sample-row"><span class="lbl">Every chapter below runs on a manifest:</span>
+  <button data-sample="web">Web (nginx, 3 replicas)</button><button data-sample="api">API (needs SSD + big requests)</button><button data-sample="bad">Worker (bad image)</button></div>
+<div class="jobgrid clusterbar">
+  <label>Worker nodes <select id="nn"><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+  <label><input type="checkbox" id="taint"> taint the last node <code>dedicated=gpu:NoSchedule</code></label>
+  <span class="note" id="statLine" style="margin:0"></span>
+</div>
+<div class="note" id="srcInfo"></div>
+<details class="mydata"><summary>Edit the manifest yourself (Deployment + Service YAML)</summary>
+  <p class="note" style="margin:0 0 8px">Change replicas, <code>resources.requests</code>, <code>readinessProbe.initialDelaySeconds</code>, <code>nodeSelector</code> or <code>rollingUpdate</code>; every chapter re-runs on it.</p>
   <textarea id="src" rows="16" spellcheck="false"></textarea>
-  <div class="note" id="srcInfo"></div>
-  <div class="bar">
-    <button class="primary" id="playAll">▶ Play all 10 phases</button>
-    <button id="pauseBtn" disabled>⏸ Pause</button>
-    <label>Speed <input type="range" id="speed" min="0.25" max="4" step="0.25" value="1"> <b id="speedV">1×</b></label>
-    <span class="note" id="statLine"></span>
-  </div>
-</section>
-
-<section>
-  <h2><em>◎</em>Architecture overview <span class="note" style="font-weight:400">components and how they connect · colors match the phases below</span></h2>
-  <div class="bar"><button class="primary" id="ovTrace">▶ Trace kubectl apply through the cluster</button><button id="ovClear">Clear</button><span class="note" id="ovCap"></span></div>
-  <div id="ovView"></div>
-  <div class="chips" style="margin-top:6px"><span class="chip">solid = data flow</span><span class="chip">dashed = control / watch</span><span class="chip" style="border-color:var(--bad)">dotted = status / events</span></div>
-  <div id="ovInfo"></div>
-</section>
-
-<section id="simSec">
-  <h2><em>▶</em>Live cluster simulation <span class="note" style="font-weight:400">watch inserts, updates and deletes travel between the nodes · edit the actions or inject failures</span></h2>
-  <div class="bar"><label>Scenario <select id="simScn"></select></label><label><span id="simNL">nodes</span> <select id="simN"></select></label><span id="simSet" class="bar" style="margin:0"></span>
-    <button class="primary" id="simPlay">▶ Play</button><button id="simStep">Step ›</button><button id="simReset">⏮</button><label>Speed <select id="simSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label></div>
-  <div class="note" id="simDesc" style="margin:0 0 6px"></div>
-  <svg id="simSvg" style="width:100%;border:1px solid var(--line);border-radius:10px;background:var(--bg)"></svg>
-  <div class="bar"><input type="range" id="simT" min="0" max="1000" value="0" step="10" style="flex:1"><span class="mono" id="simTv"></span></div>
-  <div id="simInsp" class="box" style="margin:8px 0"></div>
-  <div class="simgrid"><div><h3 style="margin-top:0">Actions <span class="note" style="font-weight:400">(time in ms, then op and arguments)</span></h3><textarea id="simAct" rows="7" spellcheck="false"></textarea>
-    <div class="bar"><select id="simOp"></select><span id="simArgs" class="bar" style="margin:0"></span><button id="simAdd">＋ add action</button></div></div>
-   <div><h3 style="margin-top:0">Event log <span class="note" style="font-weight:400">(click an event to see why)</span></h3><div id="simLog" class="simlog"></div></div></div>
-</section>
-
-<section id="phaseSec">
-  <h2><em>2</em>Inside the cluster, phase by phase</h2>
-  <div class="nav" id="nav"></div>
-  <div class="blurb" id="blurb"></div>
-  <div class="bar" id="phCtl"></div>
-  <div class="bar"><button id="prev">‹ Prev</button><button class="primary" id="anim">▶ Animate this phase</button><button id="nextB">Next ›</button></div>
-  <div id="phView"></div>
-</section>
-</main>
-
+</details>
+</div>
+<script src="../../assets/lab.js"></script>
 <script>
+const STORY={
+ system:'Kubernetes',
+ title:'Build the <span>Kubernetes</span> control plane from scratch',
+ lead:'Start from a real operations problem. Watch the obvious deploy script break. Then rebuild, piece by piece, the control plane that keeps hundreds of containers running without a human in the loop.',
+ problem:{
+  scene:[
+   'You run the platform team of a marketplace: <b>40 services</b>, about <b>600 containers</b> on <b>120 machines</b>. Teams ship 50 times a day, and some machine fails roughly every other day.',
+   'Today a deploy is a bash script that SSHes into machines and runs <code>docker run</code>. Last night a machine died at 3 a.m. and the <i>checkout</i> service ran on 1 of its 3 copies until someone woke up. Your job: make the cluster run itself.'],
+  musts:[
+   '<b>Declare, don\'t command.</b> Teams say <i>"3 copies of web:1.25"</i>; the system makes it true and <b>keeps</b> it true.',
+   '<b>Self-healing.</b> A dead container or a dead machine is replaced without a human.',
+   '<b>Smart placement.</b> Containers land only on machines with enough free CPU and memory and the right labels.',
+   '<b>Zero-downtime deploys</b> with a one-command rollback, and capacity that follows the load.',
+   '<b>One safe source of truth.</b> Many people and programs change state at once: no lost updates, no unauthorised writes.'],
+  naive:{title:'Your first instinct: a smarter deploy script',text:'A script picks hosts, SSHes in, runs the containers and edits the load balancer config. It works for the demo, then:',
+   breaks:['It runs <b>once</b>. When a machine dies an hour later, nothing notices and nothing restarts.','If it crashes halfway, the cluster is left in an unknown state: 2 of 3 copies, or old and new versions mixed.','Two engineers deploying at the same time overwrite each other, and the load balancer still points at IPs that no longer exist.']},
+  quest:'Rebuild the core of Kubernetes in 10 chapters. In each one you meet a problem, try the naive fix, see it fail, then see the real design running as a small control plane in your browser.'},
+ overview:{title:'The whole control plane on one page',lead:'Before the details, see how one <code>kubectl apply</code> travels. Press <b>Trace a request</b> to follow it, or tap a component to see what it receives and sends. Notice that nothing calls anything directly: every component reads and writes objects through the API server. Colors match the chapters.'},
+ chapters:[
+  {ask:'You run <code>kubectl apply</code>. Who actually starts the containers, and when?',
+   why:'One command has to end with 3 running, reachable containers on the right machines, and must still end there if any component crashes halfway through.',
+   v0:{name:'One imperative script that does everything in order',code:'for i in 1..3:\n  host = pickHost()\n  ssh(host, "docker run web:1.25")\nlb.add(host)',breaks:'It is a one-shot sequence. If it dies after the 2nd container, nobody knows a 3rd is missing. If a host dies tomorrow, nothing re-runs the loop. There is no record of what <i>should</i> be running.'},
+   design:'Store only the <b>desired state</b> in one place, and let independent components, each watching that place, push reality one step closer to it.',
+   predict:{q:'<code>kubectl apply</code> prints <i>"deployment.apps/web created"</i>. At that moment, how many containers are running?',opts:['All of them: apply waits until the pods are up','One: apply starts the first pod and the others follow','None yet: apply only stored the desired state'],ans:2,why:'apply returns as soon as the Deployment object is persisted. In the sequence below, the first container starts seconds later, after the controllers, the scheduler and a kubelet have each reacted to a watch event.'},
+   build:{intro:'The skeleton every later chapter plugs into:',
+    steps:['<b>Object model.</b> Every resource is <code>{kind, metadata, spec, status}</code>: <code>spec</code> is what you want, <code>status</code> is what is.','<b>One store, one front door.</b> Clients only write <code>spec</code> through the API server (chapter 2), which persists it (chapter 3).','<b>Watchers.</b> Each component subscribes to the kinds it cares about and writes the next piece of state: Deployment &rarr; ReplicaSet &rarr; Pods &rarr; <code>nodeName</code> &rarr; container &rarr; endpoints.','<b>No direct calls.</b> Components never talk to each other, only to the API server, so any one of them can crash and restart alone.'],
+    code:'kubectl:    PUT desired object -> return\ncontroller: on change(obj): write next object\nscheduler:  on unbound pod: write pod.nodeName\nkubelet:    on pod for me: start it, write status',
+    rule:'The store holds the <b>only truth</b>. Every component can be killed and restarted at any time and must rebuild everything it needs from the store.'}},
+  {ask:'Anyone with network access can write cluster state. How do you stop bad or malicious objects?',
+   why:'One malformed Deployment, say a selector that matches no pod, would make controllers loop forever. One leaked credential with write access is a full cluster takeover.',
+   v0:{name:'Let every client write straight to the database',code:'db.put("/deployments/web", yaml)   // anyone, any shape',breaks:'No identity, no permissions, no defaults, no validation. A Deployment whose selector does not match its labels is stored, and the ReplicaSet controller keeps creating pods it can never count.'},
+   design:'Put <b>one gatekeeper</b> in front of the store: every request passes the same chain, and the first failing stage rejects it before anything is written.',
+   predict:{q:'Bob may create Deployments, but his manifest has <code>selector: app=web</code> while the pod labels say <code>app=other</code>. Pick <i>selector &ne; labels</i> below. What happens?',opts:['It is stored; the ReplicaSet simply never finds its pods','It is rejected with 422 at validation, and nothing reaches etcd','It is rejected with 403 by RBAC'],ans:1,why:'Bob passes authentication and RBAC, defaults are filled in, then schema validation refuses a selector that does not match the template labels (HTTP 422 Invalid). Nothing is persisted, so no controller ever sees it.'},
+   build:{steps:['<b>Authenticate:</b> map the bearer token or client certificate to a user and groups, or answer 401.','<b>Authorize (RBAC):</b> does any role bound to this user allow <code>verb</code> on <code>resource</code> in this namespace? If not, 403.','<b>Mutating admission:</b> fill defaults and inject fields (for example a sidecar).','<b>Validate</b> the final object (422), then run <b>validating admission</b> (quotas, policies).','<b>Persist</b> with the resourceVersion check (chapter 3), then fan the change out to watchers.'],
+    code:'user = authn(req) or 401\nif !rbac.allows(user, req.verb, req.resource): 403\nobj = mutate(req.obj)            // defaults, injection\nerrs = validate(obj) + admit(obj) // 422 / 403\nif errs: return errs\nreturn store.write(obj)          // 201, or 409 if stale',
+    rule:'Nothing reaches the store without passing <b>every</b> stage, and the API server is the <b>only</b> component that talks to the store.'}},
+  {ask:'Two clients update the same Deployment at the same time. Whose change survives?',
+   why:'Controllers, kubectl and autoscalers all write the same objects concurrently, and 30 controllers polling every object every second would melt the store.',
+   v0:{name:'Read, modify, write back, and poll for changes',code:'obj = get(key); obj.replicas = 5; put(key, obj)\nwhile true: for o in list(all): react(o); sleep(1)',breaks:'Two writers read the same version; the second <code>put</code> silently erases the first (<b>lost update</b>). Polling costs <i>controllers &times; objects</i> reads per second and still reacts up to a second late.'},
+   design:'Version every write with one global <b>revision</b>: updates become compare-and-swap on <code>resourceVersion</code>, and readers <b>stream changes</b> from a revision instead of polling.',
+   predict:{q:'A and B both read the Deployment at resourceVersion 12. A writes first. Then B writes, still sending rv 12. Choose <i>update race (409)</i> and predict B\'s result.',opts:['409 Conflict: B must re-read (now rv 13) and retry','B\'s write wins and A\'s change is lost','The store merges both changes automatically'],ans:0,why:'B\'s write is conditional on rv 12, but the object is now at rv 13, so it is refused. B re-reads, re-applies its change on top of A\'s, and succeeds. No locks, and no lost updates.'},
+   build:{steps:['Keep one global counter <code>rev</code>; every write increments it and stamps the object with <code>resourceVersion = rev</code>.','<b>Conditional update:</b> accept a write only if its <code>resourceVersion</code> equals the stored one, otherwise answer 409.','Keep a history of changes. <b>Watch(fromRev)</b> streams every ADDED / MODIFIED / DELETED after <code>fromRev</code>.','<b>Compaction</b> drops old history; a watch from a compacted revision answers 410 Gone, and the client must LIST again.','Clients build an <b>informer</b>: LIST once, remember rev, WATCH from it, keep a local cache.'],
+    code:'write(obj, expectRv):\n  if store[obj.key].rv != expectRv: return 409\n  rev += 1; obj.rv = rev; store[obj.key] = obj\n  history.append({rev, type, obj}); notify watchers\nwatch(fromRev):\n  if fromRev < compactedRev: return 410\n  stream history after fromRev, then live events',
+    rule:'A write based on a stale version is <b>rejected, never merged silently</b>, and watchers see changes in revision order.'}},
+  {ask:'A pod is deleted, and the "pod deleted" event is lost. Is it ever replaced?',
+   why:'Events get lost: connections drop, controllers restart, nodes reboot. A system that only works when every single event arrives will drift away from what you asked for.',
+   v0:{name:'Edge-triggered handlers: react to each event',code:'onPodDeleted(pod):\n  createPod(pod.template)',breaks:'If the event is missed (watch hiccup, controller restart), the pod is <b>never</b> replaced. If an event is delivered twice, you get one pod too many. Tick <i>lose the watch event</i> below to see the difference.'},
+   design:'Make controllers <b>level-triggered</b>: whatever woke them up, they re-read the current state, compare it with the desired state, and take the smallest step to close the gap.',
+   predict:{q:'Select <i>delete a pod</i> and tick <i>lose the watch event</i>. What happens to the missing replica?',opts:['Nothing: the controller never heard about it','A human has to restart the controller manager','It is recreated on a later reconcile'],ans:2,why:'The ReplicaSet controller does not remember events, it counts pods. The next time it runs for that ReplicaSet (here a periodic resync; in a real cluster typically a re-list after the broken watch) it sees 2 &lt; 3 and creates one. Duplicated events are just as harmless.'},
+   build:{steps:['<b>Informer:</b> LIST + WATCH into a local cache (chapter 3).','On any event, push the <b>object key</b> (not the event) onto a de-duplicating <b>work queue</b>.','<b>Reconcile(key):</b> read desired from the cache, count the observed children, create or delete the difference.','Re-queue with back-off on errors; resync or re-list as a safety net.','Children carry an <code>ownerReference</code> so controllers can find them and garbage collection can delete them.'],
+    code:'on any event for obj: queue.add(ownerKey(obj))\nworker: key = queue.pop()\n  rs   = cache.get(key)\n  pods = cache.pods(ownedBy = key, notTerminating)\n  diff = rs.replicas - len(pods)\n  if diff > 0: create diff pods\n  if diff < 0: delete -diff pods (unready first)',
+    rule:'Reconcile from <b>current state, not from events</b>: running it twice, late or after a missed event gives the same result.'}},
+  {ask:'A new pod needs 200m CPU and an SSD. Which of 120 machines should run it?',
+   why:'Put it on a full node and it gets starved or killed. Ignore labels and taints and a database lands on a disk-less GPU box. Decide badly and some nodes sit idle while others overflow.',
+   v0:{name:'Round-robin over the nodes',code:'node = nodes[i++ % nodes.length]',breaks:'It ignores free capacity, <code>nodeSelector</code> and taints. Pods land on full nodes or on nodes that cannot run them, and you only find out when they fail.'},
+   design:'Separate <b>hard rules</b> from <b>preferences</b>: filter out every node that cannot run the pod, score the ones that can, then bind the pod by writing a single field.',
+   predict:{q:'Web sample, 3 nodes of 2000m CPU, pods request 200m but really use about 20m. Slide <i>Pods to schedule</i> to 36. How many get a node?',opts:['All 36: real usage is tiny','30: the scheduler adds up requests, so pod 31 stays Pending','10: one node at a time is filled first'],ans:1,why:'Filtering compares the sum of <b>requests</b> with the node capacity: 10 &times; 200m fills 2000m on each node. Pods 31 to 36 stay Pending with <i>Insufficient cpu</i>, even though the CPUs are mostly idle.'},
+   build:{steps:['Watch for pods with an empty <code>spec.nodeName</code>.','<b>Filter:</b> drop nodes that are not Ready, have a taint the pod does not tolerate, miss a <code>nodeSelector</code> label, or lack free requested CPU or memory.','<b>Score</b> the survivors: least-allocated (spread), most-allocated (bin-pack), minus a penalty for replicas of the same app.','<b>Bind:</b> write <code>spec.nodeName</code>. If nothing passes, record the reasons ("0/3 nodes available: ...") and retry later.'],
+    code:'feasible = [n for n in nodes if ready(n) and tolerates(pod, n)\n            and matches(pod.nodeSelector, n.labels)\n            and n.free.cpu >= pod.cpu and n.free.mem >= pod.mem]\nif !feasible: pod.status = Unschedulable(reasons); retry\nbest = max(feasible, key = score)\npatch(pod, nodeName = best)',
+    rule:'Never bind a pod to a node where the <b>sum of requests</b> would exceed capacity or a hard constraint fails.'}},
+  {ask:'A pod is bound to node-1. What turns that record into a running, healthy container?',
+   why:'Image pulls fail, apps take seconds to boot, containers crash. The control plane only sees what the node reports, so "started" and "ready to serve" must be reported separately.',
+   v0:{name:'Start the container once and mark it Running',code:'onPodBound(pod):\n  runtime.run(pod.image)\n  setStatus(pod, "Running")',breaks:'A failed pull is never retried, so the pod is silently stuck. And "Running" is reported while the app is still booting, so traffic arrives before it can answer.'},
+   design:'Put an <b>agent on every node</b> that reconciles its own pods: watch the pods bound to me, drive the container runtime toward their spec, and report observed status, including readiness, back to the API server.',
+   predict:{q:'Pick <i>bad image tag</i>. What happens to the pod?',opts:['It stays put and the kubelet keeps retrying the pull','The scheduler moves it to another node','The API server rejects the Deployment: no such image'],ans:0,why:'Neither the API server nor the scheduler looks at registries. The kubelet reports <code>ErrImagePull</code>, then <code>ImagePullBackOff</code>, and retries with an exponentially growing delay. The pod never becomes Ready, so it never receives traffic.'},
+   build:{steps:['Watch pods whose <code>spec.nodeName</code> is this node.','For each one, reconcile through the runtime interface (CRI): pull the image, create and start the container. On failure, retry with exponential back-off.','Report <code>phase</code> (Pending &rarr; Running) and a separate <code>ready</code> condition driven by the readiness probe.','On deletion: SIGTERM, wait the grace period, SIGKILL, then remove the pod object.','Renew the node heartbeat (a Lease) every few seconds (chapter 10).'],
+    code:'for pod in podsBoundTo(me):\n  c = runtime.get(pod)\n  if pod.deleting: stopGracefully(c); continue\n  if !c: try runtime.pull+start(pod) except: backoff(pod)\n  setStatus(pod, phase = c.state, ready = probe(c))',
+    rule:'A pod is reported <b>Ready only after its readiness probe passes</b>, and status always reflects what the node actually observed.'}},
+  {ask:'Pods come and go with new IPs every deploy. How do clients find a working one?',
+   why:'In a single rolling update every pod IP changes. Hard-coded IPs break on the next deploy, and traffic sent to a pod that is still booting or already gone fails.',
+   v0:{name:'Hard-code pod IPs in the client, or DNS round-robin',code:'upstreams = ["10.244.0.2", "10.244.1.2", "10.244.2.2"]',breaks:'The list is stale after every deploy, includes pods that are not ready yet, and DNS caches keep stale answers for minutes.'},
+   design:'Give the service one <b>stable virtual IP</b>, keep a live list of <b>ready</b> pod IPs (Endpoints), and let every node rewrite packets for that virtual IP to one of them.',
+   predict:{q:'During a rolling update, set <i>grace period</i> to <b>0 s</b> and watch the failed counter. Why do some requests fail?',opts:['Some nodes still route to an old pod for a moment after its container has already exited','The Service gets a new ClusterIP during the update','New pods get traffic before they are Ready'],ans:0,why:'Removing the pod from Endpoints and stopping its container happen in parallel, and each node\'s kube-proxy needs a moment to reprogram its rules. With grace 0 the container is gone before every node has caught up. With a 2 s grace period it keeps serving through that lag: 0 failures.'},
+   build:{steps:['A Service is <code>{selector, port, targetPort}</code> plus a stable ClusterIP allocated once.','<b>Endpoints controller:</b> list pods matching the selector that are Running, Ready and not terminating; write their IPs.','<b>kube-proxy</b> on every node watches Endpoints and programs kernel rules: packets to <code>ClusterIP:port</code> are DNAT-ed to a random endpoint.','Apps must drain on SIGTERM: keep serving during the grace period while the rules propagate.'],
+    code:'endpoints(svc) = sorted(p.ip for p in pods\n  if matches(svc.selector, p.labels) and p.ready and !p.deleting)\nkube-proxy, on endpoints change:\n  rules[svc.clusterIP] = endpoints   // DNAT, equal odds',
+    rule:'Only <b>Ready, non-terminating</b> pods are endpoints, and a pod keeps serving until every node has stopped routing to it.'}},
+  {ask:'Ship version 2 to all pods without ever dropping below full capacity. How?',
+   why:'50 deploys a day. Each one must keep serving, must stop by itself if v2 is broken, and must be undoable in seconds.',
+   v0:{name:'Delete all old pods, then create the new ones',code:'scale(oldVersion, 0)\nscale(newVersion, replicas)',breaks:'Downtime between the last old pod stopping and the first new pod becoming Ready. If v2 is broken, <b>everything</b> is down. (This is the <i>Recreate</i> strategy in the capstone.)'},
+   design:'A new pod template gets its <b>own ReplicaSet</b>. The Deployment controller shifts replicas from old to new in steps bounded by <code>maxSurge</code> and <code>maxUnavailable</code>, counting only Ready pods.',
+   predict:{q:'Set maxSurge <b>1</b>, maxUnavailable <b>0</b> and choose <i>broken tag</i>. What does the rollout do?',opts:['Replaces the old pods one by one and the service goes down','Rolls back to the old version automatically','Stalls with 1 unready new pod while all old pods keep serving'],ans:2,why:'With maxUnavailable 0, an old pod is only removed once a new one is Ready, and that never happens. maxSurge 1 caps the extra pods at one. Kubernetes does not roll back on its own: it reports the stall (progress deadline exceeded) and you run <code>rollout undo</code>, which you can tick below.'},
+   build:{steps:['Hash the pod template; the ReplicaSet named <code>deploy-&lt;hash&gt;</code> is the "new" one. Create it if it is missing.','<b>Scale up</b> the new ReplicaSet while the total stays at most <code>replicas + maxSurge</code>.','<b>Scale down</b> old ReplicaSets only while Ready pods stay at least <code>replicas - maxUnavailable</code>.','Run on every change (pod Ready, pod gone): the rollout is just this reconcile repeated.','Keep old ReplicaSets at 0 replicas: rollback means making an old template the new one again.'],
+    code:'new = rsFor(hash(template)) or create(0 replicas)\nup = min(R - new.replicas, R + maxSurge - total)\nscale(new, new.replicas + up)\nbudget = ready - (R - maxUnavailable)\nfor old in oldRS: take = min(old.replicas, budget)\n  scale(old, old.replicas - take); budget -= take',
+    rule:'During a rollout, <b>Ready &ge; replicas &minus; maxUnavailable</b> and <b>total &le; replicas + maxSurge</b> at every moment.'}},
+  {ask:'Traffic jumps 7x at 8 p.m. How many replicas do you need, and when do you scale back?',
+   why:'Too few pods and requests time out; too many and you pay for idle machines. Load moves faster than any human can edit YAML.',
+   v0:{name:'Add one pod above 80% CPU, remove one below 40%',code:'every 15s:\n  if cpu > 80%: replicas += 1\n  if cpu < 40%: replicas -= 1',breaks:'A 7x spike needs many steps of +1, so it stays overloaded for minutes. When load hovers near a threshold the count flaps up and down every period.'},
+   design:'Compute the needed replicas <b>proportionally</b> from utilisation versus a target, scale up quickly, and scale down only to the highest recommendation seen during a stabilisation window.',
+   predict:{q:'4 Ready pods average 90% CPU (of their request) and the target is 60%. What replica count does the HPA ask for?',opts:['5: add one pod per period','6','8: double the replicas under load'],ans:1,why:'desired = ceil(current &times; utilisation / target) = ceil(4 &times; 1.5) = 6. Read the same formula in the caption below as the load changes. Utilisation is measured against the pod <b>request</b>, which is why HPA needs requests set.'},
+   build:{steps:['Every period, read the average CPU of Ready pods and divide by the CPU <b>request</b> to get utilisation.','<code>raw = ceil(current &times; util / target)</code>; ignore changes within a ~10% tolerance.','Clamp to <code>[min, max]</code>; limit how much one step may scale up.','<b>Scale down</b> to the highest recommendation inside the stabilisation window, then write <code>spec.replicas</code>; the Deployment does the rest.'],
+    code:'util = avg(cpuUsage(readyPods)) / cpuRequest\nraw  = ceil(current * util / target)\nif abs(util / target - 1) <= 0.1: raw = current\nwindow.push(raw)\ndesired = raw > current ? raw : max(window)\nscale(deployment, clamp(desired, min, max))',
+    rule:'Scale on a <b>ratio to the target</b>, and never scale down faster than the stabilisation window allows.'}},
+  {ask:'A machine loses power at 3 a.m. How does the cluster notice and heal?',
+   why:'A dead node sends nothing. The control plane cannot tell <i>dead</i> from <i>slow network</i>, and reacting to every blip would reshuffle thousands of pods.',
+   v0:{name:'One missed heartbeat: delete its pods and move them',code:'if now - node.lastBeat > 2s:\n  for pod in podsOn(node): delete(pod)',breaks:'A 3-second network blip reshuffles every pod on the node. A partitioned node that is actually alive keeps running the old copies while new ones start elsewhere.'},
+   design:'Treat silence as <b>suspicion, not death</b>: after a grace period mark the node NotReady and taint it, evict its pods only after a toleration period, and let the normal ReplicaSet loop create replacements.',
+   predict:{q:'Press Play. When do replacements for the dead node\'s pods start?',opts:['As soon as the first heartbeat is missed','After a grace period plus an eviction toleration','Never: an operator has to delete them by hand'],ans:1,why:'Here the node is marked NotReady about 9 s after it dies (8 s grace, checked every second), and its pods are evicted after the toleration you set (6 s by default). With real defaults (tens of seconds of grace plus a 300 s toleration) that is about 5 minutes, which is why critical workloads lower <code>tolerationSeconds</code>.'},
+   build:{steps:['The kubelet renews a heartbeat (Lease) every few seconds.','<b>Node controller:</b> no heartbeat for <code>grace</code> &rarr; mark NotReady and add the <code>unreachable:NoExecute</code> taint.','<b>Taint eviction:</b> pods that do not tolerate the taint longer than <code>tolerationSeconds</code> are marked for deletion.','The ReplicaSet controller sees fewer live pods and creates replacements; the scheduler skips the NotReady node; Endpoints drop the lost pods.','When the node returns, remove the taint; its kubelet cleans up the old containers.'],
+    code:'every 1s, for node in nodes:\n  if now - lastBeat(node) > GRACE and node.ready:\n    node.ready = false; taint(node, unreachable:NoExecute)\n  for pod on NotReady node past tolerationSeconds:\n    markDeleted(pod)   // ReplicaSet loop replaces it\n  if beats again: node.ready = true; untaint(node)',
+    rule:'Only <b>prolonged</b> silence evicts pods, and replacement always goes through the same reconcile loops, never special failure code.'}}
+ ],
+ milestones:[
+  {t:'Versioned object store with watch',test:'Two concurrent updates from the same resourceVersion: exactly one gets 409. A watch from revision N replays every later change in order; from a compacted revision it gets 410.'},
+  {t:'API server in front of it',test:'A viewer creating a Deployment gets 403 and the store revision does not change; a selector that does not match the labels gets 422.'},
+  {t:'Informer, work queue, ReplicaSet controller',test:'Delete a pod: it is recreated. Drop the DELETED event: it is still recreated after the next resync. Kill and restart the controller: no duplicates.'},
+  {t:'Scheduler',test:'A pod never lands on a node failing its nodeSelector or taints; when requests do not fit, it stays Pending with a readable reason.'},
+  {t:'Kubelet with a fake runtime',test:'A pod goes Pending &rarr; Running &rarr; Ready; a bad image shows ErrImagePull then ImagePullBackOff with growing retry delays.'},
+  {t:'Endpoints and kube-proxy',test:'Scale down under constant traffic with a grace period longer than the rule-sync lag: zero failed requests.'},
+  {t:'Deployment controller (rolling update)',test:'Through a whole rollout, Ready never drops below replicas &minus; maxUnavailable and the total never exceeds replicas + maxSurge; a broken image stalls instead of spreading.'},
+  {t:'HPA and node lifecycle',test:'A 7x load step reaches ceil(R &times; util / target) replicas within a few periods; killing a node gets its pods replaced after grace + toleration.'}],
+ capstone:{title:'Put it together: a live cluster',lead:'Everything from the chapters, running at once. Play a scenario, scrub the timeline, tap any component or event to see why it happened, then switch the update strategy to <i>Recreate</i> or kill a worker node.'}
+};
+</script>
+<script>
+Lab.mount(STORY);
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const J=x=>{try{return JSON.stringify(x)}catch{return String(x)}};
@@ -370,9 +377,9 @@ class Sim{
   at(dt,fn){this.q.push({t:this.t+dt,k:this.k++,fn})}
   run(until){while(this.q.length){let bi=0;for(let i=1;i<this.q.length;i++){const a=this.q[i],b=this.q[bi];if(a.t<b.t||(a.t===b.t&&a.k<b.k))bi=i}const e=this.q[bi];if(e.t>until)break;this.q.splice(bi,1);this.t=e.t;e.fn()}this.t=until}
   emit(from,to,msg,kind='call'){this.log.push({t:this.t,from,to,msg,kind})}
-  key(kind,name){return`/registry/${kind.toLowerCase()}s/${name}`}
+  key(kind,name){return`/registry/${kind.toLowerCase()}${kind.endsWith('s')?'':'s'}/${name}`}
   get(kind,name){const e=this.kv.get(this.key(kind,name));return e?C(e.obj):null}
-  list(kind){const pre=`/registry/${kind.toLowerCase()}s/`;return[...this.kv.entries()].filter(([k])=>k.startsWith(pre)).map(([k,e])=>C(e.obj))}
+  list(kind){const pre=`/registry/${kind.toLowerCase()}${kind.endsWith('s')?'':'s'}/`;return[...this.kv.entries()].filter(([k])=>k.startsWith(pre)).map(([k,e])=>C(e.obj))}
   write(obj,verb,who,expectRv,quiet){
     const k=this.key(obj.kind,obj.metadata.name),cur=this.kv.get(k);
     if(verb==='create'&&cur)return{err:409};
@@ -570,9 +577,6 @@ function build(){
 }
 
 /* ================= player ================= */
-let gen=0,paused=false,speed=1,cur=0,playingAll=false;
-function animate(draw,dur){const g=++gen;let el=0,last=null;return new Promise(res=>{function frame(now){if(g!==gen){res(false);return}if(last===null)last=now;const dt=now-last;last=now;if(!paused)el+=dt*speed;const p=Math.min(1,el/dur);draw(p);if(p<1)requestAnimationFrame(frame);else res(true)}requestAnimationFrame(frame)})}
-const sleep=ms=>new Promise(r=>setTimeout(r,ms/speed));
 const podCls=p=>p.term?'term':/Err|BackOff/.test(p.reason||'')?'err':p.ready?'ready':p.phase==='Running'?'run':'pend';
 const podChip=p=>`<span class="pod ${podCls(p)}" title="${esc(p.name)} · ${esc(p.reason||p.phase)}${p.ip?' · '+p.ip:''}">${esc(p.name.slice(-5))}${p.term?' ✕':!p.ready&&p.phase==='Running'?' …':''}</span>`;
 function snapAt(sim,t){let b=sim.snaps[0];for(const s of sim.snaps){if(s.t<=t)b=s;else break}return b}
@@ -597,9 +601,9 @@ function draw1(p){
   sv+='</svg>';
   const fin=snapAt(sim,tEnd),dep=sim.get('Deployment',S.dep.metadata.name),ep=S.svc?sim.get('Endpoints',S.svc.metadata.name):null;
   return`<div class="caption">${esc(S.dep.metadata.name)}: <span class="mono">kubectl apply</span> → ${show[Math.max(0,k-1)]?esc(show[Math.max(0,k-1)].msg):''} <b>(${show[Math.max(0,k-1)]?sec(show[Math.max(0,k-1)].t):''})</b>. ${p>=1?`All ${S.dep.spec.replicas} pod(s) ready after <b>${sec(tEnd)}</b>.`:''}</div>
-  <div class="g2" style="grid-template-columns:1.7fr 1fr"><div>${sv}</div>
-  <div><h3 style="margin-top:0">Resulting state (t=${sec(tEnd)})</h3>${(fin.nodes).map(n=>`<div class="node ${n.alive?'':'dead'}" style="margin-bottom:6px"><b>${n.name}</b> <span class="tag ${n.ready?'g':'r'}">${n.ready?'Ready':'NotReady'}</span><div>${fin.pods.filter(x=>x.node===n.name).map(podChip).join('')||'<span class="note">no pods</span>'}</div></div>`).join('')}${fin.pods.some(x=>!x.node)?`<div class="node"><b>Pending (unscheduled)</b><div>${fin.pods.filter(x=>!x.node).map(podChip).join('')}</div></div>`:''}
-  <table><tr><td>Deployment</td><td class="mono">${dep&&dep.status?esc(J(dep.status)):'-'}</td></tr><tr><td>Endpoints</td><td class="mono">${ep?esc(ep.spec.addrs.join(', ')||'(none ready)'):'-'}</td></tr><tr><td>etcd revision</td><td class="mono">${sim.rev}</td></tr></table></div></div>
+  <div class="svgscroll seq">${sv}</div>
+  <h3>Resulting state (t=${sec(tEnd)})</h3><div class="g2"><div>${(fin.nodes).map(n=>`<div class="node ${n.alive?'':'dead'}" style="margin-bottom:6px"><b>${n.name}</b> <span class="tag ${n.ready?'g':'r'}">${n.ready?'Ready':'NotReady'}</span><div>${fin.pods.filter(x=>x.node===n.name).map(podChip).join('')||'<span class="note">no pods</span>'}</div></div>`).join('')}${fin.pods.some(x=>!x.node)?`<div class="node"><b>Pending (unscheduled)</b><div>${fin.pods.filter(x=>!x.node).map(podChip).join('')}</div></div>`:''}</div>
+  <div><table class="kv"><tr><td>Deployment</td><td class="mono">${dep&&dep.status?esc(J(dep.status)):'-'}</td></tr><tr><td>Endpoints</td><td class="mono">${ep?esc(ep.spec.addrs.join(', ')||'(none ready)'):'-'}</td></tr><tr><td>etcd revision</td><td class="mono">${sim.rev}</td></tr></table></div></div>
   <div class="note">Nothing here is imperative: <b>kubectl only writes desired state</b>. Each component watches the API server for objects it cares about and writes the next piece of state, so the whole rollout emerges from independent reconcile loops.</div>`;
 }
 
@@ -645,7 +649,7 @@ function draw2(p){
   const R=pipeline({...k,obj},40),show=Math.max(1,Math.ceil(p*R.st.length)),last=R.st[Math.min(show,R.st.length)-1];
   const stages=['Authentication','Authorization (RBAC)','Mutating admission','Schema validation','Validating admission (ResourceQuota)','Persist to etcd','Response + watch fan-out'];
   const boxes=stages.map((s,i)=>{const r=R.st.find(x=>x.n===s),idx=R.st.indexOf(r),vis=r&&idx<show,col=!r?'var(--line)':!vis?'var(--line)':r.ok?'var(--ok)':'var(--bad)';return`<div class="row" style="border-color:${col};${r&&vis?'':'opacity:.4'}"><b>${i+1}. ${esc(s)}</b>${vis?` · <span class="${r.ok?'ok':'bad'}">${r.ok?'✔':'✘'}</span> ${esc(r.msg)}`:''}</div>`}).join('');
-  return`<div class="caption ${R.code>=400?'bad':'good'}">${esc(k.verb.toUpperCase())} ${k.res} as <b>${esc((USERS[k.token]||{name:'(anonymous)'}).name)}</b> → <b>HTTP ${R.code}</b>${R.code>=400?' — the request stops at the first failing stage and nothing is written to etcd':''}</div>
+  return`<div class="caption ${R.code>=400?'bad':'good'}">${esc(k.verb.toUpperCase())} ${k.res} as <b>${esc((USERS[k.token]||{name:'(anonymous)'}).name)}</b> → <b>HTTP ${R.code}</b>${R.code>=400?' — the request stops at the first failing stage and nothing is written to etcd':''}${OPT.preq==='quota'?'<div class="note" style="margin-top:4px"><b>Simplified:</b> a real <span class="mono">requests.cpu</span> ResourceQuota is checked when <i>Pods</i> are created, so the Deployment itself would be accepted and the ReplicaSet\'s pod creations would be refused (visible as events on the ReplicaSet).</div>':''}</div>
   <div class="g2"><div><h3 style="margin-top:0">Request pipeline</h3>${boxes}</div>
   <div><h3 style="margin-top:0">Mutating admission: defaults injected into your Deployment</h3>${R.added&&R.added.length?`<pre>${esc(R.added.join('\n'))}</pre>`:'<div class="note">(request rejected before mutation, or nothing to add)</div>'}<h3>What gets stored</h3><pre>${esc(J({kind:'Deployment',metadata:{name:S.dep.metadata.name,namespace:'default',resourceVersion:R.code===201?'41':'-'},spec:{replicas:obj.spec.replicas,strategy:S.dep.spec.strategy,selector:obj.spec.selector,containers:obj.spec.template.spec.containers.map(c=>({name:c.name,image:c.image,requests:{cpu:c.cpu+'m',memory:c.mem+'Mi'}}))}}))}</pre></div></div>
   <div class="note">Every request goes through the same chain: <b>authenticate</b> who you are, <b>authorize</b> (RBAC) what you may do, <b>mutating admission</b> fills defaults, the object is <b>validated</b>, <b>validating admission</b> (quotas, policies) can still reject it, and only then is it persisted to etcd and fanned out to watchers. The API server is the only component that talks to etcd.</div>`;
@@ -657,9 +661,9 @@ function draw2(p){
 function draw3(p){
   const sim=simApply();
   if(OPT.econf==='conflict'){
-    const steps=[['A','GET Deployment/'+S.dep.metadata.name,'rv 12'],['B','GET Deployment/'+S.dep.metadata.name,'rv 12'],['A','PUT replicas=5, If-Match rv 12','OK → rv 13'],['B','PUT image=v2, If-Match rv 12','409 Conflict (object is at rv 13)'],['B','GET Deployment/'+S.dep.metadata.name,'rv 13 (replicas=5)'],['B','PUT replicas=5,image=v2, If-Match rv 13','OK → rv 14']];
+    const steps=[['A','GET Deployment/'+S.dep.metadata.name,'rv 12'],['B','GET Deployment/'+S.dep.metadata.name,'rv 12'],['A','PUT replicas=5, resourceVersion 12','OK → rv 13'],['B','PUT image=v2, resourceVersion 12','409 Conflict (object is at rv 13)'],['B','GET Deployment/'+S.dep.metadata.name,'rv 13 (replicas=5)'],['B','PUT replicas=5,image=v2, resourceVersion 13','OK → rv 14']];
     const k=Math.max(1,Math.ceil(p*steps.length));
-    return`<div class="caption">Two clients update the same object. etcd/API server use <b>optimistic concurrency</b>: a write carries the resourceVersion it was based on; if the object changed since, it is rejected (409) instead of silently overwriting.</div><table><tr><th>#</th><th>client</th><th>request</th><th>result</th></tr>${steps.slice(0,k).map((s,i)=>`<tr style="${s[2].startsWith('409')?'background:color-mix(in srgb,var(--bad) 14%,var(--card))':''}"><td>${i+1}</td><td><b>${s[0]}</b></td><td class="mono">${esc(s[1])}</td><td class="mono ${s[2].startsWith('409')?'bad':''}">${esc(s[2])}</td></tr>`).join('')}</table>
+    return`<div class="caption">Two clients update the same object. etcd/API server use <b>optimistic concurrency</b>: a write carries the resourceVersion it was based on; if the object changed since, it is rejected (409) instead of silently overwriting.</div><table class="wrap"><tr><th>#</th><th>client</th><th>request</th><th>result</th></tr>${steps.slice(0,k).map((s,i)=>`<tr style="${s[2].startsWith('409')?'background:color-mix(in srgb,var(--bad) 14%,var(--card))':''}"><td>${i+1}</td><td><b>${s[0]}</b></td><td class="mono">${esc(s[1])}</td><td class="mono ${s[2].startsWith('409')?'bad':''}">${esc(s[2])}</td></tr>`).join('')}</table>
     <div class="note">This is why controllers re-read and retry: no locks, no lost updates. Compare-and-swap on resourceVersion is the only concurrency primitive the whole control plane relies on.</div>`;
   }
   if(OPT.econf==='watch'){
@@ -686,8 +690,8 @@ function draw4(p){
   const kinds={delete:'a pod is deleted by hand',scale:'replicas is raised by 2',edit:'replicas is lowered by 1'};
   const lost=sim.log.filter(l=>l.kind==='lost'&&l.t<=T);
   return`<div class="caption">Event: <b>${kinds[OPT.ctrlAct]}</b>${OPT.dropWatch?' <span class="bad">and the watch event is LOST</span>':''}. Controllers do not execute commands; each loop compares <b>observed</b> state with <b>desired</b> state and takes the smallest step to close the gap (level-triggered, so it is safe to run twice).</div>
-  <div class="g2"><div><h3 style="margin-top:0">Reconcile log</h3><table><tr><th>t</th><th>controller</th><th>observed → desired</th><th>action</th></tr>${rec.slice(-12).map(r=>`<tr><td>${sec(r.t-t0)}</td><td>${esc(r.ctrl.replace('-controller',''))}</td><td class="mono">${esc(r.obs)} → ${esc(r.des)}</td><td class="mono">${esc(r.act||'…')}</td></tr>`).join('')||'<tr><td colspan="4">…</td></tr>'}</table>
-    ${lost.map(l=>`<div class="note bad">${sec(l.t-t0)} ${esc(l.msg)}</div>`).join('')}${OPT.dropWatch&&T>t0+6000?'<div class="note ok">The periodic informer resync (every 6 s here, 10–15 min in real clusters) re-enqueued the ReplicaSet and the missing pod was recreated anyway.</div>':''}</div>
+  <div class="g2"><div><h3 style="margin-top:0">Reconcile log</h3><table class="wrap"><tr><th>t</th><th>controller</th><th>observed → desired</th><th>action</th></tr>${rec.slice(-12).map(r=>`<tr><td>${sec(r.t-t0)}</td><td>${esc(r.ctrl.replace('-controller',''))}</td><td class="mono">${esc(r.obs)} → ${esc(r.des)}</td><td class="mono">${esc(r.act||'…')}</td></tr>`).join('')||'<tr><td colspan="4">…</td></tr>'}</table>
+    ${lost.map(l=>`<div class="note bad">${sec(l.t-t0)} ${esc(l.msg)}</div>`).join('')}${OPT.dropWatch&&T>t0+6000?'<div class="note ok">A periodic resync (every 6 s in this model) re-enqueued the ReplicaSet; the controller counted the pods again and recreated the missing one. In a real cluster the usual safety net is the informer re-listing after a broken watch; either way the level-triggered loop heals.</div>':''}</div>
   <div><h3 style="margin-top:0">Cluster state at +${((T-t0)/1000).toFixed(1)}s</h3>${state.nodes.map(n=>`<div class="node" style="margin-bottom:6px"><b>${n.name}</b><div>${state.pods.filter(x=>x.node===n.name).map(podChip).join('')||'<span class="note">no pods</span>'}</div></div>`).join('')}<div class="note">desired replicas: <b>${state.dep}</b> · ReplicaSets: ${state.rs.map(r=>r.name.slice(-5)+' '+r.ready+'/'+r.desired).join(', ')}</div></div></div>
   <div class="note">Ownership chain: Deployment → ReplicaSet → Pods (ownerReferences). Deleting a Pod is simply a change that makes observed ≠ desired, so the ReplicaSet controller recreates it. Edge-triggered systems break when an event is missed; level-triggered controllers heal on the next pass or resync.</div>`;
 }
@@ -720,7 +724,7 @@ function draw6(p){
   const tPend=find(x=>true),tSched=find(x=>x.node),tCreating=find(x=>x.reason==='ContainerCreating'||/Err|BackOff/.test(x.reason||'')),tRun=find(x=>x.phase==='Running'),tReady=find(x=>x.ready);
   const T=p*Math.min(30000,Math.max(12000,(tReady||14000)+2500)),W=620,xs=t=>10+t/Math.min(30000,Math.max(12000,(tReady||14000)+2500))*W;
   const seg=(a,b,col,l)=>a==null?'':`<rect x="${xs(a)}" y="30" width="${Math.max(2,xs(Math.min(b==null?T:b,T))-xs(a))}" height="26" fill="${col}" opacity="${a<=T?1:0}"><title>${l}</title></rect><text x="${xs(a)+3}" y="47" style="font-size:9.5px;fill:#fff;opacity:${a<=T?1:0}">${l}</text>`;
-  const sv=`<svg viewBox="0 0 650 90" style="max-height:100px">${seg(tPend,tSched,'var(--t7)','Pending')}${seg(tSched,tCreating||tRun,'var(--t4)','Scheduled')}${seg(tCreating,tRun||(OPT.lcase==='bad'?30000:null),OPT.lcase==='bad'?'var(--bad)':'var(--t3)',OPT.lcase==='bad'?'ErrImagePull → BackOff':'pull image + create')}${seg(tRun,tReady,'var(--t1)','Running (not ready)')}${seg(tReady,null,'var(--ok)','Ready · gets traffic')}<line x1="${xs(T)}" x2="${xs(T)}" y1="10" y2="70" stroke="var(--ink)" opacity=".5"/><text x="10" y="82" style="fill:var(--mut);font-size:10px">time since apply (s)</text></svg>`;
+  const sv=`<div class="wide"><svg viewBox="0 0 650 90" style="max-height:100px">${seg(tPend,tSched,'var(--t7)','Pending')}${seg(tSched,tCreating||tRun,'var(--t4)','Scheduled')}${seg(tCreating,tRun||(OPT.lcase==='bad'?30000:null),OPT.lcase==='bad'?'var(--bad)':'var(--t3)',OPT.lcase==='bad'?'ErrImagePull → BackOff':'pull image + create')}${seg(tRun,tReady,'var(--t1)','Running (not ready)')}${seg(tReady,null,'var(--ok)','Ready · gets traffic')}<line x1="${xs(T)}" x2="${xs(T)}" y1="10" y2="70" stroke="var(--ink)" opacity=".5"/><text x="10" y="82" style="fill:var(--mut);font-size:10px">time since apply (s)</text></svg></div>`;
   const log=sim.log.filter(l=>l.t<=T&&(l.from.startsWith('kubelet')||l.to==='runtime'||l.from==='scheduler')).slice(-9);
   const now=snapAt(sim,T).pods[0];
   return`<div class="caption">One pod, from <span class="mono">Pending</span> to <span class="mono">Ready</span>. State now: <b>${esc(now?(now.ready?'Running · Ready':now.reason||now.phase):'-')}</b>. ${OPT.lcase==='bad'?'<b class="bad">The image tag does not exist: the kubelet keeps retrying with exponential back-off and the pod never becomes Ready.</b>':OPT.lcase==='slow'?'The readiness probe has a long initialDelay, so the pod runs but receives no traffic for a while.':'The kubelet pulls the image, asks the container runtime (CRI) to start it, then readiness probing decides when it can serve.'}</div>${sv}
@@ -763,9 +767,9 @@ function draw8(p){
   const sim=simRollout(),T0=sim.rolloutStart,span=55000,T=T0+p*span,now=snapAt(sim,T);
   const names=[...new Set(sim.snaps.flatMap(s=>s.rs.map(r=>r.name)))],W=640,H=110,xs=t=>10+(t-T0)/span*W;
   const maxPods=Math.max(1,...sim.snaps.map(s=>s.pods.filter(x=>!x.term||true).length));
-  let sv=`<svg viewBox="0 0 680 ${H+20}" style="max-height:${H+30}px">`;
+  let sv=`<div class="wide"><svg viewBox="0 0 680 ${H+20}" style="max-height:${H+30}px">`;
   names.forEach((nm,ri)=>{let pts='';sim.snaps.filter(s=>s.t>=T0-500&&s.t<=T).forEach(s=>{const r=s.rs.find(x=>x.name===nm),v=r?s.pods.filter(x=>x.rs===nm&&x.ready&&!x.term).length:0;pts+=`${xs(s.t)},${H-v/maxPods*(H-10)} `});sv+=`<polyline fill="none" stroke="${tc(ri)}" stroke-width="2.5" points="${pts}"/><text x="${12}" y="${14+ri*12}" style="fill:${tc(ri)};font-size:10px">${esc(nm.slice(-8))} ready pods</text>`});
-  sv+=`<line x1="${xs(T)}" x2="${xs(T)}" y1="4" y2="${H}" stroke="var(--ink)" opacity=".4"/></svg>`;
+  sv+=`<line x1="${xs(T)}" x2="${xs(T)}" y1="4" y2="${H}" stroke="var(--ink)" opacity=".4"/></svg></div>`;
   const R=S.dep.spec.replicas,ds=sim.get('Deployment',S.dep.metadata.name),ready=now.pods.filter(x=>x.ready&&!x.term).length,min=R-ds.spec.strategy.maxUnavailable;
   const stuck=OPT.rcase==='bad';
   return`<div class="caption">Update to a ${stuck?'<b class="bad">bad</b> ':''}new image · maxSurge <b>${ds.spec.strategy.maxSurge}</b>, maxUnavailable <b>${ds.spec.strategy.maxUnavailable}</b> → ready pods never drop below <b>${min}</b> and the total never exceeds <b>${R+ds.spec.strategy.maxSurge}</b>. At +${((T-T0)/1000).toFixed(1)}s: <b>${ready}/${R}</b> ready${stuck&&!OPT.rback?' · <span class="bad">rollout stuck waiting for new pods to become Ready; old pods keep serving</span>':''}${OPT.rback&&T>T0+18000?' · <b class="ok">rolled back</b>':''}</div>${sv}
@@ -780,11 +784,11 @@ function draw9(p){
   const sim=simHPA(),log=sim.hpaLog,T=p*110000,W=640,xs=t=>10+t/110000*W,mx=Math.max(1,...log.map(l=>l.cur),...log.map(l=>l.ready),OPT.hmax),maxLoad=Math.max(1,...log.map(l=>l.load));
   let a='',b='',c='';log.filter(l=>l.t<=T).forEach(l=>{a+=`${xs(l.t)},${100-l.load/maxLoad*90} `;b+=`${xs(l.t)},${100-l.cur/mx*90} `;c+=`${xs(l.t)},${100-l.ready/mx*90} `});
   const cur=log.filter(l=>l.t<=T).slice(-1)[0]||log[0];
-  const sv=`<svg viewBox="0 0 680 115" style="max-height:125px"><polyline fill="none" stroke="var(--t7)" stroke-width="2" stroke-dasharray="4 3" points="${a}"/><polyline fill="none" stroke="var(--t0)" stroke-width="2.5" points="${b}"/><polyline fill="none" stroke="var(--ok)" stroke-width="2.5" points="${c}"/><line x1="${xs(T)}" x2="${xs(T)}" y1="4" y2="105" stroke="var(--ink)" opacity=".4"/><text x="10" y="112" style="fill:var(--mut);font-size:10px">load (dashed) · desired replicas (blue) · ready replicas (green)</text></svg>`;
+  const sv=`<div class="wide"><svg viewBox="0 0 680 115" style="max-height:125px"><polyline fill="none" stroke="var(--t7)" stroke-width="2" stroke-dasharray="4 3" points="${a}"/><polyline fill="none" stroke="var(--t0)" stroke-width="2.5" points="${b}"/><polyline fill="none" stroke="var(--ok)" stroke-width="2.5" points="${c}"/><line x1="${xs(T)}" x2="${xs(T)}" y1="4" y2="105" stroke="var(--ink)" opacity=".4"/><text x="10" y="112" style="fill:var(--mut);font-size:10px">load (dashed) · desired replicas (blue) · ready replicas (green)</text></svg></div>`;
   const req=S.dep.spec.template.spec.containers[0].cpu;
   return`<div class="caption">Every 3 s the HPA reads average CPU utilisation (usage ÷ <i>request</i> = ${req}m) and computes <b>desired = ceil(current × utilisation ÷ target)</b>. At +${(cur.t/1000).toFixed(0)}s: ${cur.ready} ready pod(s), utilisation <b>${cur.util.toFixed(0)}%</b> vs target ${OPT.htarget}% → ceil(${cur.cur} × ${cur.util.toFixed(0)} ÷ ${OPT.htarget}) = <b>${Math.ceil(cur.cur*cur.util/OPT.htarget)}</b> → clamped to [${OPT.hmin}, ${OPT.hmax}] → <b>${cur.des}</b>.</div>${sv}
   <div class="g2"><div><table><tr><th>t</th><th class="n">load m</th><th class="n">ready</th><th class="n">util %</th><th class="n">replicas</th></tr>${log.filter(l=>l.t<=T).slice(-8).map(l=>`<tr><td>${(l.t/1000).toFixed(0)}s</td><td class="n">${Math.round(l.load)}</td><td class="n">${l.ready}</td><td class="n">${l.util.toFixed(0)}</td><td class="n">${l.cur}${l.des!==l.cur?' → <b>'+l.des+'</b>':''}</td></tr>`).join('')}</table></div>
-  <div><div class="note" style="margin:0">Scaling up is fast (at most double + 4 per step), but new pods still need to be scheduled, pull images and pass readiness (green lags blue). Scaling down waits for a <b>stabilisation window</b> (${OPT.hstab}s): the highest recommendation in the window wins, which prevents flapping when load briefly dips.</div></div></div>`;
+  <div><div class="note" style="margin:0">Scaling up is fast (at most double + 4 per step), but new pods still need to be scheduled, pull images and pass readiness (green lags blue). Scaling down waits for a <b>stabilisation window</b> (${OPT.hstab}s): the highest recommendation in the window wins, which prevents flapping when load briefly dips. <i>Simplified:</i> during scale-up a real HPA counts pods that are not Ready yet as 0% busy, which damps the overshoot this model can show mid-spike.</div></div></div>`;
 }
 
 /* =========================================================
@@ -795,7 +799,7 @@ function draw10(p){
   const ev=sim.log.filter(l=>l.t>=T0-200&&l.t<=T&&(l.from==='node-controller'&&!/^PUT /.test(l.msg)||l.from==='chaos'||l.from==='scheduler'&&/→/.test(l.msg)||l.from==='replicaset-controller'&&/^POST/.test(l.msg)||l.to==='kubelet/'+sim.victim&&false)).slice(0,14);
   const R=S.dep.spec.replicas,ready=now.pods.filter(x=>x.ready&&!x.term).length;
   return`<div class="caption"><b>${sim.victim}</b> loses power at +0s. Heartbeats stop → after the grace period the node controller marks it <b>NotReady</b>, taints it, and after the toleration period <b>evicts</b> its pods; the ReplicaSet creates replacements and the scheduler places them on healthy nodes. At +${((T-T0)/1000).toFixed(1)}s: <b>${ready}/${R}</b> pods Ready.</div>
-  <div class="g2"><div><h3 style="margin-top:0">Timeline</h3>${ev.map(l=>`<span class="row ${l.kind==='lost'?'bad':''}">+${((l.t-T0)/1000).toFixed(1)}s · ${esc(l.msg)}</span>`).join('')||'<span class="note">…</span>'}<div class="note">Heartbeat grace 8 s, eviction after ${OPT.nevict} s (real defaults: 40 s and 300 s).</div></div>
+  <div class="g2"><div><h3 style="margin-top:0">Timeline</h3>${ev.map(l=>`<span class="row ${l.kind==='lost'?'bad':''}">+${((l.t-T0)/1000).toFixed(1)}s · ${esc(l.msg)}</span>`).join('')||'<span class="note">…</span>'}<div class="note">Heartbeat grace 8 s, eviction after ${OPT.nevict} s (real clusters: tens of seconds of grace, then a default 300 s toleration).</div></div>
   <div>${now.nodes.map(n=>`<div class="node ${n.alive?'':'dead'}" style="margin-bottom:6px"><b>${n.name}</b> <span class="tag ${n.ready?'g':'r'}">${n.ready?'Ready':'NotReady'}</span>${n.alive?'':' <span class="tag r">down</span>'}<div>${now.pods.filter(x=>x.node===n.name).map(podChip).join('')||'<span class="note">no pods</span>'}</div></div>`).join('')}${now.pods.some(x=>!x.node)?`<div class="node"><b>Pending</b><div>${now.pods.filter(x=>!x.node).map(podChip).join('')}</div></div>`:''}</div></div>
   <div class="chips"><span class="chip">endpoints ${now.ep}</span><span class="chip">service stays up while ≥1 pod is Ready</span></div>
   <div class="note">Kubernetes cannot know a silent node is dead, only that it stopped reporting. Evicted pods stay "Terminating" on the dead node (their kubelet cannot confirm) but no longer count, so capacity is restored elsewhere. If the node returns (control above), its kubelet cleans the old containers up.</div>`;
@@ -818,13 +822,14 @@ function ctlHTML(k){
   if(!S||S.error)return'';
   const sel=(key,opts,val)=>`<select data-opt="${key}">${opts.map(([v,l])=>`<option value="${v}" ${String(v)===String(val)?'selected':''}>${esc(l)}</option>`).join('')}</select>`;
   const rng=(key,min,max,step,val,suf='')=>`<input type="range" data-opt="${key}" min="${min}" max="${max}" step="${step}" value="${val}" style="width:120px"> ${val}${suf}`;
-  if(k===0)return`<span class="note">Edit the manifest above (replicas, requests, readiness delay, nodeSelector) and watch the sequence change.</span>`;
+  if(k===0)return`<span class="note">Pick another sample or edit the manifest at the top of the page (replicas, requests, readiness delay, nodeSelector) and watch the sequence change.</span>`;
   if(k===1)return`<label>Request ${sel('preq',[['valid','valid create (alice)'],['notoken','no token'],['viewer','viewer tries to create'],['quota','over ResourceQuota'],['selector','selector ≠ labels'],['stale','stale update (409)']],OPT.preq)}</label>`;
   if(k===2)return`<label>Scenario ${sel('econf',[['keys','keys & revisions'],['conflict','update race (409)'],['watch','watch resume / 410 Gone']],OPT.econf)}</label>${OPT.econf==='watch'?`<label>compaction ${rng('ecompact',0,10,1,OPT.ecompact)}</label>`:''}`;
   if(k===3)return`<label>Event ${sel('ctrlAct',[['delete','delete a pod'],['scale','scale up by 2'],['edit','scale down by 1']],OPT.ctrlAct)}</label><label><input type="checkbox" data-opt="dropWatch" ${OPT.dropWatch?'checked':''}> lose the watch event</label>`;
-  if(k===4)return`<label>Pods to schedule ${rng('srep',1,36,1,OPT.srep)}</label><label>Policy ${sel('spolicy',[['spread','spread replicas'],['least','least allocated'],['pack','bin-packing']],OPT.spolicy)}</label><span class="note">Nodes and taint are set in the first panel.</span>`;
+  if(k===4)return`<label>Pods to schedule ${rng('srep',1,36,1,OPT.srep)}</label><label>Policy ${sel('spolicy',[['spread','spread replicas'],['least','least allocated'],['pack','bin-packing']],OPT.spolicy)}</label><span class="note">Node count and the taint are set at the top of the page.</span>`;
   if(k===5)return`<label>Case ${sel('lcase',[['normal','normal'],['bad','bad image tag'],['slow','slow readiness (9 s)']],OPT.lcase)}</label>`;
-  if(k===6||k===7)return`<label>New image ${sel('rcase',[['good','valid new tag'],['bad','broken tag']],OPT.rcase)}</label><label>maxSurge ${sel('rsurge',[[-1,'manifest'],0,1,2,3].map(x=>Array.isArray(x)?x:[x,x]),OPT.rsurge)}</label><label>maxUnavailable ${sel('runav',[[-1,'manifest'],0,1,2,3].map(x=>Array.isArray(x)?x:[x,x]),OPT.runav)}</label><label>grace period ${sel('tgrace',[0,2,5].map(x=>[x,x+' s']),OPT.tgrace)}</label><label><input type="checkbox" data-opt="rback" ${OPT.rback?'checked':''}> rollback at +18 s</label>`;
+  if(k===6)return`<label>grace period ${sel('tgrace',[0,2,5].map(x=>[x,x+' s']),OPT.tgrace)}</label><label>New image ${sel('rcase',[['good','valid new tag'],['bad','broken tag']],OPT.rcase)}</label><label><input type="checkbox" data-opt="rback" ${OPT.rback?'checked':''}> rollback at +18 s</label><label>maxSurge ${sel('rsurge',[[-1,'manifest'],0,1,2,3].map(x=>Array.isArray(x)?x:[x,x]),OPT.rsurge)}</label><label>maxUnavailable ${sel('runav',[[-1,'manifest'],0,1,2,3].map(x=>Array.isArray(x)?x:[x,x]),OPT.runav)}</label>`;
+  if(k===7)return`<label>New image ${sel('rcase',[['good','valid new tag'],['bad','broken tag']],OPT.rcase)}</label><label>maxSurge ${sel('rsurge',[[-1,'manifest'],0,1,2,3].map(x=>Array.isArray(x)?x:[x,x]),OPT.rsurge)}</label><label>maxUnavailable ${sel('runav',[[-1,'manifest'],0,1,2,3].map(x=>Array.isArray(x)?x:[x,x]),OPT.runav)}</label><label>grace period ${sel('tgrace',[0,2,5].map(x=>[x,x+' s']),OPT.tgrace)}</label><label><input type="checkbox" data-opt="rback" ${OPT.rback?'checked':''}> rollback at +18 s</label>`;
   if(k===8)return`<label>Load ${sel('hload',[['spike','spike'],['ramp','ramp'],['steady','steady']],OPT.hload)}</label><label>target cpu ${rng('htarget',30,90,5,OPT.htarget,'%')}</label><label>min ${rng('hmin',1,6,1,OPT.hmin)}</label><label>max ${rng('hmax',3,20,1,OPT.hmax)}</label><label>scale-down window ${rng('hstab',3,40,1,OPT.hstab,' s')}</label>`;
   if(k===9)return`<label>Failing node ${sel('nfail',nodeList().map((n,i)=>[i,n.name]),OPT.nfail)}</label><label>eviction after ${rng('nevict',2,12,1,OPT.nevict,' s')}</label><label><input type="checkbox" data-opt="nrecover" ${OPT.nrecover?'checked':''}> node recovers at +30 s</label>`;
   return'';
@@ -836,20 +841,6 @@ $('#phCtl').addEventListener('change',e=>{
 });
 
 /* ================= render / wiring ================= */
-function renderNav(){$('#nav').innerHTML=PHASES.map((ph,i)=>`<div class="nv ${i===cur?'act':''} ${i<cur?'done':''}" data-ph="${i}"><b>${i+1}. ${ph.t}</b><small>${ph.s} · ${ph.f}</small></div>`).join('')}
-function showPhase(k,p=1){cur=k;renderNav();ovRender();const ph=PHASES[k];$('#blurb').innerHTML=`${ph.b}<div class="ft">Component: ${ph.f}</div>`;$('#phCtl').innerHTML=ctlHTML(k);paintView(p);$('#prev').disabled=k===0;$('#nextB').disabled=k===PHASES.length-1}
-function paintView(p=1){
-  if(!S||S.error){$('#phView').innerHTML=`<div class="box bad">${esc(S?S.error:'')}</div>`;return}
-  try{$('#phView').innerHTML=PHASES[cur].draw(p)}catch(e){$('#phView').innerHTML=`<div class="box bad">Render error: ${esc(e.message)}</div>`;console.error(e)}
-}
-function stopAll(){gen++;playingAll=false;paused=false;$('#pauseBtn').disabled=true;$('#pauseBtn').textContent='⏸ Pause'}
-$('#nav').onclick=e=>{const n=e.target.closest('[data-ph]');if(!n)return;stopAll();showPhase(+n.dataset.ph)};
-$('#prev').onclick=()=>{stopAll();showPhase(Math.max(0,cur-1))};
-$('#nextB').onclick=()=>{stopAll();showPhase(Math.min(PHASES.length-1,cur+1))};
-$('#anim').onclick=()=>{stopAll();animate(p=>paintView(p),PHASES[cur].dur)};
-$('#playAll').onclick=async()=>{if(!S||S.error)return;stopAll();playingAll=true;$('#pauseBtn').disabled=false;for(let k=0;k<PHASES.length;k++){showPhase(k,0);const ok=await animate(p=>paintView(p),PHASES[k].dur);if(!ok)return;await sleep(500);if(!playingAll)return}playingAll=false;$('#pauseBtn').disabled=true};
-$('#pauseBtn').onclick=()=>{paused=!paused;$('#pauseBtn').textContent=paused?'▶ Resume':'⏸ Pause'};
-$('#speed').oninput=e=>{speed=+e.target.value;$('#speedV').textContent=speed+'×'};
 function rebuild(reparse){
   S=build();
   if(S&&!S.error){const sv=S.svc;$('#srcInfo').innerHTML=`Parsed ${S.docs.length} document(s): Deployment <b>${esc(S.dep.metadata.name)}</b> (${S.dep.spec.replicas} replicas, requests ${S.dep.spec.template.spec.containers[0].cpu}m cpu / ${S.dep.spec.template.spec.containers[0].mem}Mi, maxSurge ${S.dep.spec.strategy.maxSurge}, maxUnavailable ${S.dep.spec.strategy.maxUnavailable})${sv?` and Service <b>${esc(sv.metadata.name)}</b>`:''}.`;
@@ -866,62 +857,7 @@ $$('[data-sample]').forEach(b=>b.onclick=()=>{$('#src').value=SAMPLES[b.dataset.
    ARCHITECTURE OVERVIEW (components + relationships)
    ========================================================= */
 const OVS={"w": 1000, "h": 420, "groups": [{"x": 170, "y": 40, "w": 790, "h": 225, "label": "Control plane"}, {"x": 170, "y": 290, "w": 580, "h": 110, "label": "Worker node (\u00d7N)"}], "nodes": [{"id": "kubectl", "x": 10, "y": 80, "w": 110, "h": 56, "label": "kubectl", "sub": "declares state", "desc": "Sends the desired state (a manifest) to the API server; it does not tell anything to run.", "phase": 0}, {"id": "etcd", "x": 10, "y": 190, "w": 110, "h": 56, "label": "etcd", "sub": "versioned KV", "desc": "The only store of cluster state: every object has a resourceVersion and clients can watch changes.", "phase": 2}, {"id": "apiserver", "x": 190, "y": 80, "w": 150, "h": 64, "label": "API server", "sub": "authn \u00b7 RBAC \u00b7 admission", "desc": "The front door and the only component that reads or writes etcd. Authenticates, authorizes, admits, validates, persists and fans out watch events.", "phase": 1}, {"id": "cm", "x": 400, "y": 80, "w": 170, "h": 64, "label": "Controller manager", "sub": "reconcile loops", "desc": "Runs Deployment, ReplicaSet, Endpoints and other controllers that move observed state toward desired state.", "phase": 3}, {"id": "rollout", "x": 610, "y": 80, "w": 150, "h": 64, "label": "Deployment rollout", "sub": "ReplicaSets \u00b7 surge", "desc": "Shifts replicas between old and new ReplicaSets within maxSurge/maxUnavailable limits and keeps history for rollback.", "phase": 7}, {"id": "hpa", "x": 790, "y": 80, "w": 150, "h": 64, "label": "Autoscaler", "sub": "HPA", "desc": "Computes desired replicas from CPU utilisation versus a target and edits the Deployment.", "phase": 8}, {"id": "sched", "x": 400, "y": 190, "w": 170, "h": 60, "label": "Scheduler", "sub": "filter \u00b7 score \u00b7 bind", "desc": "Picks a node for every unscheduled pod by filtering infeasible nodes and scoring the rest, then writes spec.nodeName.", "phase": 4}, {"id": "nodelife", "x": 610, "y": 190, "w": 170, "h": 60, "label": "Node lifecycle", "sub": "heartbeat \u00b7 taint \u00b7 evict", "desc": "Detects silent nodes, marks them NotReady, taints them and evicts their pods after a toleration period.", "phase": 9}, {"id": "kubelet", "x": 190, "y": 320, "w": 150, "h": 60, "label": "Kubelet", "sub": "pod lifecycle \u00b7 probes", "desc": "Runs on each node: starts the pods bound to it through the runtime, runs probes, reports status and heartbeats.", "phase": 5}, {"id": "runtime", "x": 380, "y": 320, "w": 150, "h": 60, "label": "Container runtime", "sub": "CRI", "desc": "Pulls images and runs containers on behalf of the kubelet via the Container Runtime Interface.", "phase": 5}, {"id": "proxy", "x": 570, "y": 320, "w": 160, "h": 60, "label": "kube-proxy", "sub": "Service NAT rules", "desc": "Programs node-level rules so a Service virtual IP is spread across the ready pod endpoints.", "phase": 6}], "edges": [{"from": "kubectl", "to": "apiserver", "label": "REST", "kind": "data"}, {"from": "apiserver", "to": "etcd", "label": "persist", "kind": "data"}, {"from": "apiserver", "to": "cm", "label": "watch", "kind": "ctl"}, {"from": "apiserver", "to": "sched", "label": "unbound", "kind": "ctl"}, {"from": "apiserver", "to": "kubelet", "label": "my pods", "kind": "ctl"}, {"from": "kubelet", "to": "runtime", "label": "CRI", "kind": "data"}, {"from": "kubelet", "to": "nodelife", "label": "heartbeat", "kind": "async"}, {"from": "apiserver", "to": "proxy", "label": "endpoints", "kind": "ctl"}, {"from": "cm", "to": "rollout", "label": "RS", "kind": "data"}, {"from": "hpa", "to": "rollout", "label": "scale", "kind": "ctl"}, {"from": "nodelife", "to": "cm", "label": "evict", "kind": "ctl"}], "flow": [{"n": "kubectl", "t": "kubectl apply sends the desired state."}, {"n": "apiserver", "t": "The API server authenticates, authorizes, admits and validates it."}, {"n": "etcd", "t": "It is persisted in etcd with a new resourceVersion."}, {"n": "cm", "t": "Controllers watching the API server create a ReplicaSet and Pods."}, {"n": "sched", "t": "The scheduler binds each Pod to a node."}, {"n": "kubelet", "t": "That node's kubelet sees its Pod and starts it."}, {"n": "runtime", "t": "The container runtime pulls the image and runs the container."}, {"n": "proxy", "t": "Once Ready, kube-proxy routes Service traffic to it."}]};
-const OVN=Object.fromEntries(OVS.nodes.map(n=>[n.id,n]));
-const OV={sel:null,k:-1};
-function ovAnchor(n,tx,ty){const cx=n.x+n.w/2,cy=n.y+n.h/2,dx=tx-cx,dy=ty-cy;if(!dx&&!dy)return[cx,cy];const s=Math.min((n.w/2)/Math.abs(dx||1e-9),(n.h/2)/Math.abs(dy||1e-9));return[cx+dx*s,cy+dy*s]}
-function ovGeom(e){
-  const a=OVN[e.from],b=OVN[e.to],ca=[a.x+a.w/2,a.y+a.h/2],cb=[b.x+b.w/2,b.y+b.h/2];let c=null;
-  if(e.bend){const mx=(ca[0]+cb[0])/2,my=(ca[1]+cb[1])/2,dx=cb[0]-ca[0],dy=cb[1]-ca[1],L=Math.hypot(dx,dy)||1;c=[mx-dy/L*e.bend,my+dx/L*e.bend]}
-  const p0=ovAnchor(a,...(c||cb)),p1=ovAnchor(b,...(c||ca));
-  const mid=c?[0.25*p0[0]+0.5*c[0]+0.25*p1[0],0.25*p0[1]+0.5*c[1]+0.25*p1[1]]:[(p0[0]+p1[0])/2,(p0[1]+p1[1])/2];
-  return{p0,p1,c,mid};
-}
-function ovRender(){
-  const el=document.getElementById('ovView');if(!el)return;
-  const flow=OVS.flow,k=OV.k,act=new Set(),actE=new Set();
-  if(k>=0){for(let i=0;i<=Math.min(k,flow.length-1);i++)act.add(flow[i].n);for(let i=1;i<=k&&i<flow.length;i++){actE.add(flow[i-1].n+'>'+flow[i].n);actE.add(flow[i].n+'>'+flow[i-1].n)}}
-  const sel=OV.sel,rel=new Set();if(sel){rel.add(sel);OVS.edges.forEach(e=>{if(e.from===sel)rel.add(e.to);if(e.to===sel)rel.add(e.from)})}
-  const curPh=typeof cur==='number'?cur:-1;
-  let s=`<svg viewBox="0 0 ${OVS.w} ${OVS.h}" style="max-height:${OVS.h*1.1}px"><defs><marker id="ovar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="#8a94a6"/></marker><marker id="ovara" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="var(--acc)"/></marker></defs>`;
-  (OVS.groups||[]).forEach(g=>{s+=`<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${g.x+12}" y="${g.y+g.h-10}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${esc(g.label)}</text>`});
-  OVS.edges.forEach(e=>{
-    const g=ovGeom(e),on=actE.has(e.from+'>'+e.to),dim=sel&&!(e.from===sel||e.to===sel),hl=sel&&(e.from===sel||e.to===sel);
-    const d=g.c?`M${g.p0[0]},${g.p0[1]} Q${g.c[0]},${g.c[1]} ${g.p1[0]},${g.p1[1]}`:`M${g.p0[0]},${g.p0[1]} L${g.p1[0]},${g.p1[1]}`;
-    s+=`<g style="${dim?'opacity:.2':''}"><path d="${d}" class="ove ${e.kind||'data'} ${on||hl?'act':''}" marker-end="url(#${on||hl?'ovara':'ovar'})"/>${on?`<path d="${d}" class="ove flow act" style="stroke-width:5;opacity:.5"/>`:''}
-      <text x="${g.mid[0]}" y="${g.mid[1]-5}" text-anchor="middle" style="font-size:10.5px;fill:${hl||on?'var(--acc)':'var(--mut)'};paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(e.label)}</text></g>`;
-  });
-  OVS.nodes.forEach(n=>{
-    const ph=n.phase,cls=['ovn',sel===n.id?'sel':'',ph!==undefined&&ph===curPh?'cur':'',act.has(n.id)?'act':''].join(' '),dim=sel&&!rel.has(n.id);
-    s+=`<g class="${cls}" data-node="${n.id}" style="${dim?'opacity:.3':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${ph!==undefined?pc(ph):'var(--card)'}"/>
-      <text x="${n.x+10}" y="${n.y+22}" font-weight="700" style="font-size:12.5px">${esc(n.label)}</text><text x="${n.x+10}" y="${n.y+40}" style="font-size:10.5px;fill:var(--mut)">${esc(n.sub||'')}</text>
-      ${ph!==undefined?`<text x="${n.x+n.w-8}" y="${n.y+n.h-8}" text-anchor="end" style="font-size:10px;font-weight:700;fill:var(--mut)">phase ${ph+1}</text>`:''}</g>`;
-  });
-  s+='</svg>';
-  el.innerHTML=s;
-  const cap=document.getElementById('ovCap');
-  if(cap)cap.innerHTML=k>=0?`<b>Step ${Math.min(k,flow.length-1)+1}/${flow.length}:</b> ${esc(flow[Math.min(k,flow.length-1)].t)}`:(sel?'':'Click a component to see how it connects to the others.');
-  ovInfo();
-}
-function ovInfo(){
-  const el=document.getElementById('ovInfo');if(!el)return;const sel=OV.sel&&OVN[OV.sel];
-  // phase-to-phase dependencies derived from the edges
-  const pairs=new Map();OVS.edges.forEach(e=>{const a=OVN[e.from].phase,b=OVN[e.to].phase;if(a!==undefined&&b!==undefined&&a!==b){const key=a+'>'+b;if(!pairs.has(key))pairs.set(key,[]);pairs.get(key).push(e.label)}});
-  const dep=[...pairs.entries()].sort((x,y)=>x[0].split('>')[0]-y[0].split('>')[0]).map(([k,l])=>{const[a,b]=k.split('>').map(Number);return`<span class="chip" style="background:${pc(a)}">${a+1}. ${esc(PHASES[a].t)}</span> <span class="mono">→ ${esc(short(l.join(' / '),34))} →</span> <span class="chip" style="background:${pc(b)}">${b+1}. ${esc(PHASES[b].t)}</span>`}).join('<br>');
-  let card='';
-  if(sel){
-    const ins=OVS.edges.filter(e=>e.to===sel.id),outs=OVS.edges.filter(e=>e.from===sel.id);
-    card=`<div class="box" style="margin-top:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="font-size:15px">${esc(sel.label)}</b><span class="note" style="margin:0">${esc(sel.sub||'')}</span>${sel.phase!==undefined?`<button class="primary" data-go="${sel.phase}">Go to phase ${sel.phase+1}: ${esc(PHASES[sel.phase].t)} ›</button>`:''}</div>
-      <div style="margin:6px 0">${esc(sel.desc||'')}</div>
-      <div class="g2"><div><b style="font-size:12px">Receives</b>${ins.map(e=>`<div class="row"><span style="color:var(--mut)">${esc(OVN[e.from].label)}</span> ─ ${esc(e.label)} ▸</div>`).join('')||'<div class="note">nothing: it is where requests enter.</div>'}</div>
-      <div><b style="font-size:12px">Sends</b>${outs.map(e=>`<div class="row">▸ ${esc(e.label)} ─ <span style="color:var(--mut)">${esc(OVN[e.to].label)}</span></div>`).join('')||'<div class="note">nothing: it is an endpoint.</div>'}</div></div></div>`;
-  }
-  el.innerHTML=card+`<details class="dd" style="margin-top:8px"><summary>How the phases depend on each other</summary><div style="line-height:2.1;margin-top:6px">${dep||'<span class="note">no cross-phase edges</span>'}</div></details>`;
-}
-function jumpPhase(k){stopAll();showPhase(k);const t=document.getElementById('phaseSec');if(t&&t.scrollIntoView)t.scrollIntoView({behavior:'smooth',block:'start'})}
-document.getElementById('ovView').addEventListener('click',e=>{const n=e.target.closest('[data-node]');if(n){OV.k=-1;OV.sel=OV.sel===n.dataset.node?null:n.dataset.node;ovRender()}});
-document.getElementById('ovInfo').addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g)jumpPhase(+g.dataset.go)});
-document.getElementById('ovTrace').onclick=()=>{stopAll();OV.sel=null;OV.k=0;animate(p=>{OV.k=Math.min(OVS.flow.length-1,Math.floor(p*OVS.flow.length));ovRender()},OVS.flow.length*1300)};
-document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.sel=null;ovRender()};
+OVS.groupLabelBottom=true;
 
 
 /* ================= init ================= */
@@ -950,7 +886,7 @@ const DETAIL=[
 
 {how:"etcd is a Raft-replicated key-value store, normally 3 or 5 members. Every object lives under /registry/... and each write bumps a global revision, exposed as resourceVersion. Updates are optimistic: the API server rejects a write whose resourceVersion is stale with 409 Conflict. Clients use list+watch from a resourceVersion; if it was compacted away, they get 410 Gone and must re-list.",
  pros:["Strong consistency via Raft means a single agreed view of cluster state","resourceVersion gives lock-free optimistic concurrency between controllers","Watch streams push changes, so controllers do not poll","Revisions allow resuming a watch exactly where it left off"],
- cons:["Writes need a quorum and a disk fsync, so slow disks hurt the entire cluster","Practical limits: about 8 GB default quota and a 1.5 MB object size cap","Compaction and defrag must be managed, and 410 Gone forces expensive re-lists","Large clusters with many watchers or big objects (Secrets, CRDs, Events) strain it"],
+ cons:["Writes need a quorum and a disk fsync, so slow disks hurt the entire cluster","Practical limits: a 2 GB default space quota (about 8 GB recommended maximum) and a 1.5 MB request size cap","Compaction and defrag must be managed, and 410 Gone forces expensive re-lists","Large clusters with many watchers or big objects (Secrets, CRDs, Events) strain it"],
  fails:[{m:"Quorum loss",s:"API server returns timeouts or 'etcdserver: no leader'; cluster is read-only or unavailable; running pods continue",x:"Restore majority of members or recover from snapshot; keep odd member count across failure zones; practice restores"},
  {m:"Slow disk / high latency",s:"'etcdserver: request timed out', slow kubectl, leader elections flapping",x:"Use dedicated SSD/NVMe; watch fsync and backend commit durations; keep etcd off noisy neighbors"},
  {m:"Database space exceeded",s:"etcdserver: mvcc: database space exceeded; writes refused (NOSPACE alarm)",x:"Compact, defrag, disarm the alarm; find the object hoarding space (events, huge CRs); raise quota-backend-bytes carefully"},
@@ -1011,9 +947,9 @@ const DETAIL=[
  {m:"Fighting with replicas in Git",s:"GitOps resets replicas to a fixed number",x:"Remove spec.replicas from the manifest or ignore the field in the sync tool"}],
  watch:["kubectl get hpa -w and kubectl describe hpa: bad = <unknown> targets, AbleToScale or ScalingActive false","kube_horizontalpodautoscaler_status_desired_replicas vs current: bad = long gap","kubectl top pods: compare real CPU with requests and target","Pending pods after scale-up: kubectl get pods --field-selector=status.phase=Pending"]},
 
-{how:"Each kubelet renews a Lease in kube-node-lease every ~10 s. If the node-lifecycle controller sees no update for node-monitor-grace-period (default 40 s), it sets Ready to Unknown, and adds the node.kubernetes.io/unreachable taint with NoSchedule and NoExecute. Pods get a default toleration of 300 s (tolerationSeconds), after which they are evicted; their ReplicaSet creates replacements elsewhere and the Endpoints controller removes the not-Ready pods from Services.",
+{how:"Each kubelet renews a Lease in kube-node-lease every ~10 s. If the node-lifecycle controller sees no update for node-monitor-grace-period (default 40 s; 50 s in recent releases), it sets Ready to Unknown, and adds the node.kubernetes.io/unreachable taint with NoSchedule and NoExecute. Pods get a default toleration of 300 s (tolerationSeconds), after which they are evicted; their ReplicaSet creates replacements elsewhere and the Endpoints controller removes the not-Ready pods from Services.",
  pros:["Automatic recovery: lost capacity is recreated on healthy nodes","Taints and tolerations make eviction timing configurable per pod","Services stop sending traffic once pods are not Ready","Tolerating short blips avoids needless churn from brief network issues"],
- cons:["Default ~5 minutes of delay before pods are evicted (40 s detection plus 300 s toleration)","Cannot tell a dead node from a partitioned one, so a pod may still run on the isolated node","Stateful pods with RWO volumes can wait on volume detach or need fencing","Mass failure (zone outage) causes a thundering herd of rescheduling, and eviction rate is limited"],
+ cons:["Default ~5 minutes of delay before pods are evicted (40-50 s detection plus 300 s toleration)","Cannot tell a dead node from a partitioned one, so a pod may still run on the isolated node","Stateful pods with RWO volumes can wait on volume detach or need fencing","Mass failure (zone outage) causes a thundering herd of rescheduling, and eviction rate is limited"],
  fails:[{m:"Slow eviction",s:"Pods stay Running/Unknown on a NotReady node for ~5 minutes; capacity short",x:"Lower tolerationSeconds for unreachable/not-ready taints on critical workloads; run enough replicas across nodes and zones"},
  {m:"All replicas on one node",s:"Service outage when that node dies",x:"topologySpreadConstraints or pod anti-affinity; PodDisruptionBudget; multiple zones"},
  {m:"StatefulSet / volume stuck",s:"Replacement pod Pending or ContainerCreating: Multi-Attach error",x:"Wait for detach, or force delete the pod only after confirming the node is really down; use node shutdown handling"},
@@ -1135,148 +1071,9 @@ const SIMM={
  detail(id,st){return SIMM.lines(id,st)}
 };
 
-/* =========================================================
-   LIVE CLUSTER SIMULATION (shared framework)
-   events on a timeline; packets travel between nodes; state is replayed up to time T
-   ========================================================= */
-function sHash(s){let h=2166136261;s=String(s);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h>>>0}
-const sEsc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const sShort=(s,n)=>{s=String(s);return s.length>n?s.slice(0,n-1)+'…':s};
-const E=(t,d,from,to,msg,kind,fx,cause)=>({t,d,from,to,msg,kind,fx:fx||[],cause:cause||''});
-const SIM={n:0,set:{},run:null,T:0,play:false,sel:null,selNode:null,speed:1,last:null};
-const SIMCOL={write:'#2f6fed',ack:'#1a9b5a',read:'#e25a1c',data:'#e25a1c',repl:'#9b4fd0',ctl:'#6b7280',fail:'#d64545',info:'#c9a400',sched:'#0f9d8a',watch:'#8a6fd0',ctrl:'#6b7280',trunc:'#d64545'};
-function simParse(text){return text.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#')).map(l=>{const p=l.split(/\s+/);return{t:Number(p[0])||0,op:(p[1]||'').toUpperCase(),args:p.slice(2),raw:l}}).sort((a,b)=>a.t-b.t)}
-function simRun(){
-  const acts=simParse(document.getElementById('simAct').value);
-  try{SIM.run=SIMM.run(acts,SIM.n,SIM.set);SIM.run.events.sort((a,b)=>a.t-b.t||a.d-b.d)}catch(e){SIM.run={events:[],end:0,err:e.message};console.error(e)}
-  SIM.end=Math.max(1000,(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0))+600);
-  const sl=document.getElementById('simT');sl.max=SIM.end;if(SIM.T>SIM.end)SIM.T=SIM.end;
-}
-function simStateAt(T){const st=SIMM.init(SIM.n,SIM.set);for(const e of SIM.run.events){if(e.t+e.d<=T)e.fx.forEach(f=>SIMM.apply(st,f))}return st}
-function simDraw(){
-  const svg=document.getElementById('simSvg');if(!svg||!SIM.run)return;
-  const T=SIM.T,topo=SIMM.topo(SIM.n),st=simStateAt(T),byId=Object.fromEntries(topo.nodes.map(n=>[n.id,n]));
-  const W=topo.w||900,H=topo.h||430;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
-  const active=SIM.run.events.filter(e=>e.t<=T&&T<e.t+e.d),recent=SIM.run.events.filter(e=>e.t+e.d<=T&&T-(e.t+e.d)<450);
-  const hot=new Set([...active.flatMap(e=>[e.from,e.to]),...recent.map(e=>e.to)]);
-  let s='<defs><marker id="simar" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0L9,4.5L0,9z" fill="#8a94a6"/></marker></defs>';
-  (topo.zones||[]).forEach(z=>{s+=`<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${z.x+12}" y="${z.y+17}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${sEsc(z.label)}</text>`});
-  topo.edges.forEach(([a,b])=>{const A=byId[a],B=byId[b];if(!A||!B)return;s+=`<line x1="${A.x+A.w/2}" y1="${A.y+A.h/2}" x2="${B.x+B.w/2}" y2="${B.y+B.h/2}" stroke="var(--line)" stroke-width="1.5"/>`});
-  topo.nodes.forEach(n=>{
-    const status=(st.status&&st.status[n.id])||'up',down=status==='down',isHot=hot.has(n.id),sel=SIM.selNode===n.id;
-    const lines=SIMM.lines(n.id,st)||[];
-    s+=`<g class="simn" data-id="${n.id}" style="cursor:pointer;${down?'opacity:.55':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${down?'var(--p5)':n.c||'var(--card)'}" stroke="${sel?'var(--acc)':isHot?'var(--acc2)':'var(--line)'}" stroke-width="${sel||isHot?3.5:1.8}"/>
-      <text x="${n.x+9}" y="${n.y+17}" font-weight="700" style="font-size:12.5px">${sEsc(n.label)}${down?' ✕':''}</text>${n.badge&&(n.label.length*7.6+String(typeof n.badge==='function'?n.badge(st):n.badge).length*5.8<n.w)?`<text x="${n.x+n.w-8}" y="${n.y+17}" text-anchor="end" style="font-size:10px;fill:var(--mut)">${sEsc(typeof n.badge==='function'?n.badge(st):n.badge)}</text>`:''}
-      ${lines.slice(0,Math.floor((n.h-24)/13)).map((l,i)=>`<text x="${n.x+9}" y="${n.y+32+i*13}" style="font-size:10.5px;${/^!/.test(l)?'fill:var(--bad)':''}">${sEsc(sShort(String(l).replace(/^!/,''),Math.floor((n.w-14)/6.3)))}</text>`).join('')}</g>`;
-  });
-  active.forEach(e=>{const A=byId[e.from],B=byId[e.to];if(!A||!B)return;const f=Math.min(1,(T-e.t)/Math.max(1,e.d)),ax=A.x+A.w/2,ay=A.y+A.h/2,bx=B.x+B.w/2,by=B.y+B.h/2;
-    if(e.from===e.to){s+=`<text x="${A.x+A.w/2}" y="${A.y-6}" text-anchor="middle" style="font-size:10.5px;fill:${SIMCOL[e.kind]||'#6b7280'};font-weight:700">${sEsc(sShort(e.msg,30))}</text>`;return}
-    const col=SIMCOL[e.kind]||'#6b7280';s+=`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${col}" stroke-width="2.5" opacity=".35"/><circle cx="${ax+(bx-ax)*f}" cy="${ay+(by-ay)*f}" r="7" fill="${col}" stroke="#fff" stroke-width="1.5"/><text x="${ax+(bx-ax)*f}" y="${ay+(by-ay)*f-11}" text-anchor="middle" style="font-size:10px;fill:${col};font-weight:700;paint-order:stroke;stroke:var(--card);stroke-width:3px">${sEsc(sShort(e.msg,26))}</text>`});
-  svg.innerHTML=s;
-  document.getElementById('simTv').textContent=(T/1000).toFixed(2)+' s / '+(SIM.end/1000).toFixed(1)+' s';
-  document.getElementById('simT').value=T;
-  // log
-  const evs=SIM.run.events,upTo=evs.filter(e=>e.t<=T),lastI=upTo.length-1;
-  document.getElementById('simLog').innerHTML=evs.map((e,i)=>`<div class="simev ${i===lastI?'cur':''} ${e.t>T?'fut':''}" data-i="${i}"><span class="simtag" style="background:${SIMCOL[e.kind]||'#6b7280'}">${sEsc(e.kind)}</span> <span class="mono">${(e.t/1000).toFixed(2)}s</span> ${sEsc(e.from)}${e.from===e.to?'':' → '+sEsc(e.to)}: ${sEsc(e.msg)}</div>`).join('')||'<div class="note">No actions yet.</div>';
-  const cur=document.querySelector('#simLog .cur');if(cur&&SIM.play)cur.scrollIntoView({block:'nearest'});
-  // inspector
-  const insp=document.getElementById('simInsp');
-  if(SIM.selNode){const det=SIMM.detail?SIMM.detail(SIM.selNode,st):SIMM.lines(SIM.selNode,st);insp.innerHTML=`<b>${sEsc(byId[SIM.selNode].label)}</b> at ${(T/1000).toFixed(2)}s<pre>${sEsc((det||[]).join('\n')||'(empty)')}</pre>`}
-  else if(SIM.sel!=null&&evs[SIM.sel]){const e=evs[SIM.sel];insp.innerHTML=`<b>${sEsc(e.msg)}</b><div class="note">${sEsc(e.from)} → ${sEsc(e.to)} · ${(e.t/1000).toFixed(2)}s (+${e.d} ms) · ${sEsc(e.kind)}</div>${e.cause?`<div class="caption" style="margin-top:6px"><b>Why:</b> ${sEsc(e.cause)}</div>`:''}<div class="note">state changes: ${e.fx.length?sEsc(e.fx.map(f=>SIMM.fxText?SIMM.fxText(f):f.op).join('; ')):'none (message only)'}</div>`}
-  else insp.innerHTML='<div class="note">Click a node to inspect its data, or click an event in the log to see why it happened.</div>';
-}
-function simTick(now){
-  if(!SIM.play){SIM.last=null;return}
-  if(SIM.last==null)SIM.last=now;const dt=now-SIM.last;SIM.last=now;SIM.T=Math.min(SIM.end,SIM.T+dt*SIM.speed);simDraw();
-  if(SIM.T>=SIM.end){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}
-  requestAnimationFrame(simTick);
-}
-function simBuildControls(){
-  const m=SIMM,nr=m.nodeRange;
-  const sc=document.getElementById('simScn');sc.innerHTML=m.scenarios.map((s,i)=>`<option value="${i}">${sEsc(s.name)}</option>`).join('');
-  const nn=document.getElementById('simN');nn.innerHTML=Array.from({length:nr[1]-nr[0]+1},(_,i)=>`<option value="${nr[0]+i}" ${nr[0]+i===nr[2]?'selected':''}>${nr[0]+i}</option>`).join('');document.getElementById('simNL').textContent=m.nodeLabel;
-  document.getElementById('simSet').innerHTML=(m.settings||[]).map(s=>`<label>${sEsc(s.label)} <select data-set="${s.id}">${s.opts.map(o=>`<option ${o===s.def?'selected':''}>${sEsc(o)}</option>`).join('')}</select></label>`).join('');
-  SIM.set=Object.fromEntries((m.settings||[]).map(s=>[s.id,s.def]));
-  document.getElementById('simOp').innerHTML=m.menu.map((o,i)=>`<option value="${i}">${sEsc(o.label)}</option>`).join('');
-  simArgs();
-}
-function simArgs(){const o=SIMM.menu[+document.getElementById('simOp').value];document.getElementById('simArgs').innerHTML=o.args.map((a,i)=>`<input type="text" data-a="${i}" value="${sEsc(a.d)}" placeholder="${sEsc(a.n)}" style="width:${a.w||80}px">`).join('')}
-function simLoadScenario(i){const s=SIMM.scenarios[i];document.getElementById('simAct').value=s.acts.join('\n');document.getElementById('simDesc').textContent=s.desc;SIM.T=0;SIM.sel=null;SIM.selNode=null;simRun();simDraw()}
-function simInit(){
-  if(!document.getElementById('simSvg'))return;
-  SIM.n=SIMM.nodeRange[2];simBuildControls();simLoadScenario(0);
-  document.getElementById('simScn').onchange=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simLoadScenario(+e.target.value)};
-  document.getElementById('simN').onchange=e=>{SIM.n=+e.target.value;SIM.T=0;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simRun();simDraw()};
-  document.getElementById('simSet').onchange=e=>{const t=e.target.closest('[data-set]');if(t){SIM.set[t.dataset.set]=t.value;simRun();simDraw()}};
-  document.getElementById('simOp').onchange=simArgs;
-  document.getElementById('simAdd').onclick=()=>{const o=SIMM.menu[+document.getElementById('simOp').value],vals=[...document.querySelectorAll('#simArgs input')].map(i=>i.value.trim()||'-');
-    const ta=document.getElementById('simAct'),t=Math.round(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0)+300);ta.value=(ta.value.trim()?ta.value.trim()+'\n':'')+`${t} ${o.op} ${vals.join(' ')}`.trim();SIM.T=Math.max(0,t-200);simRun();simDraw()};
-  document.getElementById('simAct').onchange=()=>{simRun();simDraw()};
-  document.getElementById('simPlay').onclick=()=>{if(SIM.play){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}if(SIM.T>=SIM.end)SIM.T=0;SIM.play=true;SIM.last=null;document.getElementById('simPlay').textContent='⏸ Pause';requestAnimationFrame(simTick)};
-  document.getElementById('simReset').onclick=()=>{SIM.play=false;SIM.T=0;document.getElementById('simPlay').textContent='▶ Play';simDraw()};
-  document.getElementById('simStep').onclick=()=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const nx=SIM.run.events.find(e=>e.t+e.d>SIM.T+1);SIM.T=nx?nx.t+nx.d:SIM.end;SIM.sel=nx?SIM.run.events.indexOf(nx):null;SIM.selNode=null;simDraw()};
-  document.getElementById('simSpeed').onchange=e=>{SIM.speed=+e.target.value};
-  document.getElementById('simT').oninput=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';SIM.T=+e.target.value;simDraw()};
-  document.getElementById('simLog').onclick=e=>{const d=e.target.closest('.simev');if(!d)return;const i=+d.dataset.i;SIM.sel=i;SIM.selNode=null;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const ev=SIM.run.events[i];SIM.T=ev.t+ev.d;simDraw()};
-  document.getElementById('simSvg').onclick=e=>{const g=e.target.closest('.simn');if(g){SIM.selNode=SIM.selNode===g.dataset.id?null:g.dataset.id;SIM.sel=null;simDraw()}};
-}
+Lab.sim(SIMM);})();
 
-window.simInit=simInit;window.__sim={SIM,simDraw,simRun};})();
-/* ===== overview: packets travelling along the connections ===== */
-(function(){
-const _ovr=ovRender;
-function pt(g,f){if(g.c){const u=1-f;return[u*u*g.p0[0]+2*u*f*g.c[0]+f*f*g.p1[0],u*u*g.p0[1]+2*u*f*g.c[1]+f*f*g.p1[1]]}return[g.p0[0]+(g.p1[0]-g.p0[0])*f,g.p0[1]+(g.p1[1]-g.p0[1])*f]}
-function findEdge(a,b){let e=OVS.edges.find(x=>x.from===a&&x.to===b);if(e)return{e,rev:false};e=OVS.edges.find(x=>x.from===b&&x.to===a);return e?{e,rev:true}:null}
-ovRender=function(){
-  _ovr();
-  if(OV.k<0||OV.kf==null)return;const svg=document.querySelector('#ovView svg');if(!svg)return;
-  const flow=OVS.flow,i=Math.min(flow.length-1,Math.floor(OV.kf)),f=OV.kf-Math.floor(OV.kf);let s='';
-  if(i>=1){const ed=findEdge(flow[i-1].n,flow[i].n);
-    if(ed){const g=ovGeom(ed.e),ff=Math.min(1,f*1.15),q=ed.rev?1-ff:ff;
-      for(let tr=3;tr>=1;tr--){const qq=ed.rev?Math.min(1,q+tr*.06):Math.max(0,q-tr*.06),p2=pt(g,qq);s+=`<circle cx="${p2[0]}" cy="${p2[1]}" r="${7-tr*1.4}" fill="var(--acc2)" opacity="${.5-tr*.12}"/>`}
-      const p=pt(g,q);s+=`<circle cx="${p[0]}" cy="${p[1]}" r="8" fill="var(--acc2)" stroke="#fff" stroke-width="2"/><text x="${p[0]}" y="${p[1]-13}" text-anchor="middle" style="font-size:11px;font-weight:700;fill:var(--acc2);paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(short(flow[i].t,44))}</text>`}}
-  svg.insertAdjacentHTML('beforeend',s);
-};
-const tr=document.getElementById('ovTrace');
-tr.onclick=()=>{stopAll();OV.sel=null;OV.k=0;OV.kf=0;animate(p=>{OV.kf=Math.min(OVS.flow.length-.001,p*OVS.flow.length);OV.k=Math.floor(OV.kf);ovRender()},OVS.flow.length*1500)};
-document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.kf=null;OV.sel=null;ovRender()};
-document.getElementById('ovView').addEventListener('click',e=>{if(e.target.closest('[data-node]'))OV.kf=null},true);
-})();
-
-/* ===== accordion: one drop-down per phase + detail (how / pros / cons / failure modes / watch) ===== */
-(function(){
-const g=id=>document.getElementById(id),esc2=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const sec=g('phaseSec'),nav=g('nav'),barNav=g('prev').parentElement;
-const stage=document.createElement('div');stage.id='stage';
-const det=document.createElement('div');det.id='phDetail';
-stage.append(g('blurb'),g('phCtl'),barNav,g('phView'),det);
-nav.style.display='none';
-const acc=document.createElement('div');acc.id='acc';nav.after(acc);
-acc.innerHTML=PHASES.map((ph,i)=>`<details class="acc" data-i="${i}" style="--pc:var(--p${i%8})"><summary><span class="accn">${i+1}</span><span class="acct"><b>${esc2(ph.t)}</b><small>${esc2(ph.s)}${ph.f?' · '+esc2(ph.f):''}</small></span><span class="accg">${typeof DETAIL!=='undefined'&&DETAIL[i]?'pros · cons · failures':''}</span></summary><div class="accb"></div></details>`).join('');
-const items=[...acc.children];
-function renderDetail(k){
-  const d=typeof DETAIL!=='undefined'&&DETAIL[k];if(!d){det.innerHTML='';return}
-  const li=a=>'<ul>'+a.map(x=>`<li>${esc2(x)}</li>`).join('')+'</ul>';
-  det.innerHTML=`<h3 style="margin-top:16px">Deep dive: ${esc2(PHASES[k].t)}</h3>
-  <details class="dd" open><summary>How it works</summary><div class="ddb">${esc2(d.how)}</div></details>
-  <details class="dd" open><summary>Pros and cons</summary><div class="ddb pc"><div class="pro"><b>✓ Pros</b>${li(d.pros)}</div><div class="con"><b>✗ Cons</b>${li(d.cons)}</div></div></details>
-  <details class="dd"><summary>Failure modes (${d.fails.length})</summary><div class="ddb"><table class="fm"><tr><th>Failure mode</th><th>What you see</th><th>Mitigation</th></tr>${d.fails.map(f=>`<tr><td><b>${esc2(f.m)}</b></td><td>${esc2(f.s)}</td><td>${esc2(f.x)}</td></tr>`).join('')}</table></div></details>
-  <details class="dd"><summary>What to watch</summary><div class="ddb">${li(d.watch)}</div></details>`;
-}
-function place(k){
-  items.forEach((d,i)=>{d.open=i===k});
-  items[k].querySelector('.accb').appendChild(stage);
-}
-const _sp=showPhase;
-showPhase=function(k,p=1){place(k);_sp(k,p);renderDetail(k)};
-acc.addEventListener('click',e=>{const s=e.target.closest('summary');if(!s||!s.parentElement.classList.contains('acc'))return;e.preventDefault();
-  const d=s.parentElement,i=+d.dataset.i;
-  if(d.open){d.open=false;stopAll();return}
-  stopAll();showPhase(i);setTimeout(()=>d.scrollIntoView({behavior:'smooth',block:'start'}),30)});
-window.__accReady=true;
-})();
-
-showPhase(typeof cur==="number"&&cur>=0?cur:0);simInit();
+Lab.start({phases:PHASES,detail:DETAIL,ovs:OVS,ctl:ctlHTML,state:()=>S});
 </script>
 </body>
 </html>
