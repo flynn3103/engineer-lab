@@ -80,6 +80,26 @@ input.cli{width:100%}
 .ovn.act rect{stroke:var(--acc);stroke-width:4}
 .ove{fill:none;stroke:#8a94a6;stroke-width:1.8}.ove.ctl{stroke-dasharray:6 4}.ove.async{stroke-dasharray:2 4;stroke:var(--bad)}.ove.act{stroke:var(--acc);stroke-width:3.5}
 .ove.flow{animation:flow .6s linear infinite}
+.simgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:900px){.simgrid{grid-template-columns:1fr}}.simgrid>div{min-width:0}
+.simlog{max-height:210px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:4px}.simev{font-size:12px;padding:2px 6px;border-radius:5px;cursor:pointer;border:1px solid transparent}.simev:hover{border-color:var(--line)}.simev.cur{background:color-mix(in srgb,var(--acc) 16%,var(--card));border-color:var(--acc)}.simev.fut{opacity:.45}
+.simtag{display:inline-block;color:#fff;font-size:10px;border-radius:4px;padding:0 5px}
+#acc{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+details.acc{border:1px solid var(--line);border-radius:12px;background:var(--bg);overflow:hidden}
+details.acc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 14px;background:color-mix(in srgb,var(--pc) 55%,var(--card))}
+details.acc>summary::-webkit-details-marker{display:none}
+details.acc>summary::after{content:'▾';margin-left:auto;color:var(--mut);transition:transform .15s}
+details.acc:not([open])>summary::after{transform:rotate(-90deg)}
+details.acc[open]{border-color:var(--acc2);box-shadow:0 0 0 1px var(--acc2)}
+.accn{flex:none;width:26px;height:26px;border-radius:50%;background:var(--card);border:2px solid var(--acc2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.acct{display:flex;flex-direction:column;min-width:0}.acct small{color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.accg{font-size:11px;color:var(--mut);margin-left:auto;padding-right:6px;white-space:nowrap}@media(max-width:700px){.accg{display:none}}
+.accb{padding:12px 14px;background:var(--card)}
+.ddb{padding:8px 4px 4px;line-height:1.6}.ddb ul{margin:4px 0 0;padding-left:18px}.ddb li{margin:3px 0}
+.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:700px){.pc{grid-template-columns:1fr}}
+.pc .pro,.pc .con{border-radius:8px;padding:8px 12px;background:var(--bg);border-left:4px solid var(--ok)}.pc .con{border-left-color:var(--bad)}
+table.fm{width:100%;border-collapse:collapse;font-size:13px}table.fm th,table.fm td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}table.fm th{background:var(--bg);font-size:12px}
+@media(max-width:700px){table.fm{display:block;overflow-x:auto}}
+
 </style>
 </head>
 <body>
@@ -121,6 +141,19 @@ input.cli{width:100%}
   <div id="ovView"></div>
   <div class="chips" style="margin-top:6px"><span class="chip">solid = data flow</span><span class="chip">dashed = control / metadata</span><span class="chip" style="border-color:var(--bad)">dotted = events / async</span></div>
   <div id="ovInfo"></div>
+</section>
+
+<section id="simSec">
+  <h2><em>▶</em>Live cluster simulation <span class="note" style="font-weight:400">watch inserts, updates and deletes travel between the nodes · edit the actions or inject failures</span></h2>
+  <div class="bar"><label>Scenario <select id="simScn"></select></label><label><span id="simNL">nodes</span> <select id="simN"></select></label><span id="simSet" class="bar" style="margin:0"></span>
+    <button class="primary" id="simPlay">▶ Play</button><button id="simStep">Step ›</button><button id="simReset">⏮</button><label>Speed <select id="simSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label></div>
+  <div class="note" id="simDesc" style="margin:0 0 6px"></div>
+  <svg id="simSvg" style="width:100%;border:1px solid var(--line);border-radius:10px;background:var(--bg)"></svg>
+  <div class="bar"><input type="range" id="simT" min="0" max="1000" value="0" step="10" style="flex:1"><span class="mono" id="simTv"></span></div>
+  <div id="simInsp" class="box" style="margin:8px 0"></div>
+  <div class="simgrid"><div><h3 style="margin-top:0">Actions <span class="note" style="font-weight:400">(time in ms, then op and arguments)</span></h3><textarea id="simAct" rows="7" spellcheck="false"></textarea>
+    <div class="bar"><select id="simOp"></select><span id="simArgs" class="bar" style="margin:0"></span><button id="simAdd">＋ add action</button></div></div>
+   <div><h3 style="margin-top:0">Event log <span class="note" style="font-weight:400">(click an event to see why)</span></h3><div id="simLog" class="simlog"></div></div></div>
 </section>
 
 <section id="phaseSec">
@@ -973,6 +1006,306 @@ document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.sel=null;ov
    ========================================================= */
 $('#src').value=SAMPLES.users.t();$('#fmt').value='csv';$('#prefix').value='user';
 refresh(true,true,'user');
+
+/* ================= v2: live simulation, accordion, packets ================= */
+const DETAIL=[
+{how:"Redis reads bytes from sockets via an event loop (ae, using epoll/kqueue), appends them to a per-client query buffer, and the RESP parser turns complete frames into argv arrays. Commands then run one at a time on the main thread, so each command is atomic. Redis 6+ can use io-threads for socket reads/writes, but execution stays single-threaded.",
+ pros:["Single executor means no locks, no data races, and every command is atomic by construction.","Pipelining lets many frames share one TCP round trip, so throughput reaches hundreds of thousands of ops/sec per core.","Simple, predictable latency model: cost of a command is its own CPU time plus queue ahead of it.","RESP is trivial to parse and implement in any client language."],
+ cons:["One slow command (KEYS, SMEMBERS on a huge set, big Lua script) stalls every client.","Only one core executes commands; scaling CPU means sharding (Cluster) or replicas for reads.","A client that never reads its replies can balloon the output buffer and the server's memory.","Large values and large pipelines raise tail latency for everyone sharing the loop."],
+ fails:[{m:"Blocked event loop",s:"Latency spikes across all clients; SLOWLOG shows KEYS, SMEMBERS, SORT or a long EVAL; latency-monitor events fire.",x:"Replace KEYS with SCAN, split big keys, use UNLINK instead of DEL, keep Lua short, move heavy reads to replicas."},
+ {m:"Client output buffer overflow",s:"Clients get disconnected; INFO shows rising client_recent_max_output_buffer and memory growth from slow pub/sub or replica consumers.",x:"Tune client-output-buffer-limit per class (normal, replica, pubsub); fix slow consumers; avoid huge replies."},
+ {m:"Connection exhaustion",s:"Errors like max number of clients reached; connected_clients near maxclients; rejected_connections grows.",x:"Use connection pooling, raise maxclients and OS file descriptor limits, set timeout to drop idle clients."},
+ {m:"Protocol error from bad client framing",s:"Logs show Protocol error and the connection is closed; fragmented or oversized bulk strings are rejected (proto-max-bulk-len).",x:"Fix the client library, check proto-max-bulk-len and query buffer limits, avoid sending giant single arguments."}],
+ watch:["SLOWLOG GET and slowlog-log-slower-than: entries over a few ms mean someone is blocking the loop.","INFO stats instantaneous_ops_per_sec and LATENCY DOCTOR; bad is a flat ops rate with rising latency.","INFO clients: connected_clients, blocked_clients, client_recent_max_input/output_buffer.","INFO commandstats: usec_per_call outliers show which command dominates CPU."]},
+
+{how:"The keyspace is a hash table (dict) from key to a redisObject carrying a type and an encoding. Each type picks a compact encoding when small (listpack for small hashes, lists, zsets; intset for small integer sets) and converts to a real structure when thresholds are crossed (hashtable, quicklist, skiplist plus dict). Every command checks the type first and returns WRONGTYPE on mismatch.",
+ pros:["Purpose-built structures give O(1) or O(log N) operations such as ZADD, HINCRBY, LPUSH, SADD.","Small-object encodings (listpack, intset) save a lot of memory versus pointer-heavy structures.","The type check makes misuse fail fast instead of corrupting data.","Rich commands (ZRANGEBYSCORE, SINTER) push logic to the server, saving round trips."],
+ cons:["Encoding conversion is one-way in practice and can suddenly raise memory and CPU for a key.","Big collections have O(N) commands (SMEMBERS, LRANGE 0 -1, HGETALL) that block the event loop.","No secondary indexes or queries beyond what the type offers; you design access patterns up front.","Per-key overhead (dict entry, object header, expire entry) is significant for millions of tiny keys."],
+ fails:[{m:"WRONGTYPE error",s:"Clients see WRONGTYPE Operation against a key holding the wrong kind of value after a key-naming collision or deploy bug.",x:"Namespace keys by type and app, check TYPE during debugging, avoid reusing key names across data models."},
+ {m:"Big key",s:"One key with millions of members; DEL or SMEMBERS causes a latency spike; memory is uneven across cluster nodes.",x:"Find with redis-cli --bigkeys or MEMORY USAGE, shard into smaller keys, use UNLINK and SSCAN/HSCAN, enable lazyfree-lazy-user-del."},
+ {m:"Encoding blow-up",s:"Memory jumps after a hash or zset passes hash-max-listpack-entries or value size limits and converts to a hashtable or skiplist.",x:"Check OBJECT ENCODING, tune the *-max-listpack-* settings deliberately, bucket large hashes into many small ones."},
+ {m:"Hot key",s:"One key takes most traffic; one node (or the single thread) saturates while others idle.",x:"Cache hot keys client-side (client tracking), replicate reads, or split the key into several suffixed copies."}],
+ watch:["redis-cli --bigkeys, MEMORY USAGE key, OBJECT ENCODING key to spot oversized or converted keys.","INFO keyspace: keys and expires counts per db; INFO memory used_memory and mem_fragmentation_ratio.","INFO commandstats for O(N) commands (smembers, hgetall, lrange) with high usec_per_call."]},
+
+{how:"EXPIRE and PEXPIRE store an absolute millisecond deadline in a separate expires dict. Redis deletes expired keys two ways: lazily when a command touches the key, and actively through activeExpireCycle, which runs hz times per second (default 10), samples keys with TTLs, deletes expired ones, and repeats if more than about 25 percent of the sample was expired, within a CPU time budget. Replicas do not expire on their own; they wait for the primary's DEL.",
+ pros:["Expired keys are invisible instantly, because every access checks the deadline first.","Sampling keeps expiry cost bounded and spread over time instead of scanning the whole keyspace.","Absolute deadlines survive restarts and replication without drift concerns.","Simple cache and session semantics with SET EX, GETEX, and TTL commands."],
+ cons:["Memory is not freed at the exact deadline; untouched expired keys linger until sampled.","Mass expiry at the same second creates a burst of deletes that can stall the loop.","Expiry depends on wall-clock time, so clock jumps or skew between nodes matter.","Replica correctness relies on the primary sending DELs; replicas may still serve or hide logically expired keys differently across versions."],
+ fails:[{m:"Expiry storm",s:"Latency spike at a round timestamp when millions of keys with identical TTLs expire together.",x:"Add random jitter to TTLs, enable lazyfree-lazy-expire, lower active-expire-effort or spread key creation."},
+ {m:"Expired keys hoard memory",s:"used_memory stays high; expired_keys grows slowly while many keys are past deadline but untouched.",x:"Raise hz or active-expire-effort, scan keys to force lazy expiry, or reduce TTL cardinality."},
+ {m:"Persistent keys by mistake",s:"A SET without EX or a rewrite that drops the TTL leaves keys that never expire; memory climbs until eviction.",x:"Use SET key val EX n, check TTL on samples, alert when expires is far below keys in INFO keyspace."},
+ {m:"Clock skew or jump",s:"Keys vanish early or live too long after NTP step or restore from backup on a node with a different clock.",x:"Keep NTP healthy on all nodes, avoid restoring snapshots with stale TTL assumptions, review after failover."}],
+ watch:["INFO stats expired_keys and expired_stale_perc: high stale percentage means many dead keys are waiting.","INFO keyspace: avg_ttl and the gap between keys and expires.","LATENCY LATEST for expire-cycle events; bad is periodic spikes aligned to round times."]},
+
+{how:"When maxmemory is set and used memory exceeds it, Redis evicts keys before executing writes according to maxmemory-policy. Approximate LRU and LFU do not keep a global ordering: they sample maxmemory-samples keys (default 5), keep a small eviction pool, and remove the best candidate. LRU uses a 24-bit last-access clock in each object; LFU uses a logarithmic counter with decay (lfu-log-factor, lfu-decay-time).",
+ pros:["Sampling gives near-true LRU quality at constant cost with no per-access list maintenance.","LFU resists scan pollution and keeps genuinely popular keys through bursts of one-off reads.","Policies like volatile-ttl or allkeys-lru let one engine act as a bounded cache.","Raising maxmemory-samples trades CPU for accuracy in a tunable way."],
+ cons:["Approximate: a recently used key can be evicted, and quality depends on sample size.","noeviction turns memory pressure into write errors (OOM command not allowed) instead of data loss.","Eviction cost is paid inside write commands, adding latency exactly when memory is tight.","maxmemory does not count replica or AOF-rewrite buffers and fork copy-on-write, so RSS can exceed it."],
+ fails:[{m:"Eviction storm",s:"Writes slow down and evicted_keys spikes when a big value or burst of writes forces many evictions in one command.",x:"Give headroom (maxmemory below RAM), avoid huge values, enable lazyfree-lazy-eviction, spread load."},
+ {m:"OOM with noeviction",s:"Clients get OOM command not allowed when used memory > maxmemory; reads still work.",x:"Raise maxmemory, switch to an allkeys-* or volatile-* policy suited to the workload, or add shards."},
+ {m:"volatile-* policy with no TTLs",s:"Memory is full but nothing is evictable, so writes fail like noeviction.",x:"Use allkeys-* policies for caches, or make sure evictable keys really carry TTLs."},
+ {m:"Swap or OOM-kill from fragmentation",s:"RSS is well above used_memory (mem_fragmentation_ratio over 1.5) and the kernel starts swapping or the OOM killer fires.",x:"Enable activedefrag, restart in a controlled failover, leave RAM headroom for fork and buffers, disable swap."}],
+ watch:["INFO stats evicted_keys and keyspace_hits vs keyspace_misses; a rising miss ratio with evictions means the cache is too small.","INFO memory used_memory, maxmemory, mem_fragmentation_ratio, used_memory_rss.","MEMORY STATS and MEMORY DOCTOR for overhead breakdown.","Alert on OOM errors from clients and on used_memory near maxmemory."]},
+
+{how:"RDB writes point-in-time snapshots by forking a child (BGSAVE, or save rules like save 3600 1) that dumps a copy-on-write view to dump.rdb. AOF appends every write command to a log, flushed per appendfsync (always, everysec, or no), and is compacted by BGREWRITEAOF; Redis 7 uses multi-part AOF with a base file plus incremental files. On restart Redis loads the AOF if enabled, and aof-load-truncated lets it discard a partial last record.",
+ pros:["RDB files are compact, fast to load, and ideal for backups and fast replica bootstrap.","AOF with everysec bounds loss to roughly one second of writes at low cost.","AOF is an ordered, human-inspectable log; redis-check-aof can repair a torn tail.","Combining both (aof-use-rdb-preamble) gives fast load plus fine-grained durability."],
+ cons:["RDB loses everything since the last snapshot; AOF everysec can lose about a second, no can lose more.","fork() stalls the main thread in proportion to page-table size, and copy-on-write can double memory on write-heavy loads.","appendfsync always is durable but cuts throughput sharply due to disk fsync latency.","AOF grows large between rewrites; rewrites and snapshots cost disk I/O and memory."],
+ fails:[{m:"Fork latency spike",s:"Latency freezes of hundreds of ms during BGSAVE or rewrite on large datasets; INFO latest_fork_usec is large.",x:"Keep instances smaller, avoid THP (disable transparent huge pages), use faster hosts, schedule saves off-peak or snapshot on replicas."},
+ {m:"Copy-on-write memory blowup",s:"Memory nearly doubles during a save under heavy writes; OOM killer terminates redis-server.",x:"Reserve RAM headroom, set vm.overcommit_memory=1, reduce write rate during snapshots."},
+ {m:"Torn or corrupt AOF/RDB",s:"Startup fails or logs Bad file format or unexpected end of AOF after a crash or full disk.",x:"Run redis-check-aof --fix or redis-check-rdb, keep aof-load-truncated yes, retain older backups, monitor disk space."},
+ {m:"Disk stall blocks writes",s:"Slow fsync makes everysec writes wait; Asynchronous AOF fsync is taking too long appears in logs.",x:"Use fast local disks, avoid sharing I/O with rewrites, check no-appendfsync-on-rewrite trade-off."}],
+ watch:["INFO persistence: rdb_last_bgsave_status, aof_last_write_status, rdb_changes_since_last_save, aof_delayed_fsync.","INFO stats latest_fork_usec; bad is tens of ms per GB or more.","Disk free space and aof_current_size vs aof_base_size to know when rewrites are due.","Test restore regularly; an untested backup is not a backup."]},
+
+{how:"A replica connects with PSYNC replid offset. The primary assigns every write a byte offset in a replication stream and keeps a bounded repl-backlog-size buffer. If the replica's offset is still inside the backlog, it gets a partial resync; otherwise the primary forks a child, ships an RDB (full sync), then streams buffered writes. Replication is asynchronous: the primary replies to the client before replicas confirm.",
+ pros:["Replicas offer read scaling and a hot copy for failover and backups.","Partial resync via the backlog makes short network blips cheap.","Offsets plus replid make the stream position unambiguous, even across promotions.","Replicas can take RDB/AOF persistence off the primary."],
+ cons:["Asynchronous: acknowledged writes can be lost if the primary dies before replicas receive them (WAIT narrows but does not close this).","Replicas can serve stale reads and lag under heavy writes.","Full resync costs a fork on the primary, a big network transfer, and a long load on the replica.","A too-small backlog turns every disconnect into an expensive full sync."],
+ fails:[{m:"Resync loop",s:"Replica repeatedly does full syncs; the primary forks again and again; logs show Partial resync not possible.",x:"Increase repl-backlog-size, raise client-output-buffer-limit replica, fix flaky network, check repl-timeout."},
+ {m:"Replica lag",s:"Reads return old data; master_repl_offset minus slave_repl_offset keeps growing; replica output buffer fills.",x:"Reduce write bursts and big values, give replicas better hardware, check the network, use WAIT for critical writes."},
+ {m:"Lost writes on primary crash",s:"After failover, recently acknowledged writes are missing on the new primary.",x:"Accept as design; use WAIT numreplicas, min-replicas-to-write and min-replicas-max-lag to bound the loss window."},
+ {m:"Primary fork memory pressure on full sync",s:"Many replicas syncing at once cause repeated forks, memory spikes and latency.",x:"Stagger replica starts, use repl-diskless-sync with a delay so one RDB serves many replicas, or chain replicas."}],
+ watch:["INFO replication: master_repl_offset vs each replica's offset and lag; connected_slaves and state=online.","INFO stats sync_full, sync_partial_ok, sync_partial_err; frequent sync_full is bad.","repl_backlog_size vs write rate: backlog should cover your longest expected disconnect.","Replica master_link_status should be up; down means it is serving stale data."]},
+
+{how:"Pipelining just sends many commands without waiting for replies; it saves round trips but other clients' commands can interleave and nothing is atomic. MULTI queues commands and EXEC runs them back-to-back with no other client in between. WATCH marks keys; if any is modified before EXEC (including by expiry or eviction), EXEC returns nil and nothing runs. There is no rollback: a command that fails at runtime does not undo earlier ones.",
+ pros:["Pipelining cuts latency-bound workloads dramatically: 100 commands cost about one round trip.","MULTI/EXEC gives isolation without locks because the executor is single-threaded.","WATCH enables lock-free optimistic check-and-set patterns.","Lua scripts and Functions (EVAL, FCALL) give atomic read-modify-write with branching when MULTI is not enough."],
+ cons:["No rollback: a runtime error in the middle leaves earlier commands applied.","A large MULTI or pipeline blocks the loop and buffers lots of memory on the server.","WATCH retries can livelock on hot keys; there is no blocking or fairness.","In Cluster, all keys in a transaction or script must be in the same slot."],
+ fails:[{m:"Assuming pipeline is atomic",s:"Interleaved writes from other clients break an invariant between two commands sent in one pipeline.",x:"Wrap in MULTI/EXEC or use a Lua script / function when atomicity is required."},
+ {m:"EXEC aborted by WATCH",s:"EXEC returns nil under contention; throughput collapses as clients retry the same hot key.",x:"Retry with backoff, shrink the watched set, or move the logic into a Lua script."},
+ {m:"Partial transaction effect",s:"EXECABORT on queue-time errors, or some commands fail at EXEC time while others already applied.",x:"Validate types and arguments first, design idempotent commands, test error paths."},
+ {m:"CROSSSLOT in Cluster",s:"MULTI or script fails with CROSSSLOT Keys in request don't hash to the same slot.",x:"Use hash tags like {user:1}:cart so related keys share a slot, or redesign to single-key operations."}],
+ watch:["INFO stats total_commands_processed vs connections: pipelining shows many commands per read.","INFO commandstats for exec, multi, watch failure patterns; rejected_calls and failed_calls.","INFO clients client_recent_max_input_buffer and SLOWLOG for huge pipelines or scripts.","Application metrics: WATCH retry rate; rising means contention."]},
+
+{how:"Redis Sentinel runs as separate processes that PING the primary. After down-after-milliseconds without a valid reply, a sentinel marks it SDOWN; when quorum sentinels agree it becomes ODOWN. The sentinels elect a leader by majority and a config epoch, which picks the replica with the best priority, replication offset and run id, issues REPLICAOF NO ONE, reconfigures other replicas, and publishes the new primary to clients. The old primary is demoted when it returns.",
+ pros:["Automatic detection and promotion without a human, usually within seconds.","Quorum for ODOWN avoids a single sentinel's bad view triggering failover; majority is needed to authorize it.","Epochs fence stale decisions; the old primary is reconfigured as a replica when it comes back.","Clients discover the current primary through Sentinel, so apps need no hardcoded addresses."],
+ cons:["Replication is async, so promotion can lose recently acknowledged writes.","Network partitions can create a short split brain where the old primary still accepts writes until it is demoted.","Sentinel gives HA only, not sharding; each dataset still lives on one primary.","Misconfigured quorum or too few sentinels (need 3 across failure domains) causes false failovers or none."],
+ fails:[{m:"Split brain",s:"Old primary keeps accepting writes in a partitioned minority; those writes are discarded when it rejoins as a replica.",x:"Set min-replicas-to-write and min-replicas-max-lag so an isolated primary stops accepting writes; place sentinels in separate failure domains."},
+ {m:"Failover flapping",s:"Repeated switch-overs after brief stalls, such as a fork pause or GC-like freeze, longer than down-after-milliseconds.",x:"Raise down-after-milliseconds above worst-case fork latency, fix the latency source, tune failover-timeout."},
+ {m:"Lost acknowledged writes",s:"Data written just before the crash is missing on the promoted replica.",x:"Use WAIT for critical writes, keep replicas close and caught up, accept bounded loss as a design property."},
+ {m:"Clients keep using the old primary",s:"Writes fail with READONLY or go to a demoted node because the client cached the address.",x:"Use Sentinel-aware clients, subscribe to +switch-master, and reconnect on READONLY errors."}],
+ watch:["SENTINEL masters and SENTINEL replicas: flags, num-other-sentinels, and quorum health.","Sentinel logs for +sdown, +odown, +failover-state-*, +switch-master events.","INFO replication on replicas: offset lag decides who gets promoted and how much is lost.","Alert if fewer than quorum sentinels are reachable; failover cannot happen."]},
+
+{how:"Cluster mode maps each key to one of 16,384 hash slots with CRC16(key) mod 16384 (only the part inside {hash tags} if present). Each master owns a set of slots; nodes gossip state over the cluster bus. A request for a key the node does not own gets a MOVED redirect, and during migration ASK; smart clients cache the slot map. Resharding moves slots with MIGRATE key by key, marking slots MIGRATING on the source and IMPORTING on the target before the owner switches.",
+ pros:["Horizontal scale of memory and throughput by adding masters and moving slots.","Fixed slot space makes rebalancing incremental and online, without rehashing all keys.","Built-in failover per shard through replicas and node majority voting.","Clients route directly to the owner after learning the map, so there is no proxy hop."],
+ cons:["Multi-key commands, transactions and scripts need all keys in one slot (CROSSSLOT otherwise).","Only database 0; no cross-slot SCAN or KEYS across the cluster in one call.","Hot keys and big keys cannot be spread by the cluster; one slot lives on one node.","Resharding adds load, and large keys make MIGRATE block the source for a while."],
+ fails:[{m:"CROSSSLOT errors",s:"MGET, SINTER, MULTI or Lua across unrelated keys fails with CROSSSLOT.",x:"Design keys with hash tags {tag} so related keys share a slot, or split into per-key calls."},
+ {m:"MOVED storms after resharding or failover",s:"Clients with stale slot maps bounce between nodes; latency and error rates rise.",x:"Use cluster-aware clients that refresh the map on MOVED, avoid manual redirect loops, throttle resharding."},
+ {m:"Slot unavailable (CLUSTERDOWN)",s:"Cluster reports state fail when a master with no replica is down or slots are uncovered; writes return CLUSTERDOWN.",x:"Run at least one replica per master, keep cluster-require-full-coverage choice deliberate, repair with redis-cli --cluster fix."},
+ {m:"Big key or hot slot during migration",s:"MIGRATE of a huge key blocks the source node and times out; one shard is overloaded.",x:"Split big keys beforehand, use a small --cluster-pipeline and timeouts, rebalance by weight and traffic, not slot count only."}],
+ watch:["CLUSTER INFO: cluster_state ok, cluster_slots_assigned 16384, slots_pfail and slots_fail zero.","CLUSTER NODES: node flags, master-replica pairing, slots in migrating/importing state.","redis-cli --cluster check for slot coverage and open slots; per-node memory and ops balance.","Client metrics: MOVED/ASK counts; a sustained high rate means stale routing."]},
+
+{how:"A stream (XADD, XRANGE, XREAD) is an append-only log of entries with IDs like millisecondTime-sequence, stored in a radix tree of listpacks. A consumer group (XGROUP CREATE, XREADGROUP) tracks last-delivered-id and a Pending Entries List (PEL) per consumer; XACK removes an entry from the PEL. If a consumer dies, others take over its pending entries with XAUTOCLAIM or XCLAIM after a min-idle-time. XADD ... MAXLEN or XTRIM bounds the log size.",
+ pros:["Durable, replayable log: multiple readers can read from any ID independently.","Consumer groups share work across consumers with per-entry acknowledgement and at-least-once delivery.","The PEL exposes unacknowledged work, making crashed-consumer recovery explicit via XPENDING and XAUTOCLAIM.","Approximate trimming (MAXLEN ~) is cheap because it removes whole nodes."],
+ cons:["At-least-once only: after a claim an entry can be processed twice, so handlers must be idempotent.","Memory-resident like everything else; the log grows until you trim, and trimming can drop unread entries.","No built-in dead-letter queue; you must inspect delivery counts yourself.","Ordering is per stream; one stream lives on one node, which limits scaling a single hot stream."],
+ fails:[{m:"Stuck pending entries",s:"XPENDING shows a growing PEL with large idle times because a consumer crashed or never ACKs.",x:"Run XAUTOCLAIM with a sensible min-idle-time, always XACK after processing, alert on pending count and oldest idle."},
+ {m:"Trim drops unread data",s:"Consumers lag behind MAXLEN and lose entries; XREADGROUP skips ahead or returns gaps.",x:"Size MAXLEN or MINID from the slowest consumer's lag, monitor lag, avoid trimming past last-delivered-id."},
+ {m:"Poison message redelivery loop",s:"One bad entry is claimed and fails forever; its delivery counter in XPENDING keeps rising.",x:"Cap retries by delivery count, move the entry to a dead-letter stream, XACK and XDEL it."},
+ {m:"Unbounded stream memory",s:"used_memory grows steadily; XLEN is in the millions with no trimming policy.",x:"Set MAXLEN ~ or MINID on XADD, or schedule XTRIM; consider a retention window by time."}],
+ watch:["XINFO STREAM and XINFO GROUPS: length, last-generated-id, lag, pending, consumers.","XPENDING stream group: pending count and oldest idle time; growth means stuck consumers.","XINFO CONSUMERS: idle per consumer; large idle means dead or stalled.","INFO memory and MEMORY USAGE stream to keep the retention policy honest."]}
+];
+
+(function(){
+const SIMM={
+ id:'redis',nodeLabel:'nodes (1 primary + replicas)',nodeRange:[2,4,3],
+ settings:[{id:'lag',label:'replication lag',opts:['low','high'],def:'low'}],
+ menu:[{op:'S',label:'SET (insert/update)',args:[{n:'key',d:'user:1',w:70},{n:'value',d:'alice',w:70}]},{op:'D',label:'DEL (delete)',args:[{n:'key',d:'user:1',w:70}]},{op:'G',label:'GET (read)',args:[{n:'key',d:'user:1',w:70},{n:'node#',d:'0',w:44}]},{op:'K',label:'kill primary',args:[]},{op:'H',label:'restart node',args:[{n:'node#',d:'0',w:44}]}],
+ scenarios:[
+  {name:'insert → update → delete',desc:'Every write is executed atomically on the primary, appended to the AOF, then streamed asynchronously to replicas by byte offset. GET from a replica can be briefly stale.',acts:['0 S user:1 alice','1500 S user:2 bob','3000 S user:1 alice-v2','4500 G user:1 1','6200 D user:2','7600 G user:2 0']},
+  {name:'primary failure (async replication)',desc:'The primary dies after acknowledging writes that its replicas have not received yet. The sentinel promotes the most up-to-date replica; the unreplicated writes are lost. Try “high” lag.',acts:['0 S a 1','1200 S b 2','2400 S c 3','2900 K','6500 S d 4','8000 G c 0','8000 G a 1']},
+ ],
+ topo(n){
+  const nodes=[{id:'cli',x:14,y:160,w:90,h:70,label:'Client'},{id:'s0',x:360,y:6,w:150,h:46,label:'Sentinel',badge:'monitor'},{id:'aof',x:150,y:310,w:140,h:90,label:'AOF / disk'}];
+  const bw=Math.min(170,Math.floor(560/n)-14),x0=190+(560-n*(bw+14))/2;
+  for(let i=0;i<n;i++)nodes.push({id:'r'+i,x:x0+i*(bw+14),y:100,w:bw,h:190,label:'node '+i,badge:st=>st.role['r'+i]});
+  const edges=[];for(let i=0;i<n;i++){edges.push(['cli','r'+i],['s0','r'+i]);if(i>0)edges.push(['r0','r'+i])}edges.push(['r0','aof'],['s0','cli']);
+  return{nodes,edges,w:900,h:420,zones:[{x:x0-12,y:80,w:n*(bw+14)+10,h:226,label:'Redis · 1 primary + replicas · single-threaded command execution'}]};
+ },
+ init(n){const st={status:{cli:'up',s0:'up',aof:'up'},kv:{},off:{},role:{},aof:[],primary:0,n};for(let i=0;i<n;i++){st.status['r'+i]='up';st.kv['r'+i]={};st.off['r'+i]=0;st.role['r'+i]=i===0?'primary':'replica'}return st},
+ apply(st,f){const id='r'+f.n;switch(f.op){case'set':st.kv[id][f.k]=f.v;st.off[id]=f.o;break;case'del':delete st.kv[id][f.k];st.off[id]=f.o;break;case'down':st.status[id]='down';break;case'up':st.status[id]='up';break;case'primary':st.primary=f.n;Object.keys(st.role).forEach(k=>{if(k!==id&&st.role[k]==='primary')st.role[k]='replica'});st.role[id]='primary';break;case'aof':st.aof.push(f.c);if(st.aof.length>40)st.aof.shift();break;case'copy':st.kv[id]={...f.kv};st.off[id]=f.o;break;case'demote':st.role[id]='replica';break}},
+ fxText(f){return{set:`node ${f.n}: ${f.k}=${f.v} (offset ${f.o})`,del:`node ${f.n}: DEL ${f.k} (offset ${f.o})`,down:`node ${f.n} down`,up:`node ${f.n} up`,primary:`node ${f.n} becomes primary`,aof:'AOF record appended',copy:`node ${f.n} full resync`,demote:`node ${f.n} becomes replica`}[f.op]||f.op},
+ run(acts,n,set){
+  const W=SIMM.init(n),ev=[],pend=[],ap=f=>SIMM.apply(W,f),lag=set.lag==='high'?1700:550;
+  const push=e=>{ev.push(e);if(e.fx.length)pend.push({at:e.t+e.d,e});return e};
+  const flush=t=>{pend.sort((x,y)=>x.at-y.at);while(pend.length&&pend[0].at<=t){pend.shift().e.fx.forEach(ap)}};
+  for(const a of acts){const t=a.t;flush(t);const P=W.primary,pid='r'+P;
+   if(a.op==='S'||a.op==='D'){
+    const k=a.args[0]||'k',v=a.args[1]||'v',del=a.op==='D';
+    if(W.status[pid]==='down'){push(E(t,500,'cli','cli',`${del?'DEL':'SET'} ${k}: connection refused (no primary yet)`,'fail',[],'Until the sentinel promotes a replica there is no writable node.'));continue}
+    flush(t+500);const existed=W.kv[pid][k]!==undefined,o=W.off[pid]+1+pend.filter(x=>x.e.from===pid&&x.e.fx.some(f=>f.op==='set'||f.op==='del')&&x.e.kind==='info').length;
+    push(E(t,500,'cli',pid,del?`DEL ${k}`:`${existed?'SET (update)':'SET (insert)'} ${k} ${v}`,'write',[],'The command queues behind other clients; one thread executes commands one at a time, so each command is atomic.'));
+    push(E(t+500,0,pid,pid,del?`apply DEL (offset ${o})`:`apply SET (offset ${o})`,'info',[del?{op:'del',n:P,k,o}:{op:'set',n:P,k,v,o}],'The primary applies the command to its in-memory keyspace and assigns the next replication offset.'));
+    push(E(t+500,350,pid,'aof',`append ${del?'DEL':'SET'} to AOF`,'info',[{op:'aof',c:`${del?'DEL':'SET'} ${k}${del?'':' '+v}`}],'AOF: every write is appended to a log (fsync every second by default) and replayed after a crash.'));
+    push(E(t+500,400,pid,'cli',del?':1':'+OK','ack',[],'The client is answered before replicas have the write: replication is asynchronous.'));
+    let i=0;for(let r=0;r<n;r++){if(r===P||W.status['r'+r]==='down')continue;push(E(t+700+i*150,lag,pid,'r'+r,`replicate offset ${o}`,'repl',[del?{op:'del',n:r,k,o}:{op:'set',n:r,k,v,o}],'Replicas apply the primary\'s write stream in order, so they lag behind by the network/queue delay.'));i++}
+   }
+   if(a.op==='G'){const k=a.args[0]||'k',r=+(a.args[1]||0),id='r'+r;if(r>=n)continue;
+    if(W.status[id]==='down'){push(E(t,400,'cli','cli',`GET ${k}: node ${r} is down`,'fail',[],'The node does not answer.'));continue}
+    push(E(t,400,'cli',id,`GET ${k}`,'read',[],r===W.primary?'Reads from the primary always see the latest write.':'Reads from a replica are allowed but may be stale: it applies writes after the primary.'));
+    flush(t+400);const val=W.kv[id][k],pv=W.kv['r'+W.primary][k],stale=r!==W.primary&&val!==pv;
+    push(E(t+400,450,id,'cli',`${val===undefined?'(nil)':'"'+val+'"'}${stale?' ← STALE':''}`,stale?'fail':'data',[],stale?`The primary already has ${pv===undefined?'no such key':'"'+pv+'"'}: this replica has not applied that write yet (replication lag).`:'Value matches the primary.'))}
+   if(a.op==='K'){const e=push(E(t,0,'s0',pid,`primary (node ${P}) crashes`,'fail',[{op:'down',n:P}],'The primary process dies. Everything not yet streamed to replicas exists only on the dead node.'));flush(t);
+    for(let i=pend.length-1;i>=0;i--){const x=pend[i].e;if(x.from===pid&&x.kind==='repl'){x.msg+=' ✕ cut off';x.kind='fail';x.fx=[];x.cause='The primary died before this write reached the replica.';pend.splice(i,1)}}
+    push(E(t+700,500,'s0',pid,'PING timeout','ctl',[],'Sentinels ping the primary; after down-after-milliseconds without a reply a sentinel flags it subjectively down.'));
+    push(E(t+1500,0,'s0','s0','ODOWN: quorum agrees primary is down','ctl',[],'A quorum of sentinels must agree before failover starts, so one sentinel\'s network glitch cannot trigger it.'));
+    flush(t+1500);const cand=[...Array(n).keys()].filter(r=>r!==P&&W.status['r'+r]==='up').sort((x,y)=>W.off['r'+y]-W.off['r'+x])[0];
+    if(cand===undefined){push(E(t+1700,0,'s0','s0','no replica available: failover impossible','fail',[],'Without a replica there is nothing to promote.'));continue}
+    const lost=W.off[pid]-W.off['r'+cand];
+    push(E(t+2000,500,'s0','r'+cand,`promote node ${cand} (highest offset ${W.off['r'+cand]})`,'ctl',[{op:'primary',n:cand}],'The most up-to-date replica (highest replication offset) is promoted. The old primary is fenced if it returns.'));
+    if(lost>0)push(E(t+2500,0,'s0','s0',`${lost} acknowledged write(s) LOST (never replicated)`,'fail',[],'Asynchronous replication: the client was acked before the replica had the write. This is the window a failover can lose.'));
+    for(let r=0;r<n;r++)if(r!==P&&r!==cand&&W.status['r'+r]==='up')push(E(t+2600,300,'s0','r'+r,`REPLICAOF node ${cand}`,'ctl',[],'The other replicas start following the new primary.'));
+    flush(t+2600)}
+   if(a.op==='H'){const r=+(a.args[0]||0),id='r'+r;if(r>=n)continue;push(E(t,0,'s0',id,`node ${r} restarts`,'info',[{op:'up',n:r},{op:'demote',n:r}],'The node rejoins as a replica of the current primary.'));flush(t);
+    push(E(t+300,700,'r'+W.primary,id,'full resync (RDB + stream)','repl',[{op:'copy',n:r,kv:{...W.kv['r'+W.primary]},o:W.off['r'+W.primary]}],'A returning node discards its own (possibly divergent) data and copies the primary\'s dataset.'));flush(t+1000)}
+  }
+  return{events:ev};
+ },
+ lines(id,st){
+  if(id==='aof')return st.aof.slice(-5).map(c=>c);
+  if(id==='s0')return[`primary = node ${st.primary}`];
+  if(id[0]==='r'){const kv=st.kv[id],keys=Object.keys(kv);return[`offset ${st.off[id]} · ${keys.length} key(s)`,...keys.slice(0,9).map(k=>`${k} = ${kv[k]}`)]}
+  return[];
+ },
+ detail(id,st){if(id[0]==='r')return[`role ${st.role[id]}`,`replication offset ${st.off[id]}`,...Object.entries(st.kv[id]).map(([k,v])=>`${k} = ${v}`)];if(id==='aof')return st.aof;return SIMM.lines(id,st)}
+};
+
+/* =========================================================
+   LIVE CLUSTER SIMULATION (shared framework)
+   events on a timeline; packets travel between nodes; state is replayed up to time T
+   ========================================================= */
+function sHash(s){let h=2166136261;s=String(s);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h>>>0}
+const sEsc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sShort=(s,n)=>{s=String(s);return s.length>n?s.slice(0,n-1)+'…':s};
+const E=(t,d,from,to,msg,kind,fx,cause)=>({t,d,from,to,msg,kind,fx:fx||[],cause:cause||''});
+const SIM={n:0,set:{},run:null,T:0,play:false,sel:null,selNode:null,speed:1,last:null};
+const SIMCOL={write:'#2f6fed',ack:'#1a9b5a',read:'#e25a1c',data:'#e25a1c',repl:'#9b4fd0',ctl:'#6b7280',fail:'#d64545',info:'#c9a400',sched:'#0f9d8a',watch:'#8a6fd0',ctrl:'#6b7280',trunc:'#d64545'};
+function simParse(text){return text.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#')).map(l=>{const p=l.split(/\s+/);return{t:Number(p[0])||0,op:(p[1]||'').toUpperCase(),args:p.slice(2),raw:l}}).sort((a,b)=>a.t-b.t)}
+function simRun(){
+  const acts=simParse(document.getElementById('simAct').value);
+  try{SIM.run=SIMM.run(acts,SIM.n,SIM.set);SIM.run.events.sort((a,b)=>a.t-b.t||a.d-b.d)}catch(e){SIM.run={events:[],end:0,err:e.message};console.error(e)}
+  SIM.end=Math.max(1000,(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0))+600);
+  const sl=document.getElementById('simT');sl.max=SIM.end;if(SIM.T>SIM.end)SIM.T=SIM.end;
+}
+function simStateAt(T){const st=SIMM.init(SIM.n,SIM.set);for(const e of SIM.run.events){if(e.t+e.d<=T)e.fx.forEach(f=>SIMM.apply(st,f))}return st}
+function simDraw(){
+  const svg=document.getElementById('simSvg');if(!svg||!SIM.run)return;
+  const T=SIM.T,topo=SIMM.topo(SIM.n),st=simStateAt(T),byId=Object.fromEntries(topo.nodes.map(n=>[n.id,n]));
+  const W=topo.w||900,H=topo.h||430;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  const active=SIM.run.events.filter(e=>e.t<=T&&T<e.t+e.d),recent=SIM.run.events.filter(e=>e.t+e.d<=T&&T-(e.t+e.d)<450);
+  const hot=new Set([...active.flatMap(e=>[e.from,e.to]),...recent.map(e=>e.to)]);
+  let s='<defs><marker id="simar" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0L9,4.5L0,9z" fill="#8a94a6"/></marker></defs>';
+  (topo.zones||[]).forEach(z=>{s+=`<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${z.x+12}" y="${z.y+17}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${sEsc(z.label)}</text>`});
+  topo.edges.forEach(([a,b])=>{const A=byId[a],B=byId[b];if(!A||!B)return;s+=`<line x1="${A.x+A.w/2}" y1="${A.y+A.h/2}" x2="${B.x+B.w/2}" y2="${B.y+B.h/2}" stroke="var(--line)" stroke-width="1.5"/>`});
+  topo.nodes.forEach(n=>{
+    const status=(st.status&&st.status[n.id])||'up',down=status==='down',isHot=hot.has(n.id),sel=SIM.selNode===n.id;
+    const lines=SIMM.lines(n.id,st)||[];
+    s+=`<g class="simn" data-id="${n.id}" style="cursor:pointer;${down?'opacity:.55':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${down?'var(--p5)':n.c||'var(--card)'}" stroke="${sel?'var(--acc)':isHot?'var(--acc2)':'var(--line)'}" stroke-width="${sel||isHot?3.5:1.8}"/>
+      <text x="${n.x+9}" y="${n.y+17}" font-weight="700" style="font-size:12.5px">${sEsc(n.label)}${down?' ✕':''}</text>${n.badge&&(n.label.length*7.6+String(typeof n.badge==='function'?n.badge(st):n.badge).length*5.8<n.w)?`<text x="${n.x+n.w-8}" y="${n.y+17}" text-anchor="end" style="font-size:10px;fill:var(--mut)">${sEsc(typeof n.badge==='function'?n.badge(st):n.badge)}</text>`:''}
+      ${lines.slice(0,Math.floor((n.h-24)/13)).map((l,i)=>`<text x="${n.x+9}" y="${n.y+32+i*13}" style="font-size:10.5px;${/^!/.test(l)?'fill:var(--bad)':''}">${sEsc(sShort(String(l).replace(/^!/,''),Math.floor((n.w-14)/6.3)))}</text>`).join('')}</g>`;
+  });
+  active.forEach(e=>{const A=byId[e.from],B=byId[e.to];if(!A||!B)return;const f=Math.min(1,(T-e.t)/Math.max(1,e.d)),ax=A.x+A.w/2,ay=A.y+A.h/2,bx=B.x+B.w/2,by=B.y+B.h/2;
+    if(e.from===e.to){s+=`<text x="${A.x+A.w/2}" y="${A.y-6}" text-anchor="middle" style="font-size:10.5px;fill:${SIMCOL[e.kind]||'#6b7280'};font-weight:700">${sEsc(sShort(e.msg,30))}</text>`;return}
+    const col=SIMCOL[e.kind]||'#6b7280';s+=`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${col}" stroke-width="2.5" opacity=".35"/><circle cx="${ax+(bx-ax)*f}" cy="${ay+(by-ay)*f}" r="7" fill="${col}" stroke="#fff" stroke-width="1.5"/><text x="${ax+(bx-ax)*f}" y="${ay+(by-ay)*f-11}" text-anchor="middle" style="font-size:10px;fill:${col};font-weight:700;paint-order:stroke;stroke:var(--card);stroke-width:3px">${sEsc(sShort(e.msg,26))}</text>`});
+  svg.innerHTML=s;
+  document.getElementById('simTv').textContent=(T/1000).toFixed(2)+' s / '+(SIM.end/1000).toFixed(1)+' s';
+  document.getElementById('simT').value=T;
+  // log
+  const evs=SIM.run.events,upTo=evs.filter(e=>e.t<=T),lastI=upTo.length-1;
+  document.getElementById('simLog').innerHTML=evs.map((e,i)=>`<div class="simev ${i===lastI?'cur':''} ${e.t>T?'fut':''}" data-i="${i}"><span class="simtag" style="background:${SIMCOL[e.kind]||'#6b7280'}">${sEsc(e.kind)}</span> <span class="mono">${(e.t/1000).toFixed(2)}s</span> ${sEsc(e.from)}${e.from===e.to?'':' → '+sEsc(e.to)}: ${sEsc(e.msg)}</div>`).join('')||'<div class="note">No actions yet.</div>';
+  const cur=document.querySelector('#simLog .cur');if(cur&&SIM.play)cur.scrollIntoView({block:'nearest'});
+  // inspector
+  const insp=document.getElementById('simInsp');
+  if(SIM.selNode){const det=SIMM.detail?SIMM.detail(SIM.selNode,st):SIMM.lines(SIM.selNode,st);insp.innerHTML=`<b>${sEsc(byId[SIM.selNode].label)}</b> at ${(T/1000).toFixed(2)}s<pre>${sEsc((det||[]).join('\n')||'(empty)')}</pre>`}
+  else if(SIM.sel!=null&&evs[SIM.sel]){const e=evs[SIM.sel];insp.innerHTML=`<b>${sEsc(e.msg)}</b><div class="note">${sEsc(e.from)} → ${sEsc(e.to)} · ${(e.t/1000).toFixed(2)}s (+${e.d} ms) · ${sEsc(e.kind)}</div>${e.cause?`<div class="caption" style="margin-top:6px"><b>Why:</b> ${sEsc(e.cause)}</div>`:''}<div class="note">state changes: ${e.fx.length?sEsc(e.fx.map(f=>SIMM.fxText?SIMM.fxText(f):f.op).join('; ')):'none (message only)'}</div>`}
+  else insp.innerHTML='<div class="note">Click a node to inspect its data, or click an event in the log to see why it happened.</div>';
+}
+function simTick(now){
+  if(!SIM.play){SIM.last=null;return}
+  if(SIM.last==null)SIM.last=now;const dt=now-SIM.last;SIM.last=now;SIM.T=Math.min(SIM.end,SIM.T+dt*SIM.speed);simDraw();
+  if(SIM.T>=SIM.end){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}
+  requestAnimationFrame(simTick);
+}
+function simBuildControls(){
+  const m=SIMM,nr=m.nodeRange;
+  const sc=document.getElementById('simScn');sc.innerHTML=m.scenarios.map((s,i)=>`<option value="${i}">${sEsc(s.name)}</option>`).join('');
+  const nn=document.getElementById('simN');nn.innerHTML=Array.from({length:nr[1]-nr[0]+1},(_,i)=>`<option value="${nr[0]+i}" ${nr[0]+i===nr[2]?'selected':''}>${nr[0]+i}</option>`).join('');document.getElementById('simNL').textContent=m.nodeLabel;
+  document.getElementById('simSet').innerHTML=(m.settings||[]).map(s=>`<label>${sEsc(s.label)} <select data-set="${s.id}">${s.opts.map(o=>`<option ${o===s.def?'selected':''}>${sEsc(o)}</option>`).join('')}</select></label>`).join('');
+  SIM.set=Object.fromEntries((m.settings||[]).map(s=>[s.id,s.def]));
+  document.getElementById('simOp').innerHTML=m.menu.map((o,i)=>`<option value="${i}">${sEsc(o.label)}</option>`).join('');
+  simArgs();
+}
+function simArgs(){const o=SIMM.menu[+document.getElementById('simOp').value];document.getElementById('simArgs').innerHTML=o.args.map((a,i)=>`<input type="text" data-a="${i}" value="${sEsc(a.d)}" placeholder="${sEsc(a.n)}" style="width:${a.w||80}px">`).join('')}
+function simLoadScenario(i){const s=SIMM.scenarios[i];document.getElementById('simAct').value=s.acts.join('\n');document.getElementById('simDesc').textContent=s.desc;SIM.T=0;SIM.sel=null;SIM.selNode=null;simRun();simDraw()}
+function simInit(){
+  if(!document.getElementById('simSvg'))return;
+  SIM.n=SIMM.nodeRange[2];simBuildControls();simLoadScenario(0);
+  document.getElementById('simScn').onchange=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simLoadScenario(+e.target.value)};
+  document.getElementById('simN').onchange=e=>{SIM.n=+e.target.value;SIM.T=0;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simRun();simDraw()};
+  document.getElementById('simSet').onchange=e=>{const t=e.target.closest('[data-set]');if(t){SIM.set[t.dataset.set]=t.value;simRun();simDraw()}};
+  document.getElementById('simOp').onchange=simArgs;
+  document.getElementById('simAdd').onclick=()=>{const o=SIMM.menu[+document.getElementById('simOp').value],vals=[...document.querySelectorAll('#simArgs input')].map(i=>i.value.trim()||'-');
+    const ta=document.getElementById('simAct'),t=Math.round(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0)+300);ta.value=(ta.value.trim()?ta.value.trim()+'\n':'')+`${t} ${o.op} ${vals.join(' ')}`.trim();SIM.T=Math.max(0,t-200);simRun();simDraw()};
+  document.getElementById('simAct').onchange=()=>{simRun();simDraw()};
+  document.getElementById('simPlay').onclick=()=>{if(SIM.play){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}if(SIM.T>=SIM.end)SIM.T=0;SIM.play=true;SIM.last=null;document.getElementById('simPlay').textContent='⏸ Pause';requestAnimationFrame(simTick)};
+  document.getElementById('simReset').onclick=()=>{SIM.play=false;SIM.T=0;document.getElementById('simPlay').textContent='▶ Play';simDraw()};
+  document.getElementById('simStep').onclick=()=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const nx=SIM.run.events.find(e=>e.t+e.d>SIM.T+1);SIM.T=nx?nx.t+nx.d:SIM.end;SIM.sel=nx?SIM.run.events.indexOf(nx):null;SIM.selNode=null;simDraw()};
+  document.getElementById('simSpeed').onchange=e=>{SIM.speed=+e.target.value};
+  document.getElementById('simT').oninput=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';SIM.T=+e.target.value;simDraw()};
+  document.getElementById('simLog').onclick=e=>{const d=e.target.closest('.simev');if(!d)return;const i=+d.dataset.i;SIM.sel=i;SIM.selNode=null;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const ev=SIM.run.events[i];SIM.T=ev.t+ev.d;simDraw()};
+  document.getElementById('simSvg').onclick=e=>{const g=e.target.closest('.simn');if(g){SIM.selNode=SIM.selNode===g.dataset.id?null:g.dataset.id;SIM.sel=null;simDraw()}};
+}
+
+window.simInit=simInit;window.__sim={SIM,simDraw,simRun};})();
+/* ===== overview: packets travelling along the connections ===== */
+(function(){
+const _ovr=ovRender;
+function pt(g,f){if(g.c){const u=1-f;return[u*u*g.p0[0]+2*u*f*g.c[0]+f*f*g.p1[0],u*u*g.p0[1]+2*u*f*g.c[1]+f*f*g.p1[1]]}return[g.p0[0]+(g.p1[0]-g.p0[0])*f,g.p0[1]+(g.p1[1]-g.p0[1])*f]}
+function findEdge(a,b){let e=OVS.edges.find(x=>x.from===a&&x.to===b);if(e)return{e,rev:false};e=OVS.edges.find(x=>x.from===b&&x.to===a);return e?{e,rev:true}:null}
+ovRender=function(){
+  _ovr();
+  if(OV.k<0||OV.kf==null)return;const svg=document.querySelector('#ovView svg');if(!svg)return;
+  const flow=OVS.flow,i=Math.min(flow.length-1,Math.floor(OV.kf)),f=OV.kf-Math.floor(OV.kf);let s='';
+  if(i>=1){const ed=findEdge(flow[i-1].n,flow[i].n);
+    if(ed){const g=ovGeom(ed.e),ff=Math.min(1,f*1.15),q=ed.rev?1-ff:ff;
+      for(let tr=3;tr>=1;tr--){const qq=ed.rev?Math.min(1,q+tr*.06):Math.max(0,q-tr*.06),p2=pt(g,qq);s+=`<circle cx="${p2[0]}" cy="${p2[1]}" r="${7-tr*1.4}" fill="var(--acc2)" opacity="${.5-tr*.12}"/>`}
+      const p=pt(g,q);s+=`<circle cx="${p[0]}" cy="${p[1]}" r="8" fill="var(--acc2)" stroke="#fff" stroke-width="2"/><text x="${p[0]}" y="${p[1]-13}" text-anchor="middle" style="font-size:11px;font-weight:700;fill:var(--acc2);paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(short(flow[i].t,44))}</text>`}}
+  svg.insertAdjacentHTML('beforeend',s);
+};
+const tr=document.getElementById('ovTrace');
+tr.onclick=()=>{stopAll();OV.sel=null;OV.k=0;OV.kf=0;animate(p=>{OV.kf=Math.min(OVS.flow.length-.001,p*OVS.flow.length);OV.k=Math.floor(OV.kf);ovRender()},OVS.flow.length*1500)};
+document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.kf=null;OV.sel=null;ovRender()};
+document.getElementById('ovView').addEventListener('click',e=>{if(e.target.closest('[data-node]'))OV.kf=null},true);
+})();
+
+/* ===== accordion: one drop-down per phase + detail (how / pros / cons / failure modes / watch) ===== */
+(function(){
+const g=id=>document.getElementById(id),esc2=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sec=g('phaseSec'),nav=g('nav'),barNav=g('prev').parentElement;
+const stage=document.createElement('div');stage.id='stage';
+const det=document.createElement('div');det.id='phDetail';
+stage.append(g('blurb'),g('phCtl'),barNav,g('phView'),det);
+nav.style.display='none';
+const acc=document.createElement('div');acc.id='acc';nav.after(acc);
+acc.innerHTML=PHASES.map((ph,i)=>`<details class="acc" data-i="${i}" style="--pc:var(--p${i%8})"><summary><span class="accn">${i+1}</span><span class="acct"><b>${esc2(ph.t)}</b><small>${esc2(ph.s)}${ph.f?' · '+esc2(ph.f):''}</small></span><span class="accg">${typeof DETAIL!=='undefined'&&DETAIL[i]?'pros · cons · failures':''}</span></summary><div class="accb"></div></details>`).join('');
+const items=[...acc.children];
+function renderDetail(k){
+  const d=typeof DETAIL!=='undefined'&&DETAIL[k];if(!d){det.innerHTML='';return}
+  const li=a=>'<ul>'+a.map(x=>`<li>${esc2(x)}</li>`).join('')+'</ul>';
+  det.innerHTML=`<h3 style="margin-top:16px">Deep dive: ${esc2(PHASES[k].t)}</h3>
+  <details class="dd" open><summary>How it works</summary><div class="ddb">${esc2(d.how)}</div></details>
+  <details class="dd" open><summary>Pros and cons</summary><div class="ddb pc"><div class="pro"><b>✓ Pros</b>${li(d.pros)}</div><div class="con"><b>✗ Cons</b>${li(d.cons)}</div></div></details>
+  <details class="dd"><summary>Failure modes (${d.fails.length})</summary><div class="ddb"><table class="fm"><tr><th>Failure mode</th><th>What you see</th><th>Mitigation</th></tr>${d.fails.map(f=>`<tr><td><b>${esc2(f.m)}</b></td><td>${esc2(f.s)}</td><td>${esc2(f.x)}</td></tr>`).join('')}</table></div></details>
+  <details class="dd"><summary>What to watch</summary><div class="ddb">${li(d.watch)}</div></details>`;
+}
+function place(k){
+  items.forEach((d,i)=>{d.open=i===k});
+  items[k].querySelector('.accb').appendChild(stage);
+}
+const _sp=showPhase;
+showPhase=function(k,p=1){place(k);_sp(k,p);renderDetail(k)};
+acc.addEventListener('click',e=>{const s=e.target.closest('summary');if(!s||!s.parentElement.classList.contains('acc'))return;e.preventDefault();
+  const d=s.parentElement,i=+d.dataset.i;
+  if(d.open){d.open=false;stopAll();return}
+  stopAll();showPhase(i);setTimeout(()=>d.scrollIntoView({behavior:'smooth',block:'start'}),30)});
+window.__accReady=true;
+})();
+
+showPhase(typeof cur==="number"&&cur>=0?cur:0);simInit();
 </script>
 </body>
 </html>

@@ -78,6 +78,26 @@ svg text{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;fill:var(--in
 .ove.flow{animation:flow .6s linear infinite}
 details.dd{border:1px solid var(--line);border-radius:10px;padding:8px 14px;margin-top:10px;background:var(--bg)}
 details.dd summary{cursor:pointer;font-weight:600}
+.simgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:900px){.simgrid{grid-template-columns:1fr}}.simgrid>div{min-width:0}
+.simlog{max-height:210px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:4px}.simev{font-size:12px;padding:2px 6px;border-radius:5px;cursor:pointer;border:1px solid transparent}.simev:hover{border-color:var(--line)}.simev.cur{background:color-mix(in srgb,var(--acc) 16%,var(--card));border-color:var(--acc)}.simev.fut{opacity:.45}
+.simtag{display:inline-block;color:#fff;font-size:10px;border-radius:4px;padding:0 5px}
+#acc{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+details.acc{border:1px solid var(--line);border-radius:12px;background:var(--bg);overflow:hidden}
+details.acc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 14px;background:color-mix(in srgb,var(--pc) 55%,var(--card))}
+details.acc>summary::-webkit-details-marker{display:none}
+details.acc>summary::after{content:'▾';margin-left:auto;color:var(--mut);transition:transform .15s}
+details.acc:not([open])>summary::after{transform:rotate(-90deg)}
+details.acc[open]{border-color:var(--acc2);box-shadow:0 0 0 1px var(--acc2)}
+.accn{flex:none;width:26px;height:26px;border-radius:50%;background:var(--card);border:2px solid var(--acc2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.acct{display:flex;flex-direction:column;min-width:0}.acct small{color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.accg{font-size:11px;color:var(--mut);margin-left:auto;padding-right:6px;white-space:nowrap}@media(max-width:700px){.accg{display:none}}
+.accb{padding:12px 14px;background:var(--card)}
+.ddb{padding:8px 4px 4px;line-height:1.6}.ddb ul{margin:4px 0 0;padding-left:18px}.ddb li{margin:3px 0}
+.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:700px){.pc{grid-template-columns:1fr}}
+.pc .pro,.pc .con{border-radius:8px;padding:8px 12px;background:var(--bg);border-left:4px solid var(--ok)}.pc .con{border-left-color:var(--bad)}
+table.fm{width:100%;border-collapse:collapse;font-size:13px}table.fm th,table.fm td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}table.fm th{background:var(--bg);font-size:12px}
+@media(max-width:700px){table.fm{display:block;overflow-x:auto}}
+
 </style>
 </head>
 <body>
@@ -116,6 +136,19 @@ details.dd summary{cursor:pointer;font-weight:600}
   <div id="ovView"></div>
   <div class="chips" style="margin-top:6px"><span class="chip">solid = data flow</span><span class="chip">dashed = control / metadata</span><span class="chip" style="border-color:var(--bad)">dotted = events / async</span></div>
   <div id="ovInfo"></div>
+</section>
+
+<section id="simSec">
+  <h2><em>▶</em>Live cluster simulation <span class="note" style="font-weight:400">watch inserts, updates and deletes travel between the nodes · edit the actions or inject failures</span></h2>
+  <div class="bar"><label>Scenario <select id="simScn"></select></label><label><span id="simNL">nodes</span> <select id="simN"></select></label><span id="simSet" class="bar" style="margin:0"></span>
+    <button class="primary" id="simPlay">▶ Play</button><button id="simStep">Step ›</button><button id="simReset">⏮</button><label>Speed <select id="simSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label></div>
+  <div class="note" id="simDesc" style="margin:0 0 6px"></div>
+  <svg id="simSvg" style="width:100%;border:1px solid var(--line);border-radius:10px;background:var(--bg)"></svg>
+  <div class="bar"><input type="range" id="simT" min="0" max="1000" value="0" step="10" style="flex:1"><span class="mono" id="simTv"></span></div>
+  <div id="simInsp" class="box" style="margin:8px 0"></div>
+  <div class="simgrid"><div><h3 style="margin-top:0">Actions <span class="note" style="font-weight:400">(time in ms, then op and arguments)</span></h3><textarea id="simAct" rows="7" spellcheck="false"></textarea>
+    <div class="bar"><select id="simOp"></select><span id="simArgs" class="bar" style="margin:0"></span><button id="simAdd">＋ add action</button></div></div>
+   <div><h3 style="margin-top:0">Event log <span class="note" style="font-weight:400">(click an event to see why)</span></h3><div id="simLog" class="simlog"></div></div></div>
 </section>
 
 <section id="phaseSec">
@@ -938,6 +971,332 @@ document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.sel=null;ov
 /* ================= init ================= */
 $('#src').value=SAMPLES.orders.t();$('#fmt').value='csv';
 rebuild(true,true);
+
+/* ================= v2: live simulation, accordion, packets ================= */
+const DETAIL=[
+{how:"A query arrives as text. The parser (gram.y) builds a raw parse tree, then parse analysis resolves table and column names against the system catalogs (pg_class, pg_attribute, pg_type) and produces a Query tree. The rewriter expands views and rules, then the planner takes over. No table data is read until execution.",
+ pros:["Errors such as unknown column or ambiguous name surface before any I/O happens.","Catalog-driven typing gives strong type checks and operator resolution, including user-defined types.","A logical tree separates what is asked from how it runs, so the planner can pick any physical strategy.","Prepared statements can reuse parse and analysis work across executions."],
+ cons:["Catalog lookups cost CPU; huge schemas or many short queries stress the catalog caches (relcache, syscache).","Parsing is per backend and per statement unless you use prepared statements or a pooler that keeps them.","Implicit casts can silently change semantics or defeat index use (text vs integer, timestamp vs timestamptz).","DDL changes invalidate cached plans and force re-analysis."],
+ fails:[{m:"Ambiguous or missing column",s:"ERROR: column reference is ambiguous / column does not exist, raised before execution starts",x:"Qualify columns with table aliases and check the search_path; test queries with EXPLAIN to see the bound names."},
+  {m:"Implicit cast blocks an index",s:"Seq Scan appears in EXPLAIN even though an index exists on the column",x:"Compare columns and literals of the same type, cast the literal not the column, or add an expression index."},
+  {m:"search_path surprise",s:"Query resolves to a different schema's table or fails with relation does not exist in some roles",x:"Schema-qualify objects, pin search_path per role or function, and avoid public-writable schemas."},
+  {m:"Catalog bloat or DDL churn",s:"Slow planning, high CPU in the parse and plan phase, large pg_attribute or pg_class",x:"Avoid creating thousands of temp tables per session, vacuum catalogs, and use prepared statements."}],
+ watch:["EXPLAIN (ANALYZE) shows Planning Time; a high value on simple queries points to catalog or planning overhead.","pg_stat_statements: compare total_plan_time with total_exec_time when track_planning is on.","Check pg_catalog size, for example pg_total_relation_size('pg_attribute'), for catalog bloat."]},
+
+{how:"A table's heap is a file of 8 kB pages, each a slotted page with a line-pointer array growing from the front and tuples growing from the back. A row is addressed by a ctid (block, offset). Backends read pages through shared_buffers, pinning a buffer, and evict victims with a clock-sweep algorithm that skips pinned and recently used pages.",
+ pros:["Fixed-size pages make I/O, checksums and caching simple and predictable.","Line pointers let tuples move within a page without changing their ctid, which also enables HOT updates.","Shared buffers give all backends one cache and let hot pages avoid disk entirely.","Clock-sweep is cheap and scan-resistant enough, and large sequential scans use a small ring buffer so they do not flush the cache."],
+ cons:["Pages are not compacted automatically; dead space remains until VACUUM and page pruning reclaim it.","Postgres double-buffers with the OS page cache, so memory sizing needs care.","Rows wider than about 2 kB go to TOAST, adding extra lookups.","Random writes of dirty pages cost I/O at eviction or checkpoint time."],
+ fails:[{m:"Cache too small",s:"Low buffer hit ratio, high read latency, heavy disk reads during normal queries",x:"Raise shared_buffers (commonly about 25 percent of RAM) and verify with pg_buffercache; reduce working set with better indexes."},
+  {m:"Table bloat",s:"Table and heap size keep growing while live rows stay flat; scans get slower",x:"Tune autovacuum for the table, fix long transactions, and use pg_repack or VACUUM FULL during a window if already bloated."},
+  {m:"Backends write dirty buffers",s:"High buffers_backend in pg_stat_bgwriter and latency spikes under write load",x:"Tune bgwriter_lru_maxpages and checkpoint settings so background processes clean pages first."},
+  {m:"Page corruption",s:"ERROR: invalid page in block, or checksum failure",x:"Enable data checksums at initdb, restore from backup or replica, and investigate storage; zero_damaged_pages is a last resort."}],
+ watch:["pg_statio_user_tables heap_blks_hit vs heap_blks_read: a hit ratio persistently below about 99 percent on OLTP is suspect.","EXPLAIN (ANALYZE, BUFFERS) shows shared hit, read and dirtied pages per node.","pg_stat_bgwriter and pg_stat_io: rising backend writes or evictions mean the cache is under pressure."]},
+
+{how:"The executor runs the plan as a tree of nodes using the Volcano pull model: each node implements ExecProcNode and returns one tuple at a time to its parent. Scan, Filter and Nested Loop stream rows; Sort, HashAggregate and the build side of Hash Join must consume input first. Memory per node is bounded by work_mem.",
+ pros:["Pull-based iteration needs little memory for streaming plans and supports LIMIT early exit.","Every operator has the same interface, so the planner can combine them freely.","Pipelining returns first rows quickly, which matters for interactive queries and cursors.","Parallel query reuses the same nodes, adding Gather nodes over parallel workers."],
+ cons:["Per-tuple function calls add CPU overhead compared with vectorized engines, hurting big analytic scans.","Nested Loop rescans its inner side per outer row, so a bad estimate can turn into quadratic work.","Blocking operators need memory or spill to temp files.","Each node adds overhead, so very wide or deep plans cost more than simple ones."],
+ fails:[{m:"Nested loop explosion",s:"Query runs for minutes; EXPLAIN ANALYZE shows an inner node with huge loops count",x:"Fix row estimates with ANALYZE or extended statistics, add an index on the inner join key, or allow hash join by checking work_mem."},
+  {m:"Sort or aggregate spill",s:"EXPLAIN shows Sort Method: external merge Disk, or HashAggregate batches greater than 1",x:"Raise work_mem for that session or role, add an index that provides the order, or reduce rows earlier."},
+  {m:"Per-row function overhead",s:"CPU-bound query with a volatile or slow function in WHERE or SELECT",x:"Mark functions with correct volatility (IMMUTABLE or STABLE), move work out of the row loop, or precompute."},
+  {m:"Large OFFSET paging",s:"Page N of results gets slower as N grows",x:"Use keyset pagination (WHERE key greater than last seen) with a supporting index."}],
+ watch:["EXPLAIN (ANALYZE, BUFFERS): compare rows estimated vs actual and look at loops on inner nodes.","Look for Sort Method: external merge or Batches greater than 1 in hash nodes.","pg_stat_statements: temp_blks_written and mean_exec_time identify spilling statements."]},
+
+{how:"The default index is a B+tree: each 8 kB page holds ordered keys and pointers, with internal pages guiding the descent and leaf pages holding (key, heap ctid) and linked left and right for range scans. Inserts go to the correct leaf; a full page splits and pushes a separator key up. Index-only scans can skip the heap when the visibility map says the page is all-visible.",
+ pros:["Logarithmic lookups: a few page reads reach any row even in huge tables.","Leaf links make range scans, ORDER BY and merge joins efficient and ordered.","Covering indexes (INCLUDE) plus the visibility map allow index-only scans.","Unique indexes enforce constraints and support ON CONFLICT."],
+ cons:["Every insert, update of an indexed column and delete touches each index, adding write amplification and WAL.","Non-HOT updates must insert new entries in all indexes, since each new row version has a new ctid.","Random-keyed indexes (for example UUID v4) cause scattered writes and page splits.","Unselective predicates make index scans slower than a sequential scan due to random I/O."],
+ fails:[{m:"Index bloat",s:"Index size grows far beyond live data; lookups touch many sparse pages",x:"REINDEX CONCURRENTLY, tune autovacuum, and avoid patterns that leave sparse leaf pages."},
+  {m:"Unused or duplicate indexes",s:"Writes slow down and disk grows with indexes whose idx_scan stays at zero",x:"Check pg_stat_user_indexes and drop unused or redundant indexes after confirming on replicas too."},
+  {m:"Index not used",s:"Seq Scan despite an index; function or cast on the column, or low selectivity",x:"Match expression or type, add an expression or partial index, and refresh statistics."},
+  {m:"Blocking index build",s:"CREATE INDEX blocks writes on a busy table for a long time",x:"Use CREATE INDEX CONCURRENTLY and check for invalid indexes if it fails midway."}],
+ watch:["pg_stat_user_indexes: idx_scan equal to zero for weeks means a candidate to drop.","pgstattuple or pgstatindex: low avg_leaf_density or high leaf_fragmentation signals bloat.","EXPLAIN shows Index Scan vs Index Only Scan and Heap Fetches; high heap fetches means a stale visibility map."]},
+
+{how:"PostgreSQL implements MVCC by never overwriting a row in place. Each tuple carries xmin (creating transaction) and xmax (deleting or locking transaction); an UPDATE writes a new version and stamps xmax on the old one. A snapshot (xmin, xmax, in-progress list) plus the commit log (pg_xact) decides which version each transaction sees. Under Read Committed a snapshot is taken per statement; under Repeatable Read per transaction.",
+ pros:["Readers never block writers and writers never block readers, which gives high concurrency.","Consistent snapshots make long reports and backups see a stable view without locks.","Rollback is cheap: aborted versions are simply invisible and cleaned up later.","Row-level locking means conflicts only occur on the same rows."],
+ cons:["Old versions pile up as dead tuples and need VACUUM, so tables can bloat.","Every update writes a full new tuple and often new index entries, increasing write volume.","Under Read Committed, read-modify-write logic can lose updates; under Repeatable Read it can fail with serialization errors that apps must retry.","Transaction IDs are 32-bit and need freezing to avoid wraparound."],
+ fails:[{m:"Lost update under Read Committed",s:"Two sessions read a balance, both write back, one change silently vanishes",x:"Use SELECT ... FOR UPDATE, atomic UPDATE x = x + 1, or Repeatable Read with retry on error 40001."},
+  {m:"Serialization or write conflict",s:"ERROR: could not serialize access due to concurrent update (SQLSTATE 40001)",x:"Retry the whole transaction in the application; keep transactions short to reduce conflicts."},
+  {m:"Idle in transaction",s:"Sessions stuck idle in transaction hold locks and pin the xmin horizon, causing bloat",x:"Set idle_in_transaction_session_timeout, fix the app to commit or rollback, and kill offenders."},
+  {m:"Transaction ID wraparound",s:"Warnings to vacuum database; at the limit the cluster refuses writes",x:"Keep autovacuum healthy, monitor age(datfrozenxid), run manual VACUUM FREEZE, and tune autovacuum_freeze_max_age."}],
+ watch:["pg_stat_activity: state = idle in transaction and old xact_start or backend_xmin values.","age(datfrozenxid) and age(relfrozenxid): far above autovacuum_freeze_max_age (200 million default) means danger.","pg_stat_database xact_rollback and conflicts, plus application retry counts for 40001 errors."]},
+
+{how:"Write-ahead logging requires a change record to reach the WAL before the modified data page may be flushed, and COMMIT waits for its commit record to be fsynced (synchronous_commit on). WAL is written by backends and the walwriter into 16 MB segments in pg_wal, with each record protected by a CRC. After a crash, startup replays WAL from the last checkpoint's redo point, applying records to pages with older LSNs and stopping at the first invalid or torn record.",
+ pros:["Durability with sequential writes: data pages can be flushed lazily because the log is the source of truth.","Crash recovery is automatic and bounded by the checkpoint distance.","The same log feeds streaming replication, PITR and logical decoding.","CRC checks and LSN comparisons make replay idempotent and safe against torn tails."],
+ cons:["Every change is written twice (WAL and later the data page), and full_page_writes adds full-page images after a checkpoint.","fsync latency on the commit path directly limits transaction rate on slow disks.","WAL volume can be large for update-heavy or index-heavy workloads.","Unconsumed WAL (replication slots, failed archiving) fills disk."],
+ fails:[{m:"WAL disk fills up",s:"pg_wal grows without bound and the server may PANIC on no space",x:"Check inactive replication slots and archive_command failures, set max_slot_wal_keep_size, and add disk alarms."},
+  {m:"Slow fsync at commit",s:"High commit latency, WALWrite or WALSync wait events dominate",x:"Use fast storage with a protected write cache, batch commits, or accept synchronous_commit off only for data you can lose."},
+  {m:"Replica lag from heavy WAL",s:"Replay lag grows after bulk loads or large updates",x:"Throttle bulk jobs, check replica I/O, and size wal_compression and network accordingly."},
+  {m:"Corrupt or missing WAL segment",s:"Startup fails with invalid record or could not locate required checkpoint",x:"Restore from base backup plus archived WAL; never delete files from pg_wal by hand."}],
+ watch:["pg_stat_wal: wal_bytes, wal_buffers_full and wal_sync_time show write pressure.","pg_replication_slots: wal_status and retained WAL per slot; pg_stat_replication replay_lag for replicas.","pg_stat_activity wait_event of WALWrite, WALSync or WALInsert indicates commit-path contention."]},
+
+{how:"VACUUM scans heap pages (guided by the visibility map), removes index entries pointing to dead tuples, then marks the line pointers reusable and updates the free space map. A tuple is dead for cleanup only if its xmax committed before the oldest snapshot still in use, the xmin horizon. Autovacuum launches workers per table when dead tuples exceed autovacuum_vacuum_threshold plus scale_factor times reltuples; it also freezes old XIDs.",
+ pros:["Reclaims space for reuse without blocking normal reads and writes (plain VACUUM takes a light lock).","Updates the visibility map so index-only scans and later vacuums can skip pages.","Freezing prevents transaction ID wraparound and keeps the cluster safe long term.","Autovacuum is automatic and cost-throttled so it can run alongside production load."],
+ cons:["Plain VACUUM does not return space to the OS (except trailing empty pages); only rewriting commands do.","Autovacuum I/O competes with queries and is throttled by cost limits, so it can fall behind on busy tables.","Defaults (scale factor 0.2) are too lazy for very large tables.","One old snapshot anywhere in the database can hold back cleanup for every table."],
+ fails:[{m:"Long transaction pins the horizon",s:"Dead tuples grow while VACUUM runs but removes nothing; n_dead_tup keeps climbing",x:"Find the oldest backend_xmin, replication slots and prepared transactions; end them and set idle_in_transaction_session_timeout."},
+  {m:"Autovacuum cannot keep up",s:"Tables bloat, autovacuum workers always busy, queries slow down",x:"Lower per-table autovacuum_vacuum_scale_factor, raise autovacuum_vacuum_cost_limit, and add workers."},
+  {m:"Severe bloat",s:"Table is many times its live size; plain VACUUM does not shrink the file",x:"Use pg_repack or VACUUM FULL in a maintenance window, then fix the cause."},
+  {m:"Anti-wraparound vacuum storm",s:"Aggressive autovacuum to prevent wraparound runs on huge tables and cannot be cancelled",x:"Schedule manual VACUUM FREEZE earlier and monitor XID age with alerts well below 2 billion."}],
+ watch:["pg_stat_user_tables: n_dead_tup, last_autovacuum and autovacuum_count per table.","pg_stat_activity backend_xmin age, pg_replication_slots xmin and pg_prepared_xacts for horizon holders.","pg_stat_progress_vacuum for running vacuums and the pgstattuple extension for real bloat."]},
+
+{how:"ANALYZE samples about 300 times default_statistics_target rows per table and stores per-column statistics in pg_statistic (visible via pg_stats): null fraction, n_distinct, most common values, histogram bounds and correlation. The planner uses these to estimate selectivity and row counts, assigns costs using seq_page_cost, random_page_cost and cpu_* parameters, and picks the cheapest path and join order. Extended statistics (CREATE STATISTICS) capture correlations between columns.",
+ pros:["Cost-based planning adapts to data size and distribution without manual hints.","Per-column histograms handle skew; extended statistics fix correlated predicates.","The planner can choose between index, bitmap and sequential scans, and between nested loop, hash and merge joins.","Autovacuum runs ANALYZE automatically as data changes."],
+ cons:["Estimates are only as good as the sample; skew, correlation and expressions are easy to misjudge.","Errors compound through joins, so a small misestimate can produce a very bad plan.","Statistics go stale after bulk loads until ANALYZE runs.","There are no built-in hints, so fixing a bad plan means changing stats, settings or the query."],
+ fails:[{m:"Stale statistics",s:"After a bulk load the plan flips to a nested loop or seq scan; estimated rows far below actual",x:"Run ANALYZE after bulk changes and lower per-table autovacuum_analyze_scale_factor for volatile tables."},
+  {m:"Correlated columns underestimated",s:"EXPLAIN shows rows=1 while actual rows are thousands for a multi-column WHERE",x:"CREATE STATISTICS (dependencies, ndistinct, mcv) on the correlated columns, then ANALYZE."},
+  {m:"Skew missed by sample",s:"Rare but heavy values get wrong estimates; plan good for most values and terrible for a few",x:"Raise default_statistics_target on the column (ALTER TABLE ... SET STATISTICS) and re-analyze."},
+  {m:"Cost parameters wrong for hardware",s:"Planner avoids indexes on SSD storage because random_page_cost is 4",x:"Set random_page_cost near 1.1 for SSD and review effective_cache_size."}],
+ watch:["EXPLAIN (ANALYZE): compare estimated rows to actual rows at every node; ratio off by 10x or more is a red flag.","pg_stats and pg_stat_user_tables last_analyze and n_mod_since_analyze for staleness.","pg_stat_statements: statements with high mean time but large variance may be plan flips."]},
+
+{how:"Sorts and hash tables are limited per node by work_mem (default 4 MB). An in-memory sort uses quicksort or top-N heapsort; if it exceeds work_mem it writes sorted runs to temp files and does an external merge. A hash join builds a hash table of the smaller input; if it does not fit it is split into batches (hash_mem_multiplier can give hash more room), spilling partitions to temp files and processing batch by batch.",
+ pros:["A fixed per-node budget stops a single query from consuming all RAM.","External sort and batched hash join let queries finish on data far larger than memory.","Temp files are removed automatically at end of statement or backend exit, including after errors.","work_mem can be set per session, role or query to give heavy reports more memory safely."],
+ cons:["Spilling to disk is often orders of magnitude slower than in-memory processing.","work_mem is per node and per parallel worker, so total usage is multiplied across nodes, workers and connections.","Hash join batches re-read data, and skewed keys can make one batch huge.","Setting work_mem too high globally risks out-of-memory with many connections."],
+ fails:[{m:"Sort spills to disk",s:"EXPLAIN ANALYZE shows Sort Method: external merge Disk: NNN kB, queries slow and temp I/O high",x:"Raise work_mem for that role or query, add an index that avoids the sort, or filter earlier."},
+  {m:"Hash join multiple batches",s:"Hash node shows Batches: 8 or more with large temp writes",x:"Raise work_mem or hash_mem_multiplier, or fix an overestimated build side so the planner picks the smaller input."},
+  {m:"OOM from work_mem times concurrency",s:"OS kills postgres backends under many concurrent complex queries",x:"Keep global work_mem modest, use a pooler to cap connections, and raise it only for specific workloads."},
+  {m:"Temp files fill disk",s:"temp_file_limit errors or full volume from runaway queries",x:"Set temp_file_limit, use log_temp_files to find offenders, and fix the plan."}],
+ watch:["EXPLAIN (ANALYZE, BUFFERS): Sort Method, Disk usage, and Hash Batches versus Original Batches.","pg_stat_database temp_files and temp_bytes, plus pg_stat_statements temp_blks_read and temp_blks_written.","Enable log_temp_files = 0 (or a threshold) to log every temp file created."]},
+
+{how:"A checkpoint, triggered by checkpoint_timeout or by WAL growth reaching max_wal_size, writes all dirty shared buffers to disk and records a redo point in pg_control. WAL older than that point can be recycled, and crash recovery only replays from it. The checkpointer spreads writes over checkpoint_completion_target of the interval to smooth I/O, and the first change to each page after a checkpoint writes a full-page image when full_page_writes is on.",
+ pros:["Bounds crash recovery time: replay only covers WAL since the last checkpoint.","Lets old WAL be recycled so pg_wal stays a bounded size.","Spreading writes (completion target around 0.9) avoids large single bursts of I/O.","Full-page images after a checkpoint protect against torn page writes."],
+ cons:["Frequent checkpoints raise write I/O and WAL volume because of repeated full-page images.","Infrequent checkpoints mean more WAL to keep and a longer crash recovery.","Large shared_buffers with heavy writes can still cause I/O spikes at checkpoint time.","fsync of many files at the end of a checkpoint can stall on slow storage."],
+ fails:[{m:"Checkpoints too frequent",s:"Log says checkpoints are occurring too frequently; many requested (not timed) checkpoints in pg_stat_checkpointer",x:"Increase max_wal_size (and checkpoint_timeout) so checkpoints are mostly timed."},
+  {m:"Checkpoint I/O spike",s:"Periodic latency spikes and disk saturation aligned with checkpoint times",x:"Raise checkpoint_completion_target to 0.9, tune bgwriter, and use faster storage or spread write bursts."},
+  {m:"Long crash recovery",s:"After a crash the server spends minutes in recovery replaying WAL",x:"Shorten checkpoint_timeout or max_wal_size and keep a hot standby for fast failover."},
+  {m:"WAL spike from full-page writes",s:"WAL volume jumps right after each checkpoint on write-heavy tables",x:"Enable wal_compression and lengthen checkpoint interval; keep full_page_writes on unless storage guarantees atomic writes."}],
+ watch:["pg_stat_bgwriter or pg_stat_checkpointer: checkpoints_timed vs checkpoints_req, and write_time and sync_time.","Set log_checkpoints = on and read buffers written, write and sync durations and distance.","pg_stat_wal wal_fpi shows full-page images; a high ratio to wal_records suggests short checkpoint intervals."]},
+
+{how:"Read Committed (the default) takes a new snapshot per statement, so a later statement can see rows committed in between, which allows non-repeatable reads and phantoms. Repeatable Read uses one snapshot for the whole transaction and fails a writer with a serialization error if the row it wants changed after the snapshot; Serializable adds SSI to catch write skew. Row, table and advisory locks queue conflicting sessions, and after deadlock_timeout (1 s) the deadlock detector finds wait-for cycles and aborts one victim.",
+ pros:["Read Committed is simple and rarely errors, which suits most OLTP code.","Repeatable Read gives a stable view for reports and multi-statement logic.","Serializable (SSI) gives true serial behavior without readers blocking writers.","Deadlock detection resolves cycles automatically instead of hanging forever."],
+ cons:["Read Committed allows lost updates, non-repeatable reads and phantoms unless you lock explicitly.","Stronger levels turn races into errors (40001 or 40P01) that the application must catch and retry.","Write skew still exists under Repeatable Read; only Serializable prevents it, with extra overhead.","Long lock waits and deadlocks come from inconsistent lock order and long transactions."],
+ fails:[{m:"Deadlock",s:"ERROR: deadlock detected (SQLSTATE 40P01); one transaction is rolled back",x:"Lock rows in a consistent order, keep transactions short, and retry on 40P01; log_lock_waits helps find the pair."},
+  {m:"Lost update or write skew",s:"Data is silently wrong after concurrent updates (for example two on-call doctors both go off duty)",x:"Use SELECT FOR UPDATE, atomic UPDATE expressions, constraints, or SERIALIZABLE with retry logic."},
+  {m:"Lock queue pile-up",s:"One long DDL or idle transaction blocks others; many sessions waiting on locks, connections exhausted",x:"Set lock_timeout and statement_timeout, run DDL with short timeouts, and kill the blocker found in pg_locks."},
+  {m:"Unhandled serialization failures",s:"Intermittent 40001 errors reach users under Repeatable Read or Serializable",x:"Wrap the transaction in a retry loop with backoff and keep the transaction small."}],
+ watch:["pg_stat_activity wait_event_type = Lock, and pg_locks joined with pg_blocking_pids() to see who blocks whom.","Set log_lock_waits = on and watch pg_stat_database deadlocks and conflicts counters.","Application metrics for SQLSTATE 40001 and 40P01 retries; a rising rate means contention."]}
+];
+
+(function(){
+const SIMM={
+ id:'postgres',nodeLabel:'servers (1 primary + standbys)',nodeRange:[2,4,2],
+ settings:[{id:'sc',label:'synchronous_commit',opts:['off','local','remote'],def:'local'},{id:'lag',label:'standby lag',opts:['normal','slow'],def:'slow'}],
+ menu:[{op:'I',label:'INSERT',args:[{n:'id',d:'1',w:40},{n:'value',d:'alice',w:70}]},{op:'U',label:'UPDATE',args:[{n:'id',d:'1',w:40},{n:'value',d:'alice2',w:70}]},{op:'D',label:'DELETE',args:[{n:'id',d:'1',w:40}]},{op:'S',label:'SELECT (node#)',args:[{n:'id',d:'1',w:40},{n:'node#',d:'0',w:44}]},{op:'V',label:'VACUUM',args:[]},{op:'K',label:'crash primary',args:[]},{op:'H',label:'restart node as standby',args:[{n:'#',d:'0',w:40}]}],
+ scenarios:[
+  {name:'insert → update → delete (MVCC)',desc:'Every change is written to the WAL first, then to the heap page. UPDATE does not overwrite: it stamps the old tuple with xmax and adds a new tuple. DELETE only stamps xmax. VACUUM later reclaims dead tuples. Standbys replay the WAL, so a standby read can be stale.',acts:['0 I 1 alice','1800 I 2 bob','3600 U 1 alice2','5200 S 1 1','6800 D 2','8200 S 2 0','9600 V']},
+  {name:'primary crash (synchronous_commit)',desc:'The primary dies right after it acknowledged a commit. With synchronous_commit=off the client was told OK before the WAL was even flushed; with local it survives a restart but not a failover if the standby is behind; with remote the commit is only acknowledged once a standby has it. Switch the setting and compare.',acts:['0 I 1 a','1800 I 2 b','3200 I 3 c','4950 K','8000 I 4 d','10000 H 0','11800 S 3 1']},
+ ],
+ topo(n){
+  const nodes=[{id:'cli',x:14,y:150,w:90,h:70,label:'Client'}],bw=Math.min(230,Math.floor(660/n)-14),x0=170+(700-n*(bw+14))/2;
+  for(let i=0;i<n;i++)nodes.push({id:'n'+i,x:x0+i*(bw+14),y:70,w:bw,h:290,label:'server '+i,badge:st=>st.role['n'+i]});
+  const edges=[];for(let i=0;i<n;i++){edges.push(['cli','n'+i]);if(i>0)edges.push(['n0','n'+i])}
+  return{nodes,edges,w:900,h:420,zones:[{x:x0-10,y:48,w:n*(bw+14)+6,h:330,label:'PostgreSQL streaming replication · WAL shipping'}]};
+ },
+ init(n){const st={status:{cli:'up'},heap:{},log:{},fl:{},role:{},primary:0,n};for(let i=0;i<n;i++){const id='n'+i;st.status[id]='up';st.heap[id]=[];st.log[id]=[];st.fl[id]=0;st.role[id]=i===0?'primary':'standby'}return st},
+ apply(st,f){const id='n'+f.n,H=st.heap[id];
+  const redo=r=>{if(r.k==='ins')H.push({id:r.id,v:r.v,xmin:r.x,xmax:0});else if(r.k==='upd'){const o=H.find(t=>t.id===r.id&&!t.xmax);if(o)o.xmax=r.x;H.push({id:r.id,v:r.v,xmin:r.x,xmax:0})}else if(r.k==='del'){const o=H.find(t=>t.id===r.id&&!t.xmax);if(o)o.xmax=r.x}};
+  switch(f.op){
+   case'wal':st.log[id].push(f.r);redo(f.r);if(f.sync)st.fl[id]=f.r.lsn;break;
+   case'flush':st.fl[id]=Math.max(st.fl[id],f.lsn);break;
+   case'crash':st.status[id]='down';st.log[id]=st.log[id].filter(r=>r.lsn<=st.fl[id]);st.heap[id]=[];st.log[id].forEach(redo);break;
+   case'up':st.status[id]='up';break;
+   case'promote':st.primary=f.n;Object.keys(st.role).forEach(k=>{if(st.status[k]==='up'||k===id)st.role[k]=k===id?'primary':'standby'});st.status[id]='up';st.role[id]='primary';break;
+   case'rejoin':{const s='n'+f.from;st.heap[id]=st.heap[s].map(t=>({...t}));st.log[id]=st.log[s].map(r=>r);st.fl[id]=st.fl[s];st.status[id]='up';st.role[id]='standby';break}
+   case'vac':st.heap[id]=H.filter(t=>!t.xmax);break;
+  }},
+ fxText(f){return{wal:`node ${f.n}: WAL record lsn ${f.r&&f.r.lsn} (${f.r&&f.r.k}) + heap`,flush:`node ${f.n}: WAL flushed to lsn ${f.lsn}`,crash:`node ${f.n} crashed: unflushed WAL lost`,up:`node ${f.n} up`,promote:`node ${f.n} promoted to primary`,rejoin:`node ${f.n} rejoins as standby`,vac:`node ${f.n}: VACUUM removes dead tuples`}[f.op]||f.op},
+ run(acts,n,set){
+  const W=SIMM.init(n),ev=[],pend=[],ap=f=>SIMM.apply(W,f),lag=set.lag==='slow'?2600:600;
+  const push=e=>{ev.push(e);if(e.fx.length)pend.push({at:e.t+e.d,e});return e};
+  const flush=t=>{pend.sort((x,y)=>x.at-y.at);while(pend.length&&pend[0].at<=t){pend.shift().e.fx.forEach(ap)}};
+  let xid=100,lsn=0;const acked=[];const lastLsn=id=>W.log[id].reduce((m,r)=>Math.max(m,r.lsn),0);
+  const truth=id=>{const P='n'+W.primary,x=W.heap[P].find(t=>t.id===id&&!t.xmax);return x?x.v:null};
+  for(const a of acts){const t=a.t;flush(t);const P=W.primary,pid='n'+P,alive=W.status[pid]==='up';
+   if(a.op==='I'||a.op==='U'||a.op==='D'){
+    const id=a.args[0]||'1',v=a.args[1]||'v',k=a.op==='I'?'ins':a.op==='U'?'upd':'del';
+    if(!alive){push(E(t,400,'cli','cli','connection refused: no primary','fail',[],'The primary is down and no standby was promoted yet.'));continue}
+    flush(t+400);const exists=W.heap[pid].some(x=>x.id===id&&!x.xmax);
+    if(k==='ins'&&exists){push(E(t,500,'cli',pid,`INSERT ${id}`,'write',[],'Client sends the statement.'));push(E(t+500,400,pid,'cli','ERROR duplicate key (unique index)','fail',[],'The unique B-tree index already has this key, so the statement aborts before any change is made.'));continue}
+    if(k!=='ins'&&!exists){push(E(t,500,'cli',pid,`${a.op==='U'?'UPDATE':'DELETE'} ${id}`,'write',[],'Client sends the statement.'));push(E(t+500,400,pid,'cli','0 rows affected','ack',[],'The index/heap scan found no visible row version for this id, so there is nothing to change.'));continue}
+    xid++;lsn++;const rec={lsn,x:xid,k,id,v:k==='del'?null:v};
+    const sql=k==='ins'?`INSERT ${id}=${v}`:k==='upd'?`UPDATE ${id}=${v}`:`DELETE ${id}`;
+    push(E(t,400,'cli',pid,sql,'write',[],'The statement runs in a backend process. It takes a transaction id (xid '+xid+') and a snapshot.'));
+    push(E(t+400,300,pid,pid,`WAL record lsn ${lsn}, heap tuple`,'info',[{op:'wal',n:P,r:rec}],k==='upd'?'MVCC: the old tuple gets xmax='+xid+' and a NEW tuple version is added (the old one is not overwritten).':k==='del'?'MVCC: DELETE only stamps xmax on the tuple; the bytes stay until VACUUM.':'The WAL record is appended first (write-ahead), then the heap page in shared buffers is changed.'));
+    const fl=t+700+500;push(E(t+700,500,pid,pid,`fsync WAL → lsn ${lsn}`,'info',[{op:'flush',n:P,lsn}],'COMMIT must make its WAL record durable with fsync. The heap page itself may stay dirty in memory until a checkpoint.'));
+    let standAck=null;const stands=[...Array(n).keys()].filter(i=>i!==P&&W.status['n'+i]==='up');
+    stands.forEach(i=>{const e=push(E(t+700,lag,pid,'n'+i,`WAL lsn ${lsn} →`,'repl',[{op:'wal',n:i,r:rec,sync:true}],'The WAL sender streams records to the standby; the standby writes/flushes them and replays them into its own heap.'));const ak=push(E(t+700+lag,350,'n'+i,pid,'ack','ack',[],'Standby reports the WAL position it has received.'));if(standAck===null||ak.t+ak.d<standAck)standAck=ak.t+ak.d});
+    let at,why;
+    if(set.sc==='off'){at=t+700;why='synchronous_commit=off: OK is returned BEFORE the WAL is flushed. Fast, but a crash can lose this "committed" transaction.'}
+    else if(set.sc==='local'){at=fl;why='synchronous_commit=local: OK after the local fsync. Survives a crash+restart of this server, but a standby may still be behind.'}
+    else{if(standAck===null){push(E(fl,0,pid,pid,'COMMIT is waiting for a standby (none available)…','fail',[],'synchronous_commit=remote_write/on with a standby configured: the commit blocks until a standby confirms. With no standby up, writes hang. This is the availability cost of zero data loss.'));continue}at=standAck;why='synchronous_commit=remote: OK only after a standby confirmed the WAL. No acknowledged commit can be lost on failover, but latency includes the network round trip.'}
+    push(E(at,400,pid,'cli',`COMMIT OK (lsn ${lsn})`,'ack',[],why));acked.push({lsn,at:at+400,sql,id});
+   }
+   if(a.op==='S'){const id=a.args[0]||'1',ni=+(a.args[1]||W.primary),nid='n'+ni;if(ni>=n)continue;
+    push(E(t,450,'cli',nid,`SELECT ${id}`,'read',[],'The query reads the heap using a snapshot: it sees only tuple versions whose xmin is committed and whose xmax is not.'));
+    if(W.status[nid]!=='up'){push(E(t+450,400,nid,'cli','connection refused','fail',[],'Server is down.'));continue}
+    flush(t+450);const x=W.heap[nid].find(r=>r.id===id&&!r.xmax),tv=truth(id),stale=(x?x.v:null)!==tv&&nid!=='n'+W.primary;
+    push(E(t+450,450,nid,'cli',(x?`"${x.v}"`:'(no row)')+(stale?' ← STALE':''),stale?'fail':'ack',[],stale?`This standby has not replayed the newest WAL yet. The primary currently has ${tv===null?'no visible row':'"'+tv+'"'}. Hot-standby reads are eventually consistent.`:'MVCC returns the newest committed visible tuple version.'))}
+   if(a.op==='V'&&alive){flush(t+10);const dead=W.heap[pid].filter(x=>x.xmax).length;push(E(t,700,pid,pid,`VACUUM: ${dead} dead tuple(s) reclaimed`,'info',[{op:'vac',n:P}],'VACUUM removes tuple versions no snapshot can see any more, freeing space for reuse. Without it the table bloats.'))}
+   if(a.op==='K'&&alive){
+    for(let i=pend.length-1;i>=0;i--)if(pend[i].e.from===pid&&pend[i].at>t){const e=pend[i].e;e.fx=[];e.kind='fail';e.msg+=' ✕ never arrives';e.cause='The primary crashed before this was delivered, so the target never receives it.';pend.splice(i,1)}
+    push(E(t,0,'cli',pid,`PRIMARY ${P} CRASHES`,'fail',[{op:'crash',n:P}],'The process dies. Anything not fsynced to the WAL is gone; the heap is rebuilt from the WAL on recovery.'));
+    const cands=[...Array(n).keys()].filter(i=>i!==P&&W.status['n'+i]==='up');
+    if(cands.length){cands.sort((x,y)=>lastLsn('n'+y)-lastLsn('n'+x));const c=cands[0],at=t+1500;
+     push(E(at,600,'n'+c,'n'+c,`promote server ${c} (replayed to lsn ${lastLsn('n'+c)})`,'info',[{op:'promote',n:c}],'The standby with the most WAL becomes the new primary. Anything the old primary acknowledged but never shipped is not on it.'));
+     const mx=lastLsn('n'+c),lost=acked.filter(x=>x.lsn>mx&&x.at<=t);
+     if(lost.length)push(E(at+650,0,'n'+c,'n'+c,`${lost.length} ACKNOWLEDGED commit(s) LOST: ${lost.map(x=>x.sql).join(', ')}`,'fail',[],'The client was told COMMIT OK, but this transaction never reached the promoted standby. Use synchronous_commit=remote to prevent it.'));
+     else push(E(at+650,0,'n'+c,'n'+c,'no acknowledged commit was lost','ack',[],'Every acknowledged commit was already on the promoted standby.'));
+     flush(at+700)}
+    else{const at=t+1500;const mx=W.fl[pid];const lost=acked.filter(x=>x.lsn>mx&&x.at<=t);push(E(at,700,pid,pid,`crash recovery: replay WAL to lsn ${mx}`,'info',[{op:'up',n:P}],'No standby: the same server restarts and replays its flushed WAL (redo).'));
+     if(lost.length)push(E(at+750,0,pid,pid,`${lost.length} ACKNOWLEDGED commit(s) LOST: ${lost.map(x=>x.sql).join(', ')}`,'fail',[],'These commits were acknowledged with synchronous_commit=off before their WAL reached disk.'));flush(at+800)}
+   }
+   if(a.op==='H'){const i=+a.args[0]||0;if(i>=n||i===W.primary)continue;flush(t);push(E(t,800,'n'+W.primary,'n'+i,`server ${i} rejoins as standby (re-sync from new primary)`,'info',[{op:'rejoin',n:i,from:W.primary}],'The old primary may hold WAL the new timeline never saw; it is rewound/re-cloned and then follows the new primary.'));flush(t+800)}
+  }
+  return{events:ev};
+ },
+ lines(id,st){if(id==='cli')return[];const H=st.heap[id]||[];return[`WAL lsn ${st.log[id].reduce((m,r)=>Math.max(m,r.lsn),0)} · flushed ${st.fl[id]}`,...H.slice(0,9).map(t=>`id${t.id}=${t.v} xmin${t.xmin}${t.xmax?' xmax'+t.xmax+' ✕':''}`)]},
+ detail(id,st){if(id==='cli')return[];const H=st.heap[id]||[];return[`role: ${st.role[id]}`,`WAL records ${st.log[id].length}, flushed to lsn ${st.fl[id]}`,`heap tuples ${H.length} (${H.filter(t=>t.xmax).length} dead)`,...H.map(t=>`id=${t.id} v=${t.v} xmin=${t.xmin} xmax=${t.xmax||'-'}${t.xmax?'  (dead, VACUUM can reclaim)':''}`)]}
+};
+
+/* =========================================================
+   LIVE CLUSTER SIMULATION (shared framework)
+   events on a timeline; packets travel between nodes; state is replayed up to time T
+   ========================================================= */
+function sHash(s){let h=2166136261;s=String(s);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h>>>0}
+const sEsc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sShort=(s,n)=>{s=String(s);return s.length>n?s.slice(0,n-1)+'…':s};
+const E=(t,d,from,to,msg,kind,fx,cause)=>({t,d,from,to,msg,kind,fx:fx||[],cause:cause||''});
+const SIM={n:0,set:{},run:null,T:0,play:false,sel:null,selNode:null,speed:1,last:null};
+const SIMCOL={write:'#2f6fed',ack:'#1a9b5a',read:'#e25a1c',data:'#e25a1c',repl:'#9b4fd0',ctl:'#6b7280',fail:'#d64545',info:'#c9a400',sched:'#0f9d8a',watch:'#8a6fd0',ctrl:'#6b7280',trunc:'#d64545'};
+function simParse(text){return text.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#')).map(l=>{const p=l.split(/\s+/);return{t:Number(p[0])||0,op:(p[1]||'').toUpperCase(),args:p.slice(2),raw:l}}).sort((a,b)=>a.t-b.t)}
+function simRun(){
+  const acts=simParse(document.getElementById('simAct').value);
+  try{SIM.run=SIMM.run(acts,SIM.n,SIM.set);SIM.run.events.sort((a,b)=>a.t-b.t||a.d-b.d)}catch(e){SIM.run={events:[],end:0,err:e.message};console.error(e)}
+  SIM.end=Math.max(1000,(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0))+600);
+  const sl=document.getElementById('simT');sl.max=SIM.end;if(SIM.T>SIM.end)SIM.T=SIM.end;
+}
+function simStateAt(T){const st=SIMM.init(SIM.n,SIM.set);for(const e of SIM.run.events){if(e.t+e.d<=T)e.fx.forEach(f=>SIMM.apply(st,f))}return st}
+function simDraw(){
+  const svg=document.getElementById('simSvg');if(!svg||!SIM.run)return;
+  const T=SIM.T,topo=SIMM.topo(SIM.n),st=simStateAt(T),byId=Object.fromEntries(topo.nodes.map(n=>[n.id,n]));
+  const W=topo.w||900,H=topo.h||430;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  const active=SIM.run.events.filter(e=>e.t<=T&&T<e.t+e.d),recent=SIM.run.events.filter(e=>e.t+e.d<=T&&T-(e.t+e.d)<450);
+  const hot=new Set([...active.flatMap(e=>[e.from,e.to]),...recent.map(e=>e.to)]);
+  let s='<defs><marker id="simar" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0L9,4.5L0,9z" fill="#8a94a6"/></marker></defs>';
+  (topo.zones||[]).forEach(z=>{s+=`<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${z.x+12}" y="${z.y+17}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${sEsc(z.label)}</text>`});
+  topo.edges.forEach(([a,b])=>{const A=byId[a],B=byId[b];if(!A||!B)return;s+=`<line x1="${A.x+A.w/2}" y1="${A.y+A.h/2}" x2="${B.x+B.w/2}" y2="${B.y+B.h/2}" stroke="var(--line)" stroke-width="1.5"/>`});
+  topo.nodes.forEach(n=>{
+    const status=(st.status&&st.status[n.id])||'up',down=status==='down',isHot=hot.has(n.id),sel=SIM.selNode===n.id;
+    const lines=SIMM.lines(n.id,st)||[];
+    s+=`<g class="simn" data-id="${n.id}" style="cursor:pointer;${down?'opacity:.55':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${down?'var(--p5)':n.c||'var(--card)'}" stroke="${sel?'var(--acc)':isHot?'var(--acc2)':'var(--line)'}" stroke-width="${sel||isHot?3.5:1.8}"/>
+      <text x="${n.x+9}" y="${n.y+17}" font-weight="700" style="font-size:12.5px">${sEsc(n.label)}${down?' ✕':''}</text>${n.badge&&(n.label.length*7.6+String(typeof n.badge==='function'?n.badge(st):n.badge).length*5.8<n.w)?`<text x="${n.x+n.w-8}" y="${n.y+17}" text-anchor="end" style="font-size:10px;fill:var(--mut)">${sEsc(typeof n.badge==='function'?n.badge(st):n.badge)}</text>`:''}
+      ${lines.slice(0,Math.floor((n.h-24)/13)).map((l,i)=>`<text x="${n.x+9}" y="${n.y+32+i*13}" style="font-size:10.5px;${/^!/.test(l)?'fill:var(--bad)':''}">${sEsc(sShort(String(l).replace(/^!/,''),Math.floor((n.w-14)/6.3)))}</text>`).join('')}</g>`;
+  });
+  active.forEach(e=>{const A=byId[e.from],B=byId[e.to];if(!A||!B)return;const f=Math.min(1,(T-e.t)/Math.max(1,e.d)),ax=A.x+A.w/2,ay=A.y+A.h/2,bx=B.x+B.w/2,by=B.y+B.h/2;
+    if(e.from===e.to){s+=`<text x="${A.x+A.w/2}" y="${A.y-6}" text-anchor="middle" style="font-size:10.5px;fill:${SIMCOL[e.kind]||'#6b7280'};font-weight:700">${sEsc(sShort(e.msg,30))}</text>`;return}
+    const col=SIMCOL[e.kind]||'#6b7280';s+=`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${col}" stroke-width="2.5" opacity=".35"/><circle cx="${ax+(bx-ax)*f}" cy="${ay+(by-ay)*f}" r="7" fill="${col}" stroke="#fff" stroke-width="1.5"/><text x="${ax+(bx-ax)*f}" y="${ay+(by-ay)*f-11}" text-anchor="middle" style="font-size:10px;fill:${col};font-weight:700;paint-order:stroke;stroke:var(--card);stroke-width:3px">${sEsc(sShort(e.msg,26))}</text>`});
+  svg.innerHTML=s;
+  document.getElementById('simTv').textContent=(T/1000).toFixed(2)+' s / '+(SIM.end/1000).toFixed(1)+' s';
+  document.getElementById('simT').value=T;
+  // log
+  const evs=SIM.run.events,upTo=evs.filter(e=>e.t<=T),lastI=upTo.length-1;
+  document.getElementById('simLog').innerHTML=evs.map((e,i)=>`<div class="simev ${i===lastI?'cur':''} ${e.t>T?'fut':''}" data-i="${i}"><span class="simtag" style="background:${SIMCOL[e.kind]||'#6b7280'}">${sEsc(e.kind)}</span> <span class="mono">${(e.t/1000).toFixed(2)}s</span> ${sEsc(e.from)}${e.from===e.to?'':' → '+sEsc(e.to)}: ${sEsc(e.msg)}</div>`).join('')||'<div class="note">No actions yet.</div>';
+  const cur=document.querySelector('#simLog .cur');if(cur&&SIM.play)cur.scrollIntoView({block:'nearest'});
+  // inspector
+  const insp=document.getElementById('simInsp');
+  if(SIM.selNode){const det=SIMM.detail?SIMM.detail(SIM.selNode,st):SIMM.lines(SIM.selNode,st);insp.innerHTML=`<b>${sEsc(byId[SIM.selNode].label)}</b> at ${(T/1000).toFixed(2)}s<pre>${sEsc((det||[]).join('\n')||'(empty)')}</pre>`}
+  else if(SIM.sel!=null&&evs[SIM.sel]){const e=evs[SIM.sel];insp.innerHTML=`<b>${sEsc(e.msg)}</b><div class="note">${sEsc(e.from)} → ${sEsc(e.to)} · ${(e.t/1000).toFixed(2)}s (+${e.d} ms) · ${sEsc(e.kind)}</div>${e.cause?`<div class="caption" style="margin-top:6px"><b>Why:</b> ${sEsc(e.cause)}</div>`:''}<div class="note">state changes: ${e.fx.length?sEsc(e.fx.map(f=>SIMM.fxText?SIMM.fxText(f):f.op).join('; ')):'none (message only)'}</div>`}
+  else insp.innerHTML='<div class="note">Click a node to inspect its data, or click an event in the log to see why it happened.</div>';
+}
+function simTick(now){
+  if(!SIM.play){SIM.last=null;return}
+  if(SIM.last==null)SIM.last=now;const dt=now-SIM.last;SIM.last=now;SIM.T=Math.min(SIM.end,SIM.T+dt*SIM.speed);simDraw();
+  if(SIM.T>=SIM.end){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}
+  requestAnimationFrame(simTick);
+}
+function simBuildControls(){
+  const m=SIMM,nr=m.nodeRange;
+  const sc=document.getElementById('simScn');sc.innerHTML=m.scenarios.map((s,i)=>`<option value="${i}">${sEsc(s.name)}</option>`).join('');
+  const nn=document.getElementById('simN');nn.innerHTML=Array.from({length:nr[1]-nr[0]+1},(_,i)=>`<option value="${nr[0]+i}" ${nr[0]+i===nr[2]?'selected':''}>${nr[0]+i}</option>`).join('');document.getElementById('simNL').textContent=m.nodeLabel;
+  document.getElementById('simSet').innerHTML=(m.settings||[]).map(s=>`<label>${sEsc(s.label)} <select data-set="${s.id}">${s.opts.map(o=>`<option ${o===s.def?'selected':''}>${sEsc(o)}</option>`).join('')}</select></label>`).join('');
+  SIM.set=Object.fromEntries((m.settings||[]).map(s=>[s.id,s.def]));
+  document.getElementById('simOp').innerHTML=m.menu.map((o,i)=>`<option value="${i}">${sEsc(o.label)}</option>`).join('');
+  simArgs();
+}
+function simArgs(){const o=SIMM.menu[+document.getElementById('simOp').value];document.getElementById('simArgs').innerHTML=o.args.map((a,i)=>`<input type="text" data-a="${i}" value="${sEsc(a.d)}" placeholder="${sEsc(a.n)}" style="width:${a.w||80}px">`).join('')}
+function simLoadScenario(i){const s=SIMM.scenarios[i];document.getElementById('simAct').value=s.acts.join('\n');document.getElementById('simDesc').textContent=s.desc;SIM.T=0;SIM.sel=null;SIM.selNode=null;simRun();simDraw()}
+function simInit(){
+  if(!document.getElementById('simSvg'))return;
+  SIM.n=SIMM.nodeRange[2];simBuildControls();simLoadScenario(0);
+  document.getElementById('simScn').onchange=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simLoadScenario(+e.target.value)};
+  document.getElementById('simN').onchange=e=>{SIM.n=+e.target.value;SIM.T=0;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simRun();simDraw()};
+  document.getElementById('simSet').onchange=e=>{const t=e.target.closest('[data-set]');if(t){SIM.set[t.dataset.set]=t.value;simRun();simDraw()}};
+  document.getElementById('simOp').onchange=simArgs;
+  document.getElementById('simAdd').onclick=()=>{const o=SIMM.menu[+document.getElementById('simOp').value],vals=[...document.querySelectorAll('#simArgs input')].map(i=>i.value.trim()||'-');
+    const ta=document.getElementById('simAct'),t=Math.round(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0)+300);ta.value=(ta.value.trim()?ta.value.trim()+'\n':'')+`${t} ${o.op} ${vals.join(' ')}`.trim();SIM.T=Math.max(0,t-200);simRun();simDraw()};
+  document.getElementById('simAct').onchange=()=>{simRun();simDraw()};
+  document.getElementById('simPlay').onclick=()=>{if(SIM.play){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}if(SIM.T>=SIM.end)SIM.T=0;SIM.play=true;SIM.last=null;document.getElementById('simPlay').textContent='⏸ Pause';requestAnimationFrame(simTick)};
+  document.getElementById('simReset').onclick=()=>{SIM.play=false;SIM.T=0;document.getElementById('simPlay').textContent='▶ Play';simDraw()};
+  document.getElementById('simStep').onclick=()=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const nx=SIM.run.events.find(e=>e.t+e.d>SIM.T+1);SIM.T=nx?nx.t+nx.d:SIM.end;SIM.sel=nx?SIM.run.events.indexOf(nx):null;SIM.selNode=null;simDraw()};
+  document.getElementById('simSpeed').onchange=e=>{SIM.speed=+e.target.value};
+  document.getElementById('simT').oninput=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';SIM.T=+e.target.value;simDraw()};
+  document.getElementById('simLog').onclick=e=>{const d=e.target.closest('.simev');if(!d)return;const i=+d.dataset.i;SIM.sel=i;SIM.selNode=null;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const ev=SIM.run.events[i];SIM.T=ev.t+ev.d;simDraw()};
+  document.getElementById('simSvg').onclick=e=>{const g=e.target.closest('.simn');if(g){SIM.selNode=SIM.selNode===g.dataset.id?null:g.dataset.id;SIM.sel=null;simDraw()}};
+}
+
+window.simInit=simInit;window.__sim={SIM,simDraw,simRun};})();
+/* ===== overview: packets travelling along the connections ===== */
+(function(){
+const _ovr=ovRender;
+function pt(g,f){if(g.c){const u=1-f;return[u*u*g.p0[0]+2*u*f*g.c[0]+f*f*g.p1[0],u*u*g.p0[1]+2*u*f*g.c[1]+f*f*g.p1[1]]}return[g.p0[0]+(g.p1[0]-g.p0[0])*f,g.p0[1]+(g.p1[1]-g.p0[1])*f]}
+function findEdge(a,b){let e=OVS.edges.find(x=>x.from===a&&x.to===b);if(e)return{e,rev:false};e=OVS.edges.find(x=>x.from===b&&x.to===a);return e?{e,rev:true}:null}
+ovRender=function(){
+  _ovr();
+  if(OV.k<0||OV.kf==null)return;const svg=document.querySelector('#ovView svg');if(!svg)return;
+  const flow=OVS.flow,i=Math.min(flow.length-1,Math.floor(OV.kf)),f=OV.kf-Math.floor(OV.kf);let s='';
+  if(i>=1){const ed=findEdge(flow[i-1].n,flow[i].n);
+    if(ed){const g=ovGeom(ed.e),ff=Math.min(1,f*1.15),q=ed.rev?1-ff:ff;
+      for(let tr=3;tr>=1;tr--){const qq=ed.rev?Math.min(1,q+tr*.06):Math.max(0,q-tr*.06),p2=pt(g,qq);s+=`<circle cx="${p2[0]}" cy="${p2[1]}" r="${7-tr*1.4}" fill="var(--acc2)" opacity="${.5-tr*.12}"/>`}
+      const p=pt(g,q);s+=`<circle cx="${p[0]}" cy="${p[1]}" r="8" fill="var(--acc2)" stroke="#fff" stroke-width="2"/><text x="${p[0]}" y="${p[1]-13}" text-anchor="middle" style="font-size:11px;font-weight:700;fill:var(--acc2);paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(short(flow[i].t,44))}</text>`}}
+  svg.insertAdjacentHTML('beforeend',s);
+};
+const tr=document.getElementById('ovTrace');
+tr.onclick=()=>{stopAll();OV.sel=null;OV.k=0;OV.kf=0;animate(p=>{OV.kf=Math.min(OVS.flow.length-.001,p*OVS.flow.length);OV.k=Math.floor(OV.kf);ovRender()},OVS.flow.length*1500)};
+document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.kf=null;OV.sel=null;ovRender()};
+document.getElementById('ovView').addEventListener('click',e=>{if(e.target.closest('[data-node]'))OV.kf=null},true);
+})();
+
+/* ===== accordion: one drop-down per phase + detail (how / pros / cons / failure modes / watch) ===== */
+(function(){
+const g=id=>document.getElementById(id),esc2=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sec=g('phaseSec'),nav=g('nav'),barNav=g('prev').parentElement;
+const stage=document.createElement('div');stage.id='stage';
+const det=document.createElement('div');det.id='phDetail';
+stage.append(g('blurb'),g('phCtl'),barNav,g('phView'),det);
+nav.style.display='none';
+const acc=document.createElement('div');acc.id='acc';nav.after(acc);
+acc.innerHTML=PHASES.map((ph,i)=>`<details class="acc" data-i="${i}" style="--pc:var(--p${i%8})"><summary><span class="accn">${i+1}</span><span class="acct"><b>${esc2(ph.t)}</b><small>${esc2(ph.s)}${ph.f?' · '+esc2(ph.f):''}</small></span><span class="accg">${typeof DETAIL!=='undefined'&&DETAIL[i]?'pros · cons · failures':''}</span></summary><div class="accb"></div></details>`).join('');
+const items=[...acc.children];
+function renderDetail(k){
+  const d=typeof DETAIL!=='undefined'&&DETAIL[k];if(!d){det.innerHTML='';return}
+  const li=a=>'<ul>'+a.map(x=>`<li>${esc2(x)}</li>`).join('')+'</ul>';
+  det.innerHTML=`<h3 style="margin-top:16px">Deep dive: ${esc2(PHASES[k].t)}</h3>
+  <details class="dd" open><summary>How it works</summary><div class="ddb">${esc2(d.how)}</div></details>
+  <details class="dd" open><summary>Pros and cons</summary><div class="ddb pc"><div class="pro"><b>✓ Pros</b>${li(d.pros)}</div><div class="con"><b>✗ Cons</b>${li(d.cons)}</div></div></details>
+  <details class="dd"><summary>Failure modes (${d.fails.length})</summary><div class="ddb"><table class="fm"><tr><th>Failure mode</th><th>What you see</th><th>Mitigation</th></tr>${d.fails.map(f=>`<tr><td><b>${esc2(f.m)}</b></td><td>${esc2(f.s)}</td><td>${esc2(f.x)}</td></tr>`).join('')}</table></div></details>
+  <details class="dd"><summary>What to watch</summary><div class="ddb">${li(d.watch)}</div></details>`;
+}
+function place(k){
+  items.forEach((d,i)=>{d.open=i===k});
+  items[k].querySelector('.accb').appendChild(stage);
+}
+const _sp=showPhase;
+showPhase=function(k,p=1){place(k);_sp(k,p);renderDetail(k)};
+acc.addEventListener('click',e=>{const s=e.target.closest('summary');if(!s||!s.parentElement.classList.contains('acc'))return;e.preventDefault();
+  const d=s.parentElement,i=+d.dataset.i;
+  if(d.open){d.open=false;stopAll();return}
+  stopAll();showPhase(i);setTimeout(()=>d.scrollIntoView({behavior:'smooth',block:'start'}),30)});
+window.__accReady=true;
+})();
+
+showPhase(typeof cur==="number"&&cur>=0?cur:0);simInit();
 </script>
 </body>
 </html>

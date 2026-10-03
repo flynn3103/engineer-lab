@@ -76,6 +76,26 @@ svg text{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;fill:var(--in
 .ove.flow{animation:flow .6s linear infinite}
 details.dd{border:1px solid var(--line);border-radius:10px;padding:8px 14px;margin-top:10px;background:var(--bg)}
 details.dd summary{cursor:pointer;font-weight:600}
+.simgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:900px){.simgrid{grid-template-columns:1fr}}.simgrid>div{min-width:0}
+.simlog{max-height:210px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:4px}.simev{font-size:12px;padding:2px 6px;border-radius:5px;cursor:pointer;border:1px solid transparent}.simev:hover{border-color:var(--line)}.simev.cur{background:color-mix(in srgb,var(--acc) 16%,var(--card));border-color:var(--acc)}.simev.fut{opacity:.45}
+.simtag{display:inline-block;color:#fff;font-size:10px;border-radius:4px;padding:0 5px}
+#acc{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+details.acc{border:1px solid var(--line);border-radius:12px;background:var(--bg);overflow:hidden}
+details.acc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 14px;background:color-mix(in srgb,var(--pc) 55%,var(--card))}
+details.acc>summary::-webkit-details-marker{display:none}
+details.acc>summary::after{content:'▾';margin-left:auto;color:var(--mut);transition:transform .15s}
+details.acc:not([open])>summary::after{transform:rotate(-90deg)}
+details.acc[open]{border-color:var(--acc2);box-shadow:0 0 0 1px var(--acc2)}
+.accn{flex:none;width:26px;height:26px;border-radius:50%;background:var(--card);border:2px solid var(--acc2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.acct{display:flex;flex-direction:column;min-width:0}.acct small{color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.accg{font-size:11px;color:var(--mut);margin-left:auto;padding-right:6px;white-space:nowrap}@media(max-width:700px){.accg{display:none}}
+.accb{padding:12px 14px;background:var(--card)}
+.ddb{padding:8px 4px 4px;line-height:1.6}.ddb ul{margin:4px 0 0;padding-left:18px}.ddb li{margin:3px 0}
+.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:700px){.pc{grid-template-columns:1fr}}
+.pc .pro,.pc .con{border-radius:8px;padding:8px 12px;background:var(--bg);border-left:4px solid var(--ok)}.pc .con{border-left-color:var(--bad)}
+table.fm{width:100%;border-collapse:collapse;font-size:13px}table.fm th,table.fm td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}table.fm th{background:var(--bg);font-size:12px}
+@media(max-width:700px){table.fm{display:block;overflow-x:auto}}
+
 </style>
 </head>
 <body>
@@ -115,6 +135,19 @@ details.dd summary{cursor:pointer;font-weight:600}
   <div id="ovView"></div>
   <div class="chips" style="margin-top:6px"><span class="chip">solid = data flow</span><span class="chip">dashed = control / metadata</span><span class="chip" style="border-color:var(--bad)">dotted = events / async</span></div>
   <div id="ovInfo"></div>
+</section>
+
+<section id="simSec">
+  <h2><em>▶</em>Live cluster simulation <span class="note" style="font-weight:400">watch inserts, updates and deletes travel between the nodes · edit the actions or inject failures</span></h2>
+  <div class="bar"><label>Scenario <select id="simScn"></select></label><label><span id="simNL">nodes</span> <select id="simN"></select></label><span id="simSet" class="bar" style="margin:0"></span>
+    <button class="primary" id="simPlay">▶ Play</button><button id="simStep">Step ›</button><button id="simReset">⏮</button><label>Speed <select id="simSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label></div>
+  <div class="note" id="simDesc" style="margin:0 0 6px"></div>
+  <svg id="simSvg" style="width:100%;border:1px solid var(--line);border-radius:10px;background:var(--bg)"></svg>
+  <div class="bar"><input type="range" id="simT" min="0" max="1000" value="0" step="10" style="flex:1"><span class="mono" id="simTv"></span></div>
+  <div id="simInsp" class="box" style="margin:8px 0"></div>
+  <div class="simgrid"><div><h3 style="margin-top:0">Actions <span class="note" style="font-weight:400">(time in ms, then op and arguments)</span></h3><textarea id="simAct" rows="7" spellcheck="false"></textarea>
+    <div class="bar"><select id="simOp"></select><span id="simArgs" class="bar" style="margin:0"></span><button id="simAdd">＋ add action</button></div></div>
+   <div><h3 style="margin-top:0">Event log <span class="note" style="font-weight:400">(click an event to see why)</span></h3><div id="simLog" class="simlog"></div></div></div>
 </section>
 
 <section id="phaseSec">
@@ -800,6 +833,316 @@ document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.sel=null;ov
 /* ================= init ================= */
 $('#src').value=SAMPLES.orders.t();$('#fmt').value='csv';
 rebuild(true,true);
+
+/* ================= v2: live simulation, accordion, packets ================= */
+const DETAIL=[
+{how:"Each partition is a directory of segment files (.log, .index, .timeindex) named by base offset. Appends go to the active segment, which rolls at log.segment.bytes or log.roll.ms. The sparse offset index adds an entry roughly every index.interval.bytes, so a fetch binary-searches the index and scans a short stretch. After an unclean shutdown the broker re-validates segments past the recovery point and truncates at the first bad record.",
+ pros:["Sequential appends and reads exploit the OS page cache and disk throughput","Sparse index stays small enough to be memory-mapped yet gives near O(log n) lookup","Segment granularity makes retention and deletion cheap file operations","Recovery only scans the tail past the recovery checkpoint, not the whole log"],
+ cons:["Durability leans on replication; fsync is not per message by default (log.flush.* is unset)","Too many small segments or partitions means many open file handles and mmaps","Index lookup is sparse, so each fetch still scans a short linear stretch","Random access by key is not supported; only offset and timestamp lookups"],
+ fails:[{m:"Torn tail after crash",s:"Broker restart logs 'Recovering unflushed segment' and takes a long time with large logs",x:"Use clean shutdown, keep segments modest, raise num.recovery.threads.per.data.dir, rely on replicas to refetch truncated data"},
+ {m:"Corrupted record or index",s:"CorruptRecordException on fetch, or index rebuild messages at startup",x:"Check disk and filesystem health, let the broker rebuild indexes, re-replicate the partition from the leader if the log is bad"},
+ {m:"Out of file descriptors / mmap limit",s:"Broker fails with 'Too many open files' or 'Map failed' after adding partitions",x:"Raise ulimit -n and vm.max_map_count, cut partition count per broker, increase segment size"},
+ {m:"Disk full",s:"Log dir goes offline; partitions on it become offline or fail over",x:"Add disks or brokers, lower retention, alert before 80 percent; JBOD log dir failure marks only that dir offline"}],
+ watch:["kafka.log:type=Log,name=Size and LogEndOffset per partition; flat or runaway growth is suspect","OfflineLogDirectoryCount above 0 means a failed disk","kafka-dump-log.sh --files <segment> to inspect records and verify the index","Startup time and 'Recovering unflushed segment' log lines after restarts"]},
+
+{how:"The default partitioner hashes the key bytes with murmur2 and takes it modulo the partition count, so equal keys always land in the same partition. Records without a key use the sticky partitioner: fill one batch for a partition, then switch. Order is guaranteed only inside a partition. A custom Partitioner class can override placement.",
+ pros:["Per-key ordering is preserved because one key maps to one partition","Stateful consumers can rely on key locality for joins and aggregations","Partitioning is client-side, so brokers do no routing work","Sticky partitioning for null keys yields larger batches and lower latency"],
+ cons:["Skewed keys create hot partitions that one consumer and one leader must absorb","Adding partitions changes hash modulo, so existing keys map to new partitions and per-key order breaks","No global ordering across partitions","Partition count cannot be decreased without recreating the topic"],
+ fails:[{m:"Hot partition",s:"One partition has much higher bytes-in and lag while others idle; one consumer is pegged",x:"Salt or composite keys, custom partitioner for known hot keys, split the workload, or use more fine-grained keys"},
+ {m:"Repartition breaks key order",s:"After increasing partitions the same key appears in a different partition; stateful consumers see gaps or duplicates of state",x:"Over-provision partitions up front, or create a new topic and migrate with a dual-write or replay"},
+ {m:"Null-key assumption",s:"Consumers expect ordering for records that were published without a key",x:"Always set a key when order matters; document that unkeyed topics are unordered"},
+ {m:"Too few partitions",s:"Consumer group cannot scale past partition count; extra consumers sit idle",x:"Size partitions for target consumer parallelism and throughput before launch"}],
+ watch:["Per-partition BytesInPerSec and message counts via kafka-log-dirs.sh or topic metrics; one outlier means skew","Per-partition consumer lag from kafka-consumer-groups.sh --describe","Key cardinality and top-key share in producer-side sampling","Partition count versus consumer count; consumers above partitions are idle"]},
+
+{how:"KafkaProducer.send appends records into per-partition batches in the RecordAccumulator. A batch is sent when it reaches batch.size or after linger.ms, and whole batches can be compressed (compression.type: gzip, snappy, lz4, zstd). Total buffered bytes are capped by buffer.memory; when full, send blocks up to max.block.ms and then throws.",
+ pros:["Batching amortizes request overhead and boosts throughput by orders of magnitude","Compressing whole batches gives better ratios and saves network and disk","buffer.memory bounds heap use so a slow broker cannot cause an OutOfMemoryError","linger.ms trades a few milliseconds of latency for fuller batches"],
+ cons:["linger.ms adds latency to every record in a quiet topic","Compression costs producer and consumer CPU, and brokers may recompress on mismatch","Buffered but unsent records are lost if the producer process dies","Backpressure surfaces as blocked send calls, which can stall application threads"],
+ fails:[{m:"Producer blocked by full buffer",s:"send blocks then TimeoutException: Failed to allocate memory within max.block.ms",x:"Fix the slow broker or network, raise buffer.memory, add producers, or reduce rate upstream"},
+ {m:"Batch expiry",s:"TimeoutException: Expiring N record(s) after delivery.timeout.ms",x:"Check broker health and request.timeout.ms, tune delivery.timeout.ms and retries, ensure leader availability"},
+ {m:"Tiny batches",s:"Low batch-size-avg and high request-rate with poor throughput",x:"Increase linger.ms and batch.size, make sure keys do not fan out into too many partitions"},
+ {m:"Data lost on producer crash",s:"Records accepted by send never reach the broker after process kill",x:"Call flush or close on shutdown, use callbacks to track acks, keep an outbox if loss is unacceptable"}],
+ watch:["Producer metrics batch-size-avg, record-queue-time-avg, buffer-available-bytes, bufferpool-wait-time","request-latency-avg and request-rate; rising latency drives buffer exhaustion","compression-rate-avg to confirm compression is actually helping","Broker RequestQueueTimeMs and produce TotalTimeMs for slow-broker signs"]},
+
+{how:"Consumers in a group.id split the partitions; the group coordinator broker tracks members and assigns via the partition assignor. Consumers pull records and commit offsets to the __consumer_offsets topic. Committing after processing gives at-least-once, before processing risks skips. A join, leave or missed heartbeat (session.timeout.ms, max.poll.interval.ms) triggers a rebalance.",
+ pros:["Pull model lets consumers control pace and apply their own backpressure","Group membership gives horizontal scaling and automatic failover","Offsets stored in Kafka make restarts resumable from a known position","CooperativeStickyAssignor moves only the affected partitions, avoiding stop-the-world"],
+ cons:["Eager rebalance revokes all partitions so the whole group pauses","Parallelism is capped by partition count","At-least-once means duplicates after a crash unless processing is idempotent","Slow processing past max.poll.interval.ms kicks the member out"],
+ fails:[{m:"Rebalance storm",s:"Constant 'Revoking previously assigned partitions' logs, throughput collapses, lag climbs",x:"Use CooperativeStickyAssignor, static membership via group.instance.id, tune session.timeout.ms and max.poll.interval.ms, avoid rolling restarts all at once"},
+ {m:"Duplicate processing",s:"Records reprocessed after a crash or rebalance because the commit happened after side effects",x:"Make handlers idempotent, commit synchronously after processing, or use transactions"},
+ {m:"Skipped records",s:"Messages never processed after a crash because offset was committed before processing (or auto-commit raced)",x:"Commit after processing, or disable enable.auto.commit and commit explicitly"},
+ {m:"Consumer lag growth",s:"records-lag-max rises steadily; end-to-end latency grows",x:"Scale consumers up to partition count, speed up processing, reduce max.poll.records, check for a stuck member"}],
+ watch:["kafka-consumer-groups.sh --describe: per-partition LAG and CONSUMER-ID","Consumer metrics records-lag-max, rebalance-rate-per-hour, last-rebalance-seconds-ago, commit-latency-avg","Group state (Stable, PreparingRebalance, Empty) from the coordinator","Time between polls versus max.poll.interval.ms; close to the limit predicts eviction"]},
+
+{how:"Brokers delete whole closed segments once they exceed retention.ms or retention.bytes; the active segment is never deleted. The log start offset advances and consumers behind it get OffsetOutOfRange and fall back per auto.offset.reset. With tiered storage (KIP-405, remote.storage.enable), closed segments are copied to remote storage and local.retention.ms/bytes only controls the local copy.",
+ pros:["Retention is a cheap file delete and independent of consumers, so slow readers never block the broker","Time and size limits give predictable disk usage","Tiered storage decouples storage from compute and keeps long history readable","Local disks can be small and rebuilds of brokers copy less data"],
+ cons:["A consumer lagging beyond retention silently loses data","Deletion granularity is a segment, so actual retention can overshoot the setting","Tiered reads from remote storage have higher latency than local reads","Tiered storage cannot be used with compacted topics and adds a plugin to operate"],
+ fails:[{m:"Consumer falls off retained range",s:"OffsetOutOfRangeException; with auto.offset.reset=latest records are skipped, with earliest a big reprocess happens",x:"Alert on lag versus retention, raise retention, scale consumers, choose reset policy deliberately"},
+ {m:"Retention not applied",s:"Disk keeps growing because the active segment is large and has not rolled",x:"Lower segment.ms or log.segment.bytes so segments roll and become eligible for deletion"},
+ {m:"Remote storage outage",s:"Fetches of old offsets fail or time out while recent data still works",x:"Monitor the remote storage plugin, keep local retention long enough for common consumer lag, retry and alert"},
+ {m:"Retention too short for replay",s:"Backfill or reprocessing cannot reach the needed history",x:"Extend retention or enable tiered storage before the incident, not after"}],
+ watch:["Consumer lag compared to time left until deletion (lag in time versus retention.ms)","Log start offset versus committed offsets from kafka-consumer-groups.sh","Per-topic log Size and disk usage trend per broker","Tiered storage metrics: RemoteCopyLagBytes, RemoteFetchBytesPerSec, RemoteCopyErrorsPerSec"]},
+
+{how:"Followers fetch from the partition leader like consumers. The in-sync replica set (ISR) holds followers within replica.lag.time.max.ms. The high watermark is the highest offset replicated to all ISR members and only records below it are visible to consumers. With acks=all the leader acks after the full ISR has the record, and min.insync.replicas rejects writes when the ISR is too small.",
+ pros:["acks=all with min.insync.replicas=2 and replication factor 3 survives one broker loss without losing acked data","The high watermark prevents consumers from seeing data that could be lost on failover","ISR adapts to slow followers instead of waiting for all replicas forever","Leader epochs let followers truncate divergent logs safely after failover"],
+ cons:["acks=all adds latency, bound by the slowest ISR member","With ISR shrunk below min.insync.replicas, producers get errors and the partition is unavailable for writes","acks=1 or 0 can lose acknowledged data on leader failure","Replication multiplies network and disk use"],
+ fails:[{m:"acks=1 data loss",s:"Leader fails after ack but before followers fetch; the acked record vanishes after election",x:"Use acks=all with min.insync.replicas of 2 and replication factor 3"},
+ {m:"ISR shrink",s:"UnderReplicatedPartitions rises, IsrShrinksPerSec spikes, NotEnoughReplicasException for acks=all producers",x:"Find the slow or dead follower (disk, GC, network), fix it, tune replica.lag.time.max.ms only after root cause"},
+ {m:"Unclean leader election",s:"Out-of-sync replica becomes leader after all ISR died; consumers see data rewind or loss",x:"Keep unclean.leader.election.enable=false; accept unavailability over loss unless the topic tolerates it"},
+ {m:"Offline partition",s:"OfflinePartitionsCount above 0; clients get LeaderNotAvailable",x:"Restore the failed brokers, check ISR of the partition, only then consider a controlled unclean election"}],
+ watch:["UnderReplicatedPartitions and UnderMinIsrPartitionCount should stay at 0","IsrShrinksPerSec and IsrExpandsPerSec; frequent flapping is bad","UncleanLeaderElectionsPerSec and OfflinePartitionsCount must be 0","kafka-topics.sh --describe --under-replicated-partitions and follower lag via ReplicaFetcherManager MaxLag"]},
+
+{how:"With enable.idempotence=true (default since Kafka 3.0) the broker assigns a producer ID (PID) with an epoch, and the producer tags each batch with a per-partition sequence number. The leader keeps recent batch metadata per PID and partition, so a retried batch is detected as a duplicate and acked without re-append. A gap in sequence raises OutOfOrderSequenceException. A newer epoch fences older producers.",
+ pros:["Retries after a lost ack no longer create duplicates","Ordering holds with up to 5 in-flight requests per connection","Zero application changes beyond a config flag","Epoch fencing stops a stale producer from writing after a replacement started"],
+ cons:["Guarantees apply to one producer session and one partition only; a restart gets a new PID","Does not cover duplicates created by application-level resends or consumer reprocessing","Requires acks=all and bounded max.in.flight.requests.per.connection (5 or less)","Broker dedup state is limited, so it cannot detect duplicates across very old batches"],
+ fails:[{m:"Duplicate on retry (idempotence off)",s:"Same record appears twice after a timeout and retry",x:"Enable idempotence, which is default in modern clients, and keep acks=all"},
+ {m:"OutOfOrderSequenceException",s:"Producer errors after the broker lost sequence state or a batch was expired out of order",x:"Treat as fatal for that producer, recreate it, review delivery.timeout.ms and broker retention of producer state"},
+ {m:"Zombie producer fenced",s:"ProducerFencedException or InvalidProducerEpochException from an old instance",x:"Expected for a replaced instance; shut it down, do not retry, check for duplicate deployments"},
+ {m:"Cross-session duplicates",s:"After app restart the same logical message is written again",x:"Use transactional.id for cross-session guarantees or add a business-level idempotency key downstream"}],
+ watch:["Producer metrics record-retry-rate and record-error-rate","Client log lines with OutOfOrderSequenceException or ProducerFencedException","Broker metric ProducerStateManager and producer snapshot files in the partition directory","Config check: enable.idempotence=true, acks=all, max.in.flight.requests.per.connection 5 or less"]},
+
+{how:"With cleanup.policy=compact the log cleaner thread rewrites older segments keeping only the latest record per key, while offsets of kept records do not change. A record with a null value is a tombstone; it is kept for delete.retention.ms so consumers rebuilding state can see the delete, then removed. The active segment is never compacted, and a partition is cleaned when its dirty ratio passes min.cleanable.dirty.ratio.",
+ pros:["Bounded storage that still holds the full current state per key","New consumers can rebuild a table by reading the topic from the start","Offsets are preserved so consumer positions stay valid","Tombstones allow deletes, for example for GDPR key removal"],
+ cons:["Cleaning is asynchronous; old versions may remain for a long time","Does not preserve history of intermediate values","Cleaner threads cost I/O and CPU; a dead cleaner thread silently stops compaction","Consumers slower than delete.retention.ms can miss a tombstone and keep stale keys"],
+ fails:[{m:"Tombstone removed too early",s:"A slow rebuilding consumer never sees the delete and keeps a deleted key in its state",x:"Set delete.retention.ms longer than the worst-case consumer rebuild time"},
+ {m:"Cleaner thread died",s:"Topic keeps growing; log-cleaner-recopy and cleaner metrics flat; log shows LogCleaner errors",x:"Check log-cleaner.log, fix the cause (often a corrupt or oversized record), restart the broker"},
+ {m:"Nothing compacts",s:"Old values remain because the active segment never rolls or the dirty ratio is not reached",x:"Lower segment.ms or min.cleanable.dirty.ratio, set max.compaction.lag.ms to bound staleness"},
+ {m:"Null key rejected",s:"Producer gets an error writing a record without a key to a compacted topic",x:"Always set a non-null key for compacted topics"}],
+ watch:["kafka.log:type=LogCleanerManager,name=max-dirty-percent and time-since-last-run-ms","kafka.log:type=LogCleaner,name=max-clean-time-secs and cleaner-recopy-percent","Topic Size growth versus unique key count","Consumer rebuild time compared with delete.retention.ms"]},
+
+{how:"A transactional producer (transactional.id) registers with a transaction coordinator, writes to many partitions, and calls sendOffsetsToTransaction to commit consumed offsets in the same transaction. On commit or abort the coordinator writes control markers to every partition involved. Consumers with isolation.level=read_committed read only up to the last stable offset (LSO) and skip aborted records.",
+ pros:["Atomic read-process-write across partitions and the consumer offset for Kafka-to-Kafka pipelines","Producer fencing by transactional.id and epoch removes zombies after failover","read_committed hides in-flight and aborted data from downstream consumers","Builds on idempotent producer so retries stay safe"],
+ cons:["Exactly-once covers Kafka reads and writes only, not external side effects like database writes","Open transactions stall the LSO and delay read_committed consumers","Extra round trips and markers add latency and throughput cost","Transaction state lives in __transaction_state, adding coordinator load"],
+ fails:[{m:"Hanging transaction blocks LSO",s:"read_committed consumers stop advancing while read_uncommitted keeps going; LSO lag grows",x:"Keep transaction.timeout.ms reasonable so the coordinator aborts it, fix the stuck producer, use kafka-transactions.sh find-hanging and abort"},
+ {m:"Zombie producer",s:"ProducerFencedException after failover or rebalance",x:"Use stable transactional.id per input partition, let fenced instance close, do not retry blindly"},
+ {m:"Transaction timeout abort",s:"Commit fails with InvalidProducerEpochException after a long processing pause",x:"Reduce batch work per transaction or raise transaction.timeout.ms within the broker limit"},
+ {m:"Side effects not atomic",s:"An external database write happens twice or never when a transaction aborts",x:"Keep side effects inside Kafka, or use an idempotent sink or outbox pattern"}],
+ watch:["Consumer metric records-lag versus last-stable-offset lag for read_committed groups","Producer metrics txn-commit-time-avg, txn-abort-time-avg","Broker metrics for TransactionMarkerChannelManager and __transaction_state partition health","kafka-transactions.sh list and describe for long-running or hanging transactions"]},
+
+{how:"kafka-reassign-partitions.sh (or Cruise Control) adds target replicas to a partition, which copy data from the leader as followers, join the ISR once caught up, and only then are old replicas dropped. Leadership can then move through preferred leader election. Copy rate can be limited with --throttle (leader.replication.throttled.rate and follower.replication.throttled.rate).",
+ pros:["Rebalances disk, bytes and leader load across brokers online","Staged copy then switch keeps the partition available throughout","Throttle protects production traffic from catch-up traffic","Same mechanism handles broker decommissioning and expansion"],
+ cons:["Moving a replica copies the full partition, which can take hours and saturate disks and network","It moves whole partitions; a single hot partition or hot key is not split","A throttle that is too low makes the move take forever, too high hurts clients","New brokers receive no existing partitions unless reassignment is run"],
+ fails:[{m:"Reassignment saturates cluster",s:"Produce and fetch latency rise, ISR shrink during the move",x:"Apply a throttle, move few partitions at a time, run off-peak, remove throttle after completion"},
+ {m:"Stuck reassignment",s:"Move never finishes because a target broker is slow or down; --verify shows in progress",x:"Fix or replace the target broker, cancel with --cancel, check follower fetch lag and throttle rate"},
+ {m:"Leaders imbalance after move",s:"One broker still serves most traffic even though replica counts are even",x:"Run preferred leader election or enable auto.leader.rebalance.enable, check leader count per broker"},
+ {m:"Throttle left in place",s:"Normal follower replication stays slow later; under-replicated partitions persist",x:"Run --verify to clear throttles after the move finishes"}],
+ watch:["kafka-reassign-partitions.sh --verify for progress and throttle cleanup","ReplicaFetcherManager MaxLag and UnderReplicatedPartitions during moves","Per-broker BytesInPerSec, disk usage, and LeaderCount for balance","Network and disk saturation on source and target brokers"]},
+
+{how:"In KRaft mode a quorum of controllers (process.roles=controller) replicates the cluster metadata log, __cluster_metadata, using a Raft variant. One controller is the active leader per epoch; it handles topic, partition and leader changes and brokers fetch metadata from it. A record commits once a majority of voters has replicated it, and a new election happens if the active controller fails. This replaces ZooKeeper.",
+ pros:["No external ZooKeeper; one system to operate and secure","Metadata changes are a replicated log, so recovery and propagation to brokers are fast","Majority quorum tolerates minority failures (1 of 3, 2 of 5)","Scales to far more partitions than the old ZooKeeper design"],
+ cons:["Needs an odd number of voters and majority availability; losing quorum stops metadata changes","Quorum members cannot be changed casually in older versions; dynamic quorum came later","Network partition leaves only the majority side able to commit","Operators must learn new tools such as kafka-metadata-quorum.sh and metadata snapshots"],
+ fails:[{m:"Controller quorum lost",s:"No active controller; topic creation, leader election and broker registration stall while existing data traffic may continue",x:"Restore a majority of controller nodes; keep voters on separate failure domains"},
+ {m:"Frequent controller elections",s:"ActiveControllerCount flaps; leader changes pile up",x:"Check network latency, GC, disk fsync on controller nodes, tune controller.quorum.election.timeout.ms carefully"},
+ {m:"Metadata lag on brokers",s:"Brokers serve stale leader info; clients get NotLeaderOrFollower errors",x:"Check broker fetch from controller, metadata.log size, and snapshot generation"},
+ {m:"Split-brain worry in a partition",s:"Isolated old active controller cannot commit but may think it leads briefly",x:"Epochs and majority commit prevent conflicting writes; heal network and let it step down"}],
+ watch:["kafka.controller:type=KafkaController,name=ActiveControllerCount sums to exactly 1","kafka-metadata-quorum.sh describe --status for leader, epoch, high watermark and voter lag","kafka.server:type=raft-metrics: current-state, commit-latency-avg, election-latency-avg","Metadata log size and last snapshot age; follower lag in the quorum"]}
+];
+
+(function(){
+const KB_REPL=(p,n)=>[0,1,2].slice(0,Math.min(3,n)).map(k=>(p+k)%n);
+const SIMM={
+ id:'kafka',nodeLabel:'brokers',nodeRange:[3,5,3],
+ settings:[{id:'acks',label:'acks',opts:['all','1'],def:'all'}],
+ menu:[{op:'P',label:'produce (insert)',args:[{n:'key',d:'u1',w:60},{n:'value',d:'alice',w:70}]},{op:'U',label:'update (same key)',args:[{n:'key',d:'u1',w:60},{n:'value',d:'alice2',w:70}]},{op:'D',label:'delete (tombstone)',args:[{n:'key',d:'u1',w:60}]},{op:'C',label:'consume (poll)',args:[]},{op:'K',label:'kill broker',args:[{n:'#',d:'0',w:36}]},{op:'H',label:'heal broker',args:[{n:'#',d:'0',w:36}]}],
+ scenarios:[
+  {name:'insert → update → delete',desc:'Three keys travel through a partitioned, replicated log. An update is just another record for the same key; a delete is a tombstone (null value). The consumer rebuilds the latest state.',acts:['0 P u1 alice','1600 P u2 bob','3200 P u3 carol','4800 U u1 alice-v2','6400 D u2','8000 C']},
+  {name:'broker failure (acks=all)',desc:'The leader of a partition crashes mid-stream. A controller elects an in-sync follower; acknowledged records are not lost. Switch acks to 1 to compare.',acts:['0 P u1 a','1600 P u2 b','3200 P u3 c','3900 K 1','5200 P u3 c','7000 P u6 f','9000 H 1','11500 C']},
+  {name:'same key keeps its order',desc:'Writes to one key always land in one partition, so their order is preserved. Writes to different keys may be consumed in any interleaving.',acts:['0 P x v1','1200 P x v2','2400 P y w1','3600 P x v3','5200 C']},
+ ],
+ topo(n){
+  const bw=Math.min(150,Math.floor(560/n)-14),x0=150+(560-n*(bw+14))/2,nodes=[{id:'prod',x:14,y:170,w:100,h:70,label:'Producer'},{id:'ctrl',x:380,y:6,w:150,h:46,label:'Controller',badge:'metadata'},{id:'cons',x:780,y:150,w:110,h:130,label:'Consumer'}];
+  for(let i=0;i<n;i++)nodes.push({id:'b'+i,x:x0+i*(bw+14),y:90,w:bw,h:290,label:'broker '+i});
+  const edges=[];for(let i=0;i<n;i++){edges.push(['prod','b'+i],['b'+i,'cons'],['ctrl','b'+i]);for(let j=i+1;j<n;j++)edges.push(['b'+i,'b'+j])}
+  return{nodes,edges,w:900,h:400,zones:[{x:x0-12,y:70,w:n*(bw+14)+10,h:326,label:'Kafka cluster · topic orders · 3 partitions · RF 3'}]};
+ },
+ init(n){const st={status:{prod:'up',ctrl:'up',cons:'up'},logs:{},lead:[],ep:[0,0,0],hw:[0,0,0],view:{},coff:[0,0,0],n};for(let i=0;i<n;i++){st.status['b'+i]='up';st.logs['b'+i]=[[],[],[]]}for(let p=0;p<3;p++)st.lead[p]=KB_REPL(p,n)[0];return st},
+ apply(st,f){switch(f.op){case'app':st.logs['b'+f.b][f.p].push(f.rec);break;case'hw':st.hw[f.p]=f.v;break;case'down':st.status['b'+f.b]='down';break;case'up':st.status['b'+f.b]='up';break;case'lead':st.lead[f.p]=f.b;st.ep[f.p]=f.ep;break;case'trunc':st.logs['b'+f.b][f.p].length=f.len;break;case'consume':f.recs.forEach(r=>{if(r.val===null)delete st.view[r.key];else st.view[r.key]=r.val});st.coff[f.p]+=f.recs.length;break}},
+ fxText(f){return{app:`b${f.b} p${f.p} append offset ${f.rec&&f.rec.off}`,hw:`p${f.p} high watermark ${f.v}`,down:`broker ${f.b} down`,up:`broker ${f.b} up`,lead:`p${f.p} leader → b${f.b} (epoch ${f.ep})`,trunc:`b${f.b} p${f.p} truncated to ${f.len}`,consume:`consumer applies ${f.recs&&f.recs.length} record(s)`}[f.op]||f.op},
+ run(acts,n,set){
+  const W=SIMM.init(n),ev=[],push=e=>{ev.push(e);return e},ap=f=>SIMM.apply(W,f);
+  for(const a of acts){const t=a.t;
+   if(['P','U','D'].includes(a.op)){
+    const key=a.args[0]||'k',val=a.op==='D'?null:(a.args[1]||'v'),p=sHash(key)%3,L=W.lead[p],lb='b'+L,label=a.op==='P'?'produce':a.op==='U'?'update':'tombstone';
+    if(W.status[lb]==='down'){push(E(t,500,'prod','ctrl',`${label} ${key}: leader of p${p} is down → refresh metadata`,'fail',[],'The producer cannot reach the partition leader. It refreshes metadata and retries once a new leader has been elected.'));continue}
+    push(E(t,500,'prod',lb,`${label} ${key}${val===null?'':'='+val} → p${p}`,'write',[],`partition = hash("${key}") mod 3 = ${p}. Equal keys always go to the same partition, so their order is preserved.`));
+    const off=W.logs[lb][p].length,rec={off,key,val,ep:W.ep[p]};
+    const e1=push(E(t+500,0,lb,lb,`append offset ${off}`,'info',[{op:'app',b:L,p,rec}],'The leader appends to the end of its log and assigns the next offset. Nothing is overwritten: an update or delete is just a new record.'));ap(e1.fx[0]);
+    const rep=KB_REPL(p,n),isr=rep.filter(r=>r!==L&&W.status['b'+r]==='up'),downF=rep.filter(r=>r!==L&&W.status['b'+r]==='down');
+    if(set.acks==='1')push(E(t+500,400,lb,'prod',`ack offset ${off} (acks=1)`,'ack',[],'acks=1: the leader answers after its own append. Followers do not have the record yet, so a leader crash right now would lose it.'));
+    let tf=t+500;
+    isr.forEach((f,i)=>{const e=push(E(t+700+i*100,600,lb,'b'+f,`replicate offset ${off}`,'repl',[{op:'app',b:f,p,rec}],'Followers pull the leader log. The record is committed only after every in-sync replica has it.'));ap(e.fx[0]);tf=Math.max(tf,e.t+e.d)});
+    if(downF.length)push(E(t+500,0,lb,lb,`ISR shrinks: b${downF.join(',b')} out of sync`,'info',[],'A dead follower leaves the in-sync set so writes can still be acknowledged (as long as min.insync.replicas is met).'));
+    const hw=push(E(tf,0,lb,lb,`high watermark → ${off+1}`,'info',[{op:'hw',p,v:off+1}],'High watermark = smallest log end among in-sync replicas. Consumers can only read below it.'));ap(hw.fx[0]);
+    if(set.acks!=='1')push(E(tf,400,lb,'prod',`ack offset ${off}`,'ack',[],'acks=all: acknowledged only when all in-sync replicas have the record, so it survives losing the leader.'));
+   }
+   if(a.op==='C'){for(let p=0;p<3;p++){const L=W.lead[p],lb='b'+L;if(W.status[lb]==='down')continue;const from=W.coff[p],recs=W.logs[lb][p].slice(from,W.hw[p]);
+     push(E(t+p*140,400,'cons',lb,`fetch p${p} @${from}`,'read',[],'Consumers pull from the partition leader at their own offset.'));
+     const e=push(E(t+p*140+400,500,lb,'cons',`${recs.length} record(s) p${p}`,'data',[{op:'consume',p,recs}],'The consumer applies records in order: a later record for a key replaces the earlier value, and a tombstone deletes the key.'));ap(e.fx[0])}}
+   if(a.op==='K'){const b=+a.args[0]||0;if(b>=n)continue;const e=push(E(t,0,'ctrl','b'+b,`broker ${b} crashes`,'fail',[{op:'down',b}],'The broker process dies. Followers stop receiving data from it; the controller notices missing heartbeats.'));ap(e.fx[0]);
+     ev.forEach(x=>{if(x===e||x.t+x.d<=t)return;
+       if(x.kind==='repl'&&x.from==='b'+b&&x.fx.length){x.fx.forEach(f=>{if(f.op==='app'){const lg=W.logs['b'+f.b][f.p];const i=lg.findIndex(r=>r.off===f.rec.off&&r.key===f.rec.key);if(i>=0&&i===lg.length-1)lg.pop()}});x.fx=[];x.msg+=' ✕ cut off';x.kind='fail';x.cause='The leader died before this follower copied the record, so the record exists only on the dead leader.'}
+       else if(x.from==='b'+b&&x.fx.some(f=>f.op==='hw')){x.fx=[];x.msg='(high watermark never advanced)';x.kind='fail'}
+       else if(x.from==='b'+b&&x.to==='prod'&&x.t>t){x.msg='ack never sent (leader died)';x.kind='fail'}});
+     for(let p=0;p<3;p++)if(W.lead[p]===b){const cand=KB_REPL(p,n).filter(r=>r!==b&&W.status['b'+r]==='up').sort((x,y)=>W.logs['b'+y][p].length-W.logs['b'+x][p].length)[0];
+       if(cand===undefined){push(E(t+600,0,'ctrl','ctrl',`p${p} OFFLINE: no in-sync replica`,'fail',[],'Unclean leader election is disabled, so Kafka prefers unavailability over electing a stale replica.'));continue}
+       const lostN=W.logs['b'+b][p].length-W.logs['b'+cand][p].length;if(lostN>0)push(E(t+500,0,'ctrl','ctrl',set.acks==='1'?`${lostN} ACKNOWLEDGED record(s) on p${p} are LOST`:`${lostN} un-acknowledged record(s) on p${p} dropped (producer will retry)`,'fail',[],set.acks==='1'?'With acks=1 the producer was told "success" before any follower had the record. After failover the new leader does not have it: silent data loss.':'With acks=all the producer never received an ack for these records, so it retries them against the new leader: nothing acknowledged is lost.'));
+       const e2=push(E(t+600,500,'ctrl','b'+cand,`elect b${cand} leader of p${p} (epoch ${W.ep[p]+1})`,'ctl',[{op:'lead',p,b:cand,ep:W.ep[p]+1}],'Only an in-sync replica may become leader. The epoch fences the old leader if it comes back.'));ap(e2.fx[0])}}
+   if(a.op==='H'){const b=+a.args[0]||0;if(b>=n)continue;const e=push(E(t,0,'ctrl','b'+b,`broker ${b} restarts`,'info',[{op:'up',b}],'The broker rejoins and catches up from the current leaders before returning to the in-sync set.'));ap(e.fx[0]);
+     let k=0;for(let p=0;p<3;p++){if(!KB_REPL(p,n).includes(b))continue;const L=W.lead[p];if(L===b)continue;const miss=W.logs['b'+L][p].slice(W.logs['b'+b][p].length);const extra=W.logs['b'+b][p].length-W.logs['b'+L][p].length;if(extra>0){const et=push(E(t+250+k*150,0,'b'+b,'b'+b,`truncate p${p} divergent suffix (${extra})`,'ctl',[{op:'trunc',b,p,len:W.logs['b'+L][p].length}],'The returning replica discards records the new leader never had (they were never committed).'));et.fx.forEach(ap);k++;continue}
+       if(!miss.length)continue;
+       const e3=push(E(t+300+k*150,600,'b'+L,'b'+b,`catch-up p${p} (${miss.length} record(s))`,'repl',miss.map(rec=>({op:'app',b,p,rec})),'A returning replica fetches everything it missed from the current leader.'));e3.fx.forEach(ap);k++}}
+  }
+  return{events:ev};
+ },
+ lines(id,st){
+  if(id==='cons')return[...Object.entries(st.view).slice(0,7).map(([k,v])=>`${k} = ${v}`),Object.keys(st.view).length?'':'(no state yet)'];
+  if(id==='ctrl')return[`epochs ${st.ep.join(' ')}`];
+  if(id[0]==='b'&&id!=='bx'){const i=+id.slice(1),o=[];for(let p=0;p<3;p++){if(!KB_REPL(p,st.n).includes(i))continue;const lg=st.logs[id][p],last=lg[lg.length-1];o.push(`p${p}${st.lead[p]===i?'★':' '} ${lg.length} rec · hw ${st.hw[p]}`);o.push(last?`  o${last.off}: ${last.key}=${last.val===null?'∅':last.val}`:'  (empty)')}return o}
+  return[];
+ },
+ detail(id,st){if(id[0]==='b'){const o=[];for(let p=0;p<3;p++){if(!KB_REPL(p,st.n).includes(+id.slice(1)))continue;o.push(`partition ${p}${st.lead[p]===+id.slice(1)?' (leader, epoch '+st.ep[p]+')':' (follower)'}`);st.logs[id][p].forEach(r=>o.push(`  offset ${r.off}: ${r.key} = ${r.val===null?'null (tombstone)':r.val}`))}return o}return SIMM.lines(id,st)}
+};
+
+/* =========================================================
+   LIVE CLUSTER SIMULATION (shared framework)
+   events on a timeline; packets travel between nodes; state is replayed up to time T
+   ========================================================= */
+function sHash(s){let h=2166136261;s=String(s);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h>>>0}
+const sEsc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sShort=(s,n)=>{s=String(s);return s.length>n?s.slice(0,n-1)+'…':s};
+const E=(t,d,from,to,msg,kind,fx,cause)=>({t,d,from,to,msg,kind,fx:fx||[],cause:cause||''});
+const SIM={n:0,set:{},run:null,T:0,play:false,sel:null,selNode:null,speed:1,last:null};
+const SIMCOL={write:'#2f6fed',ack:'#1a9b5a',read:'#e25a1c',data:'#e25a1c',repl:'#9b4fd0',ctl:'#6b7280',fail:'#d64545',info:'#c9a400',sched:'#0f9d8a',watch:'#8a6fd0',ctrl:'#6b7280',trunc:'#d64545'};
+function simParse(text){return text.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#')).map(l=>{const p=l.split(/\s+/);return{t:Number(p[0])||0,op:(p[1]||'').toUpperCase(),args:p.slice(2),raw:l}}).sort((a,b)=>a.t-b.t)}
+function simRun(){
+  const acts=simParse(document.getElementById('simAct').value);
+  try{SIM.run=SIMM.run(acts,SIM.n,SIM.set);SIM.run.events.sort((a,b)=>a.t-b.t||a.d-b.d)}catch(e){SIM.run={events:[],end:0,err:e.message};console.error(e)}
+  SIM.end=Math.max(1000,(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0))+600);
+  const sl=document.getElementById('simT');sl.max=SIM.end;if(SIM.T>SIM.end)SIM.T=SIM.end;
+}
+function simStateAt(T){const st=SIMM.init(SIM.n,SIM.set);for(const e of SIM.run.events){if(e.t+e.d<=T)e.fx.forEach(f=>SIMM.apply(st,f))}return st}
+function simDraw(){
+  const svg=document.getElementById('simSvg');if(!svg||!SIM.run)return;
+  const T=SIM.T,topo=SIMM.topo(SIM.n),st=simStateAt(T),byId=Object.fromEntries(topo.nodes.map(n=>[n.id,n]));
+  const W=topo.w||900,H=topo.h||430;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  const active=SIM.run.events.filter(e=>e.t<=T&&T<e.t+e.d),recent=SIM.run.events.filter(e=>e.t+e.d<=T&&T-(e.t+e.d)<450);
+  const hot=new Set([...active.flatMap(e=>[e.from,e.to]),...recent.map(e=>e.to)]);
+  let s='<defs><marker id="simar" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0L9,4.5L0,9z" fill="#8a94a6"/></marker></defs>';
+  (topo.zones||[]).forEach(z=>{s+=`<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${z.x+12}" y="${z.y+17}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${sEsc(z.label)}</text>`});
+  topo.edges.forEach(([a,b])=>{const A=byId[a],B=byId[b];if(!A||!B)return;s+=`<line x1="${A.x+A.w/2}" y1="${A.y+A.h/2}" x2="${B.x+B.w/2}" y2="${B.y+B.h/2}" stroke="var(--line)" stroke-width="1.5"/>`});
+  topo.nodes.forEach(n=>{
+    const status=(st.status&&st.status[n.id])||'up',down=status==='down',isHot=hot.has(n.id),sel=SIM.selNode===n.id;
+    const lines=SIMM.lines(n.id,st)||[];
+    s+=`<g class="simn" data-id="${n.id}" style="cursor:pointer;${down?'opacity:.55':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${down?'var(--p5)':n.c||'var(--card)'}" stroke="${sel?'var(--acc)':isHot?'var(--acc2)':'var(--line)'}" stroke-width="${sel||isHot?3.5:1.8}"/>
+      <text x="${n.x+9}" y="${n.y+17}" font-weight="700" style="font-size:12.5px">${sEsc(n.label)}${down?' ✕':''}</text>${n.badge&&(n.label.length*7.6+String(typeof n.badge==='function'?n.badge(st):n.badge).length*5.8<n.w)?`<text x="${n.x+n.w-8}" y="${n.y+17}" text-anchor="end" style="font-size:10px;fill:var(--mut)">${sEsc(typeof n.badge==='function'?n.badge(st):n.badge)}</text>`:''}
+      ${lines.slice(0,Math.floor((n.h-24)/13)).map((l,i)=>`<text x="${n.x+9}" y="${n.y+32+i*13}" style="font-size:10.5px;${/^!/.test(l)?'fill:var(--bad)':''}">${sEsc(sShort(String(l).replace(/^!/,''),Math.floor((n.w-14)/6.3)))}</text>`).join('')}</g>`;
+  });
+  active.forEach(e=>{const A=byId[e.from],B=byId[e.to];if(!A||!B)return;const f=Math.min(1,(T-e.t)/Math.max(1,e.d)),ax=A.x+A.w/2,ay=A.y+A.h/2,bx=B.x+B.w/2,by=B.y+B.h/2;
+    if(e.from===e.to){s+=`<text x="${A.x+A.w/2}" y="${A.y-6}" text-anchor="middle" style="font-size:10.5px;fill:${SIMCOL[e.kind]||'#6b7280'};font-weight:700">${sEsc(sShort(e.msg,30))}</text>`;return}
+    const col=SIMCOL[e.kind]||'#6b7280';s+=`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${col}" stroke-width="2.5" opacity=".35"/><circle cx="${ax+(bx-ax)*f}" cy="${ay+(by-ay)*f}" r="7" fill="${col}" stroke="#fff" stroke-width="1.5"/><text x="${ax+(bx-ax)*f}" y="${ay+(by-ay)*f-11}" text-anchor="middle" style="font-size:10px;fill:${col};font-weight:700;paint-order:stroke;stroke:var(--card);stroke-width:3px">${sEsc(sShort(e.msg,26))}</text>`});
+  svg.innerHTML=s;
+  document.getElementById('simTv').textContent=(T/1000).toFixed(2)+' s / '+(SIM.end/1000).toFixed(1)+' s';
+  document.getElementById('simT').value=T;
+  // log
+  const evs=SIM.run.events,upTo=evs.filter(e=>e.t<=T),lastI=upTo.length-1;
+  document.getElementById('simLog').innerHTML=evs.map((e,i)=>`<div class="simev ${i===lastI?'cur':''} ${e.t>T?'fut':''}" data-i="${i}"><span class="simtag" style="background:${SIMCOL[e.kind]||'#6b7280'}">${sEsc(e.kind)}</span> <span class="mono">${(e.t/1000).toFixed(2)}s</span> ${sEsc(e.from)}${e.from===e.to?'':' → '+sEsc(e.to)}: ${sEsc(e.msg)}</div>`).join('')||'<div class="note">No actions yet.</div>';
+  const cur=document.querySelector('#simLog .cur');if(cur&&SIM.play)cur.scrollIntoView({block:'nearest'});
+  // inspector
+  const insp=document.getElementById('simInsp');
+  if(SIM.selNode){const det=SIMM.detail?SIMM.detail(SIM.selNode,st):SIMM.lines(SIM.selNode,st);insp.innerHTML=`<b>${sEsc(byId[SIM.selNode].label)}</b> at ${(T/1000).toFixed(2)}s<pre>${sEsc((det||[]).join('\n')||'(empty)')}</pre>`}
+  else if(SIM.sel!=null&&evs[SIM.sel]){const e=evs[SIM.sel];insp.innerHTML=`<b>${sEsc(e.msg)}</b><div class="note">${sEsc(e.from)} → ${sEsc(e.to)} · ${(e.t/1000).toFixed(2)}s (+${e.d} ms) · ${sEsc(e.kind)}</div>${e.cause?`<div class="caption" style="margin-top:6px"><b>Why:</b> ${sEsc(e.cause)}</div>`:''}<div class="note">state changes: ${e.fx.length?sEsc(e.fx.map(f=>SIMM.fxText?SIMM.fxText(f):f.op).join('; ')):'none (message only)'}</div>`}
+  else insp.innerHTML='<div class="note">Click a node to inspect its data, or click an event in the log to see why it happened.</div>';
+}
+function simTick(now){
+  if(!SIM.play){SIM.last=null;return}
+  if(SIM.last==null)SIM.last=now;const dt=now-SIM.last;SIM.last=now;SIM.T=Math.min(SIM.end,SIM.T+dt*SIM.speed);simDraw();
+  if(SIM.T>=SIM.end){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}
+  requestAnimationFrame(simTick);
+}
+function simBuildControls(){
+  const m=SIMM,nr=m.nodeRange;
+  const sc=document.getElementById('simScn');sc.innerHTML=m.scenarios.map((s,i)=>`<option value="${i}">${sEsc(s.name)}</option>`).join('');
+  const nn=document.getElementById('simN');nn.innerHTML=Array.from({length:nr[1]-nr[0]+1},(_,i)=>`<option value="${nr[0]+i}" ${nr[0]+i===nr[2]?'selected':''}>${nr[0]+i}</option>`).join('');document.getElementById('simNL').textContent=m.nodeLabel;
+  document.getElementById('simSet').innerHTML=(m.settings||[]).map(s=>`<label>${sEsc(s.label)} <select data-set="${s.id}">${s.opts.map(o=>`<option ${o===s.def?'selected':''}>${sEsc(o)}</option>`).join('')}</select></label>`).join('');
+  SIM.set=Object.fromEntries((m.settings||[]).map(s=>[s.id,s.def]));
+  document.getElementById('simOp').innerHTML=m.menu.map((o,i)=>`<option value="${i}">${sEsc(o.label)}</option>`).join('');
+  simArgs();
+}
+function simArgs(){const o=SIMM.menu[+document.getElementById('simOp').value];document.getElementById('simArgs').innerHTML=o.args.map((a,i)=>`<input type="text" data-a="${i}" value="${sEsc(a.d)}" placeholder="${sEsc(a.n)}" style="width:${a.w||80}px">`).join('')}
+function simLoadScenario(i){const s=SIMM.scenarios[i];document.getElementById('simAct').value=s.acts.join('\n');document.getElementById('simDesc').textContent=s.desc;SIM.T=0;SIM.sel=null;SIM.selNode=null;simRun();simDraw()}
+function simInit(){
+  if(!document.getElementById('simSvg'))return;
+  SIM.n=SIMM.nodeRange[2];simBuildControls();simLoadScenario(0);
+  document.getElementById('simScn').onchange=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simLoadScenario(+e.target.value)};
+  document.getElementById('simN').onchange=e=>{SIM.n=+e.target.value;SIM.T=0;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simRun();simDraw()};
+  document.getElementById('simSet').onchange=e=>{const t=e.target.closest('[data-set]');if(t){SIM.set[t.dataset.set]=t.value;simRun();simDraw()}};
+  document.getElementById('simOp').onchange=simArgs;
+  document.getElementById('simAdd').onclick=()=>{const o=SIMM.menu[+document.getElementById('simOp').value],vals=[...document.querySelectorAll('#simArgs input')].map(i=>i.value.trim()||'-');
+    const ta=document.getElementById('simAct'),t=Math.round(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0)+300);ta.value=(ta.value.trim()?ta.value.trim()+'\n':'')+`${t} ${o.op} ${vals.join(' ')}`.trim();SIM.T=Math.max(0,t-200);simRun();simDraw()};
+  document.getElementById('simAct').onchange=()=>{simRun();simDraw()};
+  document.getElementById('simPlay').onclick=()=>{if(SIM.play){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}if(SIM.T>=SIM.end)SIM.T=0;SIM.play=true;SIM.last=null;document.getElementById('simPlay').textContent='⏸ Pause';requestAnimationFrame(simTick)};
+  document.getElementById('simReset').onclick=()=>{SIM.play=false;SIM.T=0;document.getElementById('simPlay').textContent='▶ Play';simDraw()};
+  document.getElementById('simStep').onclick=()=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const nx=SIM.run.events.find(e=>e.t+e.d>SIM.T+1);SIM.T=nx?nx.t+nx.d:SIM.end;SIM.sel=nx?SIM.run.events.indexOf(nx):null;SIM.selNode=null;simDraw()};
+  document.getElementById('simSpeed').onchange=e=>{SIM.speed=+e.target.value};
+  document.getElementById('simT').oninput=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';SIM.T=+e.target.value;simDraw()};
+  document.getElementById('simLog').onclick=e=>{const d=e.target.closest('.simev');if(!d)return;const i=+d.dataset.i;SIM.sel=i;SIM.selNode=null;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const ev=SIM.run.events[i];SIM.T=ev.t+ev.d;simDraw()};
+  document.getElementById('simSvg').onclick=e=>{const g=e.target.closest('.simn');if(g){SIM.selNode=SIM.selNode===g.dataset.id?null:g.dataset.id;SIM.sel=null;simDraw()}};
+}
+
+window.simInit=simInit;window.__sim={SIM,simDraw,simRun};})();
+/* ===== overview: packets travelling along the connections ===== */
+(function(){
+const _ovr=ovRender;
+function pt(g,f){if(g.c){const u=1-f;return[u*u*g.p0[0]+2*u*f*g.c[0]+f*f*g.p1[0],u*u*g.p0[1]+2*u*f*g.c[1]+f*f*g.p1[1]]}return[g.p0[0]+(g.p1[0]-g.p0[0])*f,g.p0[1]+(g.p1[1]-g.p0[1])*f]}
+function findEdge(a,b){let e=OVS.edges.find(x=>x.from===a&&x.to===b);if(e)return{e,rev:false};e=OVS.edges.find(x=>x.from===b&&x.to===a);return e?{e,rev:true}:null}
+ovRender=function(){
+  _ovr();
+  if(OV.k<0||OV.kf==null)return;const svg=document.querySelector('#ovView svg');if(!svg)return;
+  const flow=OVS.flow,i=Math.min(flow.length-1,Math.floor(OV.kf)),f=OV.kf-Math.floor(OV.kf);let s='';
+  if(i>=1){const ed=findEdge(flow[i-1].n,flow[i].n);
+    if(ed){const g=ovGeom(ed.e),ff=Math.min(1,f*1.15),q=ed.rev?1-ff:ff;
+      for(let tr=3;tr>=1;tr--){const qq=ed.rev?Math.min(1,q+tr*.06):Math.max(0,q-tr*.06),p2=pt(g,qq);s+=`<circle cx="${p2[0]}" cy="${p2[1]}" r="${7-tr*1.4}" fill="var(--acc2)" opacity="${.5-tr*.12}"/>`}
+      const p=pt(g,q);s+=`<circle cx="${p[0]}" cy="${p[1]}" r="8" fill="var(--acc2)" stroke="#fff" stroke-width="2"/><text x="${p[0]}" y="${p[1]-13}" text-anchor="middle" style="font-size:11px;font-weight:700;fill:var(--acc2);paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(short(flow[i].t,44))}</text>`}}
+  svg.insertAdjacentHTML('beforeend',s);
+};
+const tr=document.getElementById('ovTrace');
+tr.onclick=()=>{stopAll();OV.sel=null;OV.k=0;OV.kf=0;animate(p=>{OV.kf=Math.min(OVS.flow.length-.001,p*OVS.flow.length);OV.k=Math.floor(OV.kf);ovRender()},OVS.flow.length*1500)};
+document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.kf=null;OV.sel=null;ovRender()};
+document.getElementById('ovView').addEventListener('click',e=>{if(e.target.closest('[data-node]'))OV.kf=null},true);
+})();
+
+/* ===== accordion: one drop-down per phase + detail (how / pros / cons / failure modes / watch) ===== */
+(function(){
+const g=id=>document.getElementById(id),esc2=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sec=g('phaseSec'),nav=g('nav'),barNav=g('prev').parentElement;
+const stage=document.createElement('div');stage.id='stage';
+const det=document.createElement('div');det.id='phDetail';
+stage.append(g('blurb'),g('phCtl'),barNav,g('phView'),det);
+nav.style.display='none';
+const acc=document.createElement('div');acc.id='acc';nav.after(acc);
+acc.innerHTML=PHASES.map((ph,i)=>`<details class="acc" data-i="${i}" style="--pc:var(--p${i%8})"><summary><span class="accn">${i+1}</span><span class="acct"><b>${esc2(ph.t)}</b><small>${esc2(ph.s)}${ph.f?' · '+esc2(ph.f):''}</small></span><span class="accg">${typeof DETAIL!=='undefined'&&DETAIL[i]?'pros · cons · failures':''}</span></summary><div class="accb"></div></details>`).join('');
+const items=[...acc.children];
+function renderDetail(k){
+  const d=typeof DETAIL!=='undefined'&&DETAIL[k];if(!d){det.innerHTML='';return}
+  const li=a=>'<ul>'+a.map(x=>`<li>${esc2(x)}</li>`).join('')+'</ul>';
+  det.innerHTML=`<h3 style="margin-top:16px">Deep dive: ${esc2(PHASES[k].t)}</h3>
+  <details class="dd" open><summary>How it works</summary><div class="ddb">${esc2(d.how)}</div></details>
+  <details class="dd" open><summary>Pros and cons</summary><div class="ddb pc"><div class="pro"><b>✓ Pros</b>${li(d.pros)}</div><div class="con"><b>✗ Cons</b>${li(d.cons)}</div></div></details>
+  <details class="dd"><summary>Failure modes (${d.fails.length})</summary><div class="ddb"><table class="fm"><tr><th>Failure mode</th><th>What you see</th><th>Mitigation</th></tr>${d.fails.map(f=>`<tr><td><b>${esc2(f.m)}</b></td><td>${esc2(f.s)}</td><td>${esc2(f.x)}</td></tr>`).join('')}</table></div></details>
+  <details class="dd"><summary>What to watch</summary><div class="ddb">${li(d.watch)}</div></details>`;
+}
+function place(k){
+  items.forEach((d,i)=>{d.open=i===k});
+  items[k].querySelector('.accb').appendChild(stage);
+}
+const _sp=showPhase;
+showPhase=function(k,p=1){place(k);_sp(k,p);renderDetail(k)};
+acc.addEventListener('click',e=>{const s=e.target.closest('summary');if(!s||!s.parentElement.classList.contains('acc'))return;e.preventDefault();
+  const d=s.parentElement,i=+d.dataset.i;
+  if(d.open){d.open=false;stopAll();return}
+  stopAll();showPhase(i);setTimeout(()=>d.scrollIntoView({behavior:'smooth',block:'start'}),30)});
+window.__accReady=true;
+})();
+
+showPhase(typeof cur==="number"&&cur>=0?cur:0);simInit();
 </script>
 </body>
 </html>

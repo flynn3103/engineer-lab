@@ -124,6 +124,26 @@ details.dd summary small{color:var(--mut);font-weight:400;margin-left:6px}
 .ovn.act rect{stroke:var(--acc);stroke-width:4}
 .ove{fill:none;stroke:#8a94a6;stroke-width:1.8}.ove.ctl{stroke-dasharray:6 4}.ove.async{stroke-dasharray:2 4;stroke:var(--bad)}.ove.act{stroke:var(--acc);stroke-width:3.5}
 .ove.flow{animation:flow .6s linear infinite}
+.simgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:900px){.simgrid{grid-template-columns:1fr}}.simgrid>div{min-width:0}
+.simlog{max-height:210px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:4px}.simev{font-size:12px;padding:2px 6px;border-radius:5px;cursor:pointer;border:1px solid transparent}.simev:hover{border-color:var(--line)}.simev.cur{background:color-mix(in srgb,var(--acc) 16%,var(--card));border-color:var(--acc)}.simev.fut{opacity:.45}
+.simtag{display:inline-block;color:#fff;font-size:10px;border-radius:4px;padding:0 5px}
+#acc{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+details.acc{border:1px solid var(--line);border-radius:12px;background:var(--bg);overflow:hidden}
+details.acc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 14px;background:color-mix(in srgb,var(--pc) 55%,var(--card))}
+details.acc>summary::-webkit-details-marker{display:none}
+details.acc>summary::after{content:'▾';margin-left:auto;color:var(--mut);transition:transform .15s}
+details.acc:not([open])>summary::after{transform:rotate(-90deg)}
+details.acc[open]{border-color:var(--acc2);box-shadow:0 0 0 1px var(--acc2)}
+.accn{flex:none;width:26px;height:26px;border-radius:50%;background:var(--card);border:2px solid var(--acc2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.acct{display:flex;flex-direction:column;min-width:0}.acct small{color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.accg{font-size:11px;color:var(--mut);margin-left:auto;padding-right:6px;white-space:nowrap}@media(max-width:700px){.accg{display:none}}
+.accb{padding:12px 14px;background:var(--card)}
+.ddb{padding:8px 4px 4px;line-height:1.6}.ddb ul{margin:4px 0 0;padding-left:18px}.ddb li{margin:3px 0}
+.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:700px){.pc{grid-template-columns:1fr}}
+.pc .pro,.pc .con{border-radius:8px;padding:8px 12px;background:var(--bg);border-left:4px solid var(--ok)}.pc .con{border-left-color:var(--bad)}
+table.fm{width:100%;border-collapse:collapse;font-size:13px}table.fm th,table.fm td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}table.fm th{background:var(--bg);font-size:12px}
+@media(max-width:700px){table.fm{display:block;overflow-x:auto}}
+
 </style>
 </head>
 <body>
@@ -166,6 +186,19 @@ details.dd summary small{color:var(--mut);font-weight:400;margin-left:6px}
   <div id="ovView"></div>
   <div class="chips" style="margin-top:6px"><span class="chip">solid = data flow</span><span class="chip">dashed = control / metadata</span><span class="chip" style="border-color:var(--bad)">dotted = events / async</span></div>
   <div id="ovInfo"></div>
+</section>
+
+<section id="simSec">
+  <h2><em>▶</em>Live cluster simulation <span class="note" style="font-weight:400">watch inserts, updates and deletes travel between the nodes · edit the actions or inject failures</span></h2>
+  <div class="bar"><label>Scenario <select id="simScn"></select></label><label><span id="simNL">nodes</span> <select id="simN"></select></label><span id="simSet" class="bar" style="margin:0"></span>
+    <button class="primary" id="simPlay">▶ Play</button><button id="simStep">Step ›</button><button id="simReset">⏮</button><label>Speed <select id="simSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label></div>
+  <div class="note" id="simDesc" style="margin:0 0 6px"></div>
+  <svg id="simSvg" style="width:100%;border:1px solid var(--line);border-radius:10px;background:var(--bg)"></svg>
+  <div class="bar"><input type="range" id="simT" min="0" max="1000" value="0" step="10" style="flex:1"><span class="mono" id="simTv"></span></div>
+  <div id="simInsp" class="box" style="margin:8px 0"></div>
+  <div class="simgrid"><div><h3 style="margin-top:0">Actions <span class="note" style="font-weight:400">(time in ms, then op and arguments)</span></h3><textarea id="simAct" rows="7" spellcheck="false"></textarea>
+    <div class="bar"><select id="simOp"></select><span id="simArgs" class="bar" style="margin:0"></span><button id="simAdd">＋ add action</button></div></div>
+   <div><h3 style="margin-top:0">Event log <span class="note" style="font-weight:400">(click an event to see why)</span></h3><div id="simLog" class="simlog"></div></div></div>
 </section>
 
 <section id="phaseSec">
@@ -1220,6 +1253,312 @@ $('#src').value=SAMPLES.orders.text();$('#fmt').value='csv';
 $('#tpl').value='agg';
 onData(true);
 S=build();showPhase(0);refreshDeep();
+
+/* ================= v2: live simulation, accordion, packets ================= */
+const DETAIL=[
+{how:'Spark SQL file sources (FileSourceScanExec) split files into partitions of up to spark.sql.files.maxPartitionBytes (128 MB), packing small files together (openCostInBytes). Line formats like CSV/JSON are read as byte ranges; a reader that starts mid-line skips to the next newline, so each line is decoded once. Parquet is split by row groups, and filter pushdown uses footer min/max statistics to skip groups, plus column pruning.',
+ pros:['Splittable formats let many tasks read one big file in parallel','Parquet pruning and pushdown read fewer bytes and fewer columns','Byte-range splitting needs no coordination between readers','Small files are bin-packed so tasks are not wasted on tiny inputs'],
+ cons:['Gzip and other non-splittable codecs force one task per file','Schema inference on CSV/JSON needs an extra pass over the data','Row groups that are too big or too small hurt skipping and parallelism','Min/max skipping only helps if data is clustered or sorted on the filter column'],
+ fails:[{m:'Small files problem',s:'Thousands of tiny tasks, long listing time, driver memory pressure',x:'Compact upstream, raise maxPartitionBytes, or write fewer larger files (coalesce, Delta/Iceberg compaction)'},
+  {m:'Non-splittable input',s:'One straggler task reads a huge .gz file while the rest of the stage is idle',x:'Use splittable formats (Parquet, bzip2) or repartition right after the read'},
+  {m:'Corrupt or schema-drifted records',s:'Nulls appear in PERMISSIVE mode, or the job fails in FAILFAST mode',x:'Give an explicit schema, use mode and columnNameOfCorruptRecord, quarantine bad rows'},
+  {m:'Predicate not pushed down',s:'Scan reads far more bytes than expected',x:'Filter on raw columns, avoid casts or UDFs on the column, check PushedFilters in explain'}],
+ watch:['SQL tab scan node: number of files read, size of files read, and PushedFilters','Stage tab: input size per task; many tasks under a few MB means a small-files problem','Task duration skew where one task has far more input bytes than the median']},
+{how:'RDD and DataFrame transformations such as map, filter and select are lazy: each returns a new immutable object holding a reference to its parent and the function to apply. For RDDs this builds the lineage graph of narrow and shuffle dependencies; for DataFrames Spark builds a logical plan that Catalyst optimizes later. Nothing is read or computed until an action is called.',
+ pros:['Spark sees the whole pipeline before running, so it can optimize and fuse steps','Lineage gives fault tolerance: a lost partition is recomputed from its parents','Immutable nodes make reuse and caching safe and simple','Cheap to define, so building a long chain costs almost nothing'],
+ cons:['Errors in closures or bad paths show up only at the action, far from the cause','Very long lineage (iterative jobs) slows planning and recovery and can overflow the stack','The same RDD used by two actions is recomputed unless cached','Non-deterministic or non-serializable closures cause surprising results'],
+ fails:[{m:'Task not serializable',s:'SparkException: Task not serializable when the action starts',x:'Do not capture non-serializable objects (connections, the enclosing class); create them inside mapPartitions'},
+  {m:'Recomputation of shared lineage',s:'Same expensive source scanned or computed several times',x:'Use cache or persist for reused datasets, and unpersist when finished'},
+  {m:'Lineage grows too long',s:'StackOverflowError or slow job startup in iterative loops',x:'Call checkpoint or localCheckpoint to truncate the lineage'},
+  {m:'Non-deterministic closure',s:'Different results after a retry or recompute (random, time, unordered input)',x:'Make functions deterministic, set seeds, or materialize with checkpoint'}],
+ watch:['rdd.toDebugString or df.explain(true) to inspect lineage and dependency types','Number of indentation levels in lineage output: deep chains are a warning sign','Storage tab: are reused datasets actually cached, and at what fraction']},
+{how:'On an action, SparkContext calls DAGScheduler.runJob. It walks the RDD graph backward from the final RDD, grouping narrow dependencies into one stage and cutting a new ShuffleMapStage at every ShuffleDependency. The last stage is a ResultStage. A stage runs only after its parent stages finish. With Spark SQL, AQE re-plans at these shuffle boundaries using real statistics.',
+ pros:['Pipelining narrow operations avoids writing intermediate data','Stage boundaries are the natural points for fault recovery and retries','Independent stages can run concurrently','Completed shuffle outputs can be reused, so a skipped stage shows in the UI'],
+ cons:['Every shuffle boundary costs a disk write, a network transfer and a barrier','Stage count and shuffle placement depend on how you write the query','A barrier means one slow task delays the whole next stage','Wide dependencies (joins, groupBy) multiply the data moved'],
+ fails:[{m:'Too many shuffle stages',s:'Job has many stages, each adding latency and disk and network IO',x:'Combine groupBy or join steps, pre-partition by key, or broadcast the small side to avoid a shuffle'},
+  {m:'Cartesian or exploding join',s:'Plan shows CartesianProduct or BroadcastNestedLoopJoin and the job never finishes',x:'Add real join keys or conditions, check the join type in explain'},
+  {m:'Stage retry after fetch failure',s:'Stages appear as resubmitted or retried in the UI',x:'Fix the underlying executor or disk problem; see the shuffle phase for fetch failures'},
+  {m:'Unexpected plan from stale stats',s:'Wrong join strategy picked, huge shuffle where a broadcast was possible',x:'Run ANALYZE TABLE, enable AQE, or add a broadcast hint'}],
+ watch:['Jobs tab DAG visualization and the Stages list: count of stages and skipped stages','SQL tab physical plan: Exchange nodes are the shuffle boundaries','Number of stage attempts: more than one attempt means upstream shuffle data was lost']},
+{how:'Each stage becomes a TaskSet with one task per partition, submitted to TaskSchedulerImpl. The driver offers executor slots (spark.executor.cores / spark.task.cpus) and places tasks by locality (PROCESS_LOCAL, NODE_LOCAL, ANY, with spark.locality.wait). Failed tasks are retried up to spark.task.maxFailures (4); a lost executor invalidates its map outputs and triggers recomputation.',
+ pros:['Single driver owns all state, so scheduling and recovery logic is simple and consistent','Locality-aware placement moves compute to data instead of data to compute','Automatic task retry hides transient failures from the user','Dynamic allocation and speculation (spark.speculation) adapt to load and stragglers'],
+ cons:['The driver is a single point of failure and a bottleneck with huge task counts','Locality waits can leave cores idle in exchange for local reads','Retrying a deterministic failure wastes time until maxFailures is hit','Speculation can duplicate work and is unsafe for non-idempotent sinks without care'],
+ fails:[{m:'Executor lost',s:'ExecutorLostFailure, Container killed, or heartbeat timeout; tasks rerun and map outputs are recomputed',x:'Raise executor memory or overhead, fix OOM or preemption (spot nodes), enable external shuffle service or push-based shuffle'},
+  {m:'Task failed 4 times',s:'Job aborted: Task failed spark.task.maxFailures times',x:'Read the root cause in the failed task stack trace; fix bad data or code rather than only raising retries'},
+  {m:'Driver OOM or overload',s:'Driver GC pauses, OOM, or slow scheduling with very many tasks or large collect',x:'Raise spark.driver.memory, reduce partition count, avoid large collect, tune event queue size'},
+  {m:'Straggler task',s:'One task runs far longer than the rest and holds up the stage',x:'Find the cause (skew, bad node), enable speculation, or fix partitioning'}],
+ watch:['Stage page: task time distribution (min, median, max) and a long tail of stragglers','Executors tab: failed tasks, GC time over about 10 percent of task time, and lost executors','Locality level column in the task table: mostly ANY on a cluster with data-local storage is a problem']},
+{how:'A task runs in an executor thread. It reads one input partition as an iterator and pulls rows through the chain of fused operators; with Spark SQL, whole-stage code generation compiles filter, project and similar steps into one tight Java loop. Rows flow one at a time (or in columnar batches for Parquet), so no intermediate collection is built between narrow steps.',
+ pros:['Pipelining keeps memory use low and avoids materializing between steps','Whole-stage codegen removes virtual calls and boosts CPU efficiency','Tasks are independent, so they run in parallel and can be retried alone','Vectorized Parquet reads decode column batches efficiently'],
+ cons:['A task must hold per-partition state in memory, so oversized partitions risk OOM','Python UDFs break fusion and add serialization cost between JVM and Python','A closure runs at least once per row, so side effects are repeated on retry','Very wide schemas can exceed the codegen method size and fall back to slower paths'],
+ fails:[{m:'Executor OOM in a task',s:'java.lang.OutOfMemoryError or container killed by YARN or Kubernetes for exceeding memory',x:'Use smaller partitions (more of them), raise spark.executor.memory and memoryOverhead, avoid huge per-row objects'},
+  {m:'Slow Python UDF',s:'Stage is CPU bound and far slower than equivalent SQL',x:'Prefer built-in functions or pandas UDFs with Arrow, enable spark.sql.execution.arrow.pyspark.enabled'},
+  {m:'Side effects repeated',s:'Duplicate writes or API calls after task retry or speculation',x:'Make closures idempotent; use accumulators only in actions and write through committers'},
+  {m:'Data skew inside a partition',s:'One task processes far more rows than its siblings',x:'Repartition on a better key, salt hot keys, or let AQE split skewed partitions'}],
+ watch:['Stage page: input records and size per task, and the spread between median and max','GC time and peak execution memory columns in the task table','SQL tab: codegen stage numbers in the plan (WholeStageCodegen); missing ones suggest fusion was broken']},
+{how:'Map tasks write shuffle data through a ShuffleWriter: records are partitioned by hash of the key into R reduce partitions, optionally combined map-side (reduceByKey, partial HashAggregate), buffered in memory and spilled to disk when execution memory runs out, then merged into one data file plus an index file. Reduce tasks fetch their blocks via the BlockManager or shuffle service, then aggregate or join. AQE (spark.sql.adaptive.enabled) coalesces small reduce partitions and splits skewed ones.',
+ pros:['Hash partitioning co-locates equal keys so aggregations and joins are correct','Map-side combine shrinks the data sent across the network','Spilling lets a task finish with bounded memory instead of failing','AQE picks partition counts from real sizes instead of a fixed guess'],
+ cons:['Shuffle is the most expensive step: disk write, network transfer and sort or hash','spark.sql.shuffle.partitions defaults to 200, which is rarely right without AQE','A hot key sends all its rows to one reducer, creating skew','Shuffle files live on executor local disk and are lost with the executor unless a shuffle service is used'],
+ fails:[{m:'Data skew',s:'A few reduce tasks run for a long time and read far more shuffle bytes than the median',x:'Enable AQE skew join (spark.sql.adaptive.skewJoin.enabled), salt hot keys, or broadcast the small side'},
+  {m:'FetchFailedException',s:'Reduce stage fails with Fetch failed or missing shuffle output; the map stage is resubmitted',x:'Fix executor loss or disk issues, add the external shuffle service or push-based shuffle, raise spark.network.timeout and io retries'},
+  {m:'Spill and shuffle OOM',s:'Large spill to disk or OOM in reduce tasks that aggregate big groups',x:'Increase partitions, raise executor memory, reduce per-key state, or pre-aggregate'},
+  {m:'Too many or too few partitions',s:'Thousands of tiny reduce tasks, or a few huge tasks with heavy spill',x:'Turn on AQE coalescing and set advisoryPartitionSizeInBytes, or tune spark.sql.shuffle.partitions'}],
+ watch:['Stage page: shuffle read and write size, shuffle spill (memory and disk), and per-task max versus median','SQL tab Exchange node: data size, partition count, and AQE coalesced or skew-split annotations','Executors tab: shuffle read and write totals and failed fetches; disk usage on shuffle local dirs']},
+{how:'The action decides what returns to the driver. count aggregates partial counts per task, collect and take send rows to the driver, and write actions go through the Hadoop-style committer (FileOutputCommitter or the Spark commit protocol): each task attempt writes to a temporary location, and commitTask then commitJob publish files by rename. Only successful attempts are published, so retried or speculative attempts do not duplicate output.',
+ pros:['Per-attempt temporary files make retries and speculation safe for file output','Atomic publish at job commit avoids exposing half-written output on HDFS-like stores','Merging per-partition results in the driver keeps count and similar actions cheap','The result is deterministic regardless of task finishing order'],
+ cons:['collect pulls all data to the driver, which does not scale','Rename-based commit is slow and not atomic on plain object stores like S3 without a special committer','The commit phase is serial work in the driver and can be slow with many files','Output file count equals partition count, which may not be what downstream wants'],
+ fails:[{m:'Driver OOM on collect',s:'OutOfMemoryError or spark.driver.maxResultSize exceeded',x:'Write to storage instead, use take or limit, raise maxResultSize only if the result is truly small'},
+  {m:'Small output files',s:'Thousands of tiny output files after a wide stage or high shuffle partitions',x:'coalesce or repartition before write, enable AQE coalescing, or compact with a table format'},
+  {m:'Partial or duplicate output',s:'Leftover _temporary directories, missing or doubled data after a failed job',x:'Use a committer that is safe for your store (S3A magic or Iceberg and Delta commits), and clean up failed runs'},
+  {m:'Slow job commit',s:'Job finishes computing but sits for a long time at the end',x:'Use a cloud-optimized committer or algorithm version 2 with care, and reduce the number of output files'}],
+ watch:['Jobs tab: time gap between last task end and job end points to commit cost','Output size and number of files written per task in the stage page and SQL tab write node','Driver memory and result size in logs when using collect or toPandas']},
+{how:'The driver posts lifecycle changes (SparkListenerJobStart, StageCompleted, TaskStart, TaskEnd, ExecutorRemoved and others) onto the LiveListenerBus. Listeners consume them to build the Web UI, the event log (spark.eventLog.enabled) for the History Server, and metrics. The UI numbers are folded from these events. explain() shows the parsed, analyzed, optimized and physical plans as metadata only, not row data.',
+ pros:['One ordered event stream gives a single source of truth for UI, history and metrics','Event logs allow post-mortem debugging after the application ends','Custom SparkListener or metrics sinks plug in without touching the job','explain exposes join strategy, pushed filters and partition counts without running the query'],
+ cons:['Event logs can be very large for jobs with many tasks and need rolling or compaction','The listener bus queue can overflow and drop events, making the UI inaccurate','The live UI disappears with the application unless the History Server is set up','Plan text shows what Spark intends, and AQE can change it at runtime'],
+ fails:[{m:'Listener bus drops events',s:'Log says Dropping SparkListenerEvent because no remaining room in event queue; UI shows wrong counts',x:'Raise spark.scheduler.listenerbus.eventqueue.capacity and make custom listeners fast'},
+  {m:'Missing history after crash',s:'Application not visible in History Server, or logs unreadable',x:'Enable eventLog with a durable shared path and rolling logs, and check History Server permissions'},
+  {m:'UI memory pressure',s:'Driver memory grows from retained jobs, stages and tasks',x:'Lower spark.ui.retainedJobs, retainedStages and retainedTasks, or use rolling event logs'},
+  {m:'Plan misread',s:'Explain output differs from what actually ran under AQE',x:'Use the final plan in the SQL tab after execution, or explain with the formatted mode after adaptive changes'}],
+ watch:['Spark UI: Jobs, Stages, SQL and Executors tabs; look for failed tasks, retries, and lost executors','Driver log lines about dropped listener events or slow listeners','Event log size and History Server load time; explain(mode=formatted) for plans before running costly queries']}
+];
+
+(function(){
+const SP_P=4,spPart=k=>sHash(k)%SP_P;
+const SIMM={
+ id:'spark',nodeLabel:'executors',nodeRange:[2,4,3],
+ settings:[{id:'cache',label:'cache()',opts:['off','on'],def:'on'}],
+ menu:[{op:'I',label:'INSERT row (append file)',args:[{n:'key',d:'u1',w:60},{n:'value',d:'alice',w:70}]},{op:'U',label:'UPDATE (rewrite partition)',args:[{n:'key',d:'u1',w:60},{n:'value',d:'alice2',w:70}]},{op:'D',label:'DELETE (filter + rewrite)',args:[{n:'key',d:'u1',w:60}]},{op:'R',label:'SELECT key (1 task)',args:[{n:'key',d:'u1',w:60}]},{op:'A',label:'SCAN all (count)',args:[]},{op:'K',label:'kill executor',args:[{n:'#',d:'1',w:40}]},{op:'H',label:'restart executor',args:[{n:'#',d:'1',w:40}]}],
+ scenarios:[
+  {name:'insert → update → delete (files are immutable)',desc:'Spark never edits a file. INSERT writes a new small file; UPDATE and DELETE read the whole partition, transform it, and write a replacement file. Output is staged first and only becomes visible when the driver commits, so readers always see a consistent snapshot. Key uniqueness is not enforced.',acts:['0 I u1 alice','1800 I u2 bob','3600 U u1 alice2','5600 R u1','7400 D u2','9200 A']},
+  {name:'executor lost mid-job',desc:'Kill an executor while a scan is running. Its in-flight task fails, the driver reschedules it on another executor, and the lost data is recomputed from the immutable source files (lineage). Cached partitions on the dead executor are gone. Try cache off/on.',acts:['0 I u1 a','1500 I u2 b','3000 I u3 c','4500 I u4 d','6000 A','7900 K 1','11500 A']},
+ ],
+ topo(n){
+  const nodes=[{id:'cli',x:14,y:160,w:90,h:70,label:'spark-submit'},{id:'drv',x:170,y:150,w:150,h:110,label:'Driver',badge:'DAG scheduler'},{id:'sto',x:700,y:150,w:180,h:190,label:'Storage (files)',badge:'S3 / HDFS'}];
+  const bh=Math.min(110,Math.floor(380/n)-10),y0=40+(380-n*(bh+10))/2;
+  for(let i=0;i<n;i++)nodes.push({id:'e'+i,x:440,y:y0+i*(bh+10),w:190,h:bh,label:'executor '+i,badge:'tasks'});
+  const edges=[['cli','drv']];for(let i=0;i<n;i++){edges.push(['drv','e'+i],['e'+i,'sto'])}edges.push(['drv','sto']);
+  return{nodes,edges,w:900,h:430,zones:[{x:428,y:y0-22,w:214,h:n*(bh+10)+30,label:'cluster · executors run tasks'}]};
+ },
+ init(n){const st={status:{cli:'up',drv:'up',sto:'up'},files:[],stg:[],cache:[],ver:0,jobs:0,done:{},n};for(let p=0;p<SP_P;p++){st.files.push([]);st.stg.push(null)}for(let i=0;i<n;i++){st.status['e'+i]='up';st.cache.push({});st.done['e'+i]=0}return st},
+ apply(st,f){switch(f.op){
+   case'stage':st.stg[f.p]=f.files;break;
+   case'commit':if(st.stg[f.p]){st.files[f.p]=st.stg[f.p];st.stg[f.p]=null;st.ver++}break;
+   case'cache':st.cache[f.e][f.p]=f.ver;break;
+   case'task':st.done['e'+f.e]++;break;
+   case'down':st.status['e'+f.e]='down';st.cache[f.e]={};break;
+   case'up':st.status['e'+f.e]='up';break;
+   case'job':st.jobs++;break}},
+ fxText(f){return{stage:`partition ${f.p}: staged ${f.files&&f.files.length} file(s) (not visible yet)`,commit:`partition ${f.p}: commit → new files visible`,cache:`executor ${f.e}: cached partition ${f.p}`,task:`executor ${f.e}: task done`,down:`executor ${f.e} lost (cache gone)`,up:`executor ${f.e} up`,job:'job submitted'}[f.op]||f.op},
+ run(acts,n,set){
+  const W=SIMM.init(n),ev=[],pend=[],ap=f=>SIMM.apply(W,f),cacheOn=set.cache==='on';
+  const push=e=>{ev.push(e);if(e.fx.length)pend.push({at:e.t+e.d,e});return e};
+  const flush=t=>{pend.sort((x,y)=>x.at-y.at);while(pend.length&&pend[0].at<=t){pend.shift().e.fx.forEach(ap)}};
+  const jobs=[];let seq=0;
+  const ups=()=>[...Array(n).keys()].filter(i=>W.status['e'+i]==='up');
+  const rows=p=>W.files[p].flatMap(f=>f.rows);
+  // one task = launch -> (cache | read) -> compute [-> write staged] -> done
+  function runTask(job,p,e,start){
+   const te=[],ex='e'+e,add=x=>{te.push(x);return push(x)};
+   let t=start;const hit=job.kind==='R'||job.kind==='A'?(cacheOn&&W.cache[e][p]===W.ver):false;
+   add(E(t,500,'drv',ex,`task: partition ${p}`,'sched',[],'The driver sends one task per partition to an executor. A task is the unit of work: it processes exactly one partition.'));t+=500;
+   const fxs=[];
+   if(job.kind==='I'){add(E(t,400,ex,ex,'build 1 new row','info',[],'INSERT only needs to produce the new row; no existing data is read.'));t+=400}
+   else if(hit){add(E(t,400,ex,ex,`cache hit: partition ${p}`,'info',[],'cache() kept this partition in executor memory, so storage is not read again.'));t+=400}
+   else{const nf=W.files[p].length;add(E(t,500,ex,'sto',`read ${nf} file(s) of partition ${p}`,'read',[],'Reading a partition means opening every file that belongs to it (small files hurt).'));add(E(t+500,500,'sto',ex,`${rows(p).length} row(s)`,'data',[],'Rows come back from storage.'));t+=1000;
+     add(E(t,400,ex,ex,job.kind==='R'||job.kind==='A'?'filter / count':'apply '+(job.kind==='U'?'update':'delete'),'info',cacheOn&&(job.kind==='R'||job.kind==='A')?[{op:'cache',e,p,ver:W.ver}]:[],job.kind==='D'?'DELETE is a filter that drops the matching rows; the surviving rows are rewritten.':job.kind==='U'?'UPDATE maps matching rows to new values; every other row in the partition is copied unchanged (copy-on-write).':'The transformation runs lazily inside this task on the partition.'));t+=400}
+   if(job.kind==='I'||job.kind==='U'||job.kind==='D'){
+    let nf;const cur=W.files[p].flatMap(f=>f.rows);
+    if(job.kind==='I')nf=W.files[p].concat([{name:`part-${p}-${++seq}`,rows:[{k:job.key,v:job.val}]}]);
+    else{const r=cur.filter(x=>job.kind==='D'?x.k!==job.key:true).map(x=>job.kind==='U'&&x.k===job.key?{k:x.k,v:job.val}:x);nf=r.length?[{name:`part-${p}-${++seq}`,rows:r}]:[]}
+    add(E(t,600,ex,'sto',`write part-${p}-${seq} (staged)`,'write',[{op:'stage',p,files:nf}],job.kind==='I'?'A new immutable file is written next to the existing ones. Not visible to readers until the driver commits.':'The full replacement partition is written as a NEW file; old files are untouched until commit. This is why updates are expensive.'));t+=600}
+   add(E(t,400,ex,'drv','task finished','ack',[{op:'task',e}],'The executor reports success.'));t+=400;
+   const task={p,e,doneAt:t,events:te,job};job.tasks.push(task);return task}
+  function submit(t,kind,key,val,label,why){
+   const job={kind,key,val,tasks:[],fin:false,label};jobs.push(job);
+   push(E(t,400,'cli','drv',label,'write',[{op:'job'}],why||'The application calls an action; the driver turns it into a job.'));
+   const p=key?spPart(key):0,up=ups();
+   if(!up.length){push(E(t+400,300,'drv','cli','no executors available','fail',[],'All executors are down.'));job.fin=true;return}
+   push(E(t+400,300,'drv','drv',kind==='A'?`plan: scan → ${SP_P} tasks`:`plan: partition ${p} only (1 task)`,'info',[],kind==='A'?'A full scan needs one task for each partition.':'The key maps to one partition, so the other partitions are pruned: only one task runs.'));
+   const start=t+700;
+   if(kind==='A')for(let q=0;q<SP_P;q++)runTask(job,q,up[q%up.length],start);else runTask(job,p,up[p%up.length],start);
+  }
+  function finalize(job){
+   job.fin=true;const done=Math.max(...job.tasks.map(x=>x.doneAt));flush(done);
+   if(job.kind==='I'||job.kind==='U'||job.kind==='D'){const p=job.tasks[0].p;
+    push(E(done,500,'drv','sto',`commit partition ${p}`,'write',[{op:'commit',p}],'The driver commits atomically: only now does the new file set replace the old one. If it had crashed earlier, nothing would have changed.'));
+    const w=W.stg[p];push(E(done+500,400,'drv','cli',`OK · ${job.kind==='I'?'1 row appended':job.kind==='U'?'partition rewritten':'rows removed, partition rewritten'}`,'ack',[],'Job finished. Files per partition can be seen on the Storage node.'));flush(done+500)}
+   else if(job.kind==='R'){const p=job.tasks[0].p,m=rows(p).filter(x=>x.k===job.key);push(E(done,450,'drv','cli',m.length?m.map(x=>`"${x.v}"`).join(', ')+(m.length>1?'  ← DUPLICATE rows':''):'(no row)',m.length>1?'fail':'ack',[],m.length>1?'Spark does not enforce unique keys, so inserting the same key twice stores two rows.':'The task result goes back to the driver, then to the application.'))}
+   else{let c=0;for(let p=0;p<SP_P;p++)c+=rows(p).length;push(E(done,450,'drv','cli',`count = ${c}`,'ack',[],'Partial counts from every partition are combined by the driver.'))}
+  }
+  const finalizeDue=t=>{jobs.filter(j=>!j.fin&&j.tasks.length&&Math.max(...j.tasks.map(x=>x.doneAt))<=t).forEach(finalize)};
+  for(const a of acts){const t=a.t;flush(t);finalizeDue(t);flush(t);
+   const k=a.args[0]||'k',v=a.args[1]||'v';
+   if(a.op==='I')submit(t,'I',k,v,`INSERT ${k}=${v}`,'The application appends a row. Spark has no INSERT statement on files: it writes a new file.');
+   if(a.op==='U')submit(t,'U',k,v,`UPDATE ${k}=${v}`,'Files are immutable: an update is a job that rewrites the whole partition.');
+   if(a.op==='D')submit(t,'D',k,null,`DELETE ${k}`,'A delete is a filter + rewrite of the partition.');
+   if(a.op==='R')submit(t,'R',k,null,`SELECT ${k}`,'A point lookup is still a job: Spark prunes to one partition, but there is no index.');
+   if(a.op==='A')submit(t,'A',null,null,'SCAN count(*)','An action (count) triggers a job over all partitions.');
+   if(a.op==='K'){const i=+a.args[0]||0;if(i>=n||W.status['e'+i]!=='up')continue;
+    for(let q=pend.length-1;q>=0;q--){const e=pend[q].e;if((e.from==='e'+i||e.to==='e'+i)&&pend[q].at>t&&e.kind!=='fail'){e.fx=[];e.kind='fail';e.msg+=' ✕ lost';e.cause='The executor died before this completed.';pend.splice(q,1)}}
+    push(E(t,0,'drv','e'+i,`executor ${i} LOST`,'fail',[{op:'down',e:i}],'The driver notices the missed heartbeat. Everything running on it and everything it cached is gone.'));flush(t);
+    const orphan=[];jobs.forEach(j=>{if(j.fin)return;j.tasks.forEach(x=>{if(x.e===i&&x.doneAt>t)orphan.push(x)})});
+    const up=ups();let at=t+800;
+    orphan.forEach(x=>{const j=x.job;j.tasks=j.tasks.filter(y=>y!==x);
+     if(!up.length){push(E(t+800,0,'drv','drv','job fails: no executors left','fail',[],'Every executor is lost.'));j.fin=true;return}
+     const e2=up[x.p%up.length];push(E(at,500,'drv','drv',`retry partition ${x.p} on executor ${e2} (attempt 2)`,'sched',[],'Lineage: the partition is recomputed from the immutable source files. No data is lost, only time.'));runTask(j,x.p,e2,at+500)})}
+   if(a.op==='H'){const i=+a.args[0]||0;if(i>=n)continue;push(E(t,0,'drv','e'+i,`executor ${i} registers again`,'info',[{op:'up',e:i}],'A fresh executor joins with an empty cache.'));flush(t)}
+  }
+  jobs.filter(j=>!j.fin&&j.tasks.length).forEach(finalize);
+  return{events:ev};
+ },
+ lines(id,st){if(id==='cli'||id==='drv')return id==='drv'?[`jobs ${st.jobs}`,`committed versions ${st.ver}`]:[];
+  if(id==='sto')return st.files.map((fs,p)=>`p${p}: ${fs.length} file(s), ${fs.reduce((c,f)=>c+f.rows.length,0)} row(s)${st.stg[p]?' +staged':''}`);
+  const i=+id.slice(1);return[`tasks done ${st.done[id]}`,`cached: ${Object.keys(st.cache[i]).map(p=>'p'+p).join(' ')||'—'}`]},
+ detail(id,st){if(id==='sto')return st.files.flatMap((fs,p)=>fs.length?fs.map(f=>`p${p} ${f.name}: ${f.rows.map(r=>r.k+'='+r.v).join(', ')}`):[`p${p}: (empty)`]).concat(st.stg.map((s,p)=>s?`p${p} STAGED (uncommitted): ${s.length} file(s)`:null).filter(Boolean));return SIMM.lines(id,st)}
+};
+
+/* =========================================================
+   LIVE CLUSTER SIMULATION (shared framework)
+   events on a timeline; packets travel between nodes; state is replayed up to time T
+   ========================================================= */
+function sHash(s){let h=2166136261;s=String(s);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h>>>0}
+const sEsc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sShort=(s,n)=>{s=String(s);return s.length>n?s.slice(0,n-1)+'…':s};
+const E=(t,d,from,to,msg,kind,fx,cause)=>({t,d,from,to,msg,kind,fx:fx||[],cause:cause||''});
+const SIM={n:0,set:{},run:null,T:0,play:false,sel:null,selNode:null,speed:1,last:null};
+const SIMCOL={write:'#2f6fed',ack:'#1a9b5a',read:'#e25a1c',data:'#e25a1c',repl:'#9b4fd0',ctl:'#6b7280',fail:'#d64545',info:'#c9a400',sched:'#0f9d8a',watch:'#8a6fd0',ctrl:'#6b7280',trunc:'#d64545'};
+function simParse(text){return text.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#')).map(l=>{const p=l.split(/\s+/);return{t:Number(p[0])||0,op:(p[1]||'').toUpperCase(),args:p.slice(2),raw:l}}).sort((a,b)=>a.t-b.t)}
+function simRun(){
+  const acts=simParse(document.getElementById('simAct').value);
+  try{SIM.run=SIMM.run(acts,SIM.n,SIM.set);SIM.run.events.sort((a,b)=>a.t-b.t||a.d-b.d)}catch(e){SIM.run={events:[],end:0,err:e.message};console.error(e)}
+  SIM.end=Math.max(1000,(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0))+600);
+  const sl=document.getElementById('simT');sl.max=SIM.end;if(SIM.T>SIM.end)SIM.T=SIM.end;
+}
+function simStateAt(T){const st=SIMM.init(SIM.n,SIM.set);for(const e of SIM.run.events){if(e.t+e.d<=T)e.fx.forEach(f=>SIMM.apply(st,f))}return st}
+function simDraw(){
+  const svg=document.getElementById('simSvg');if(!svg||!SIM.run)return;
+  const T=SIM.T,topo=SIMM.topo(SIM.n),st=simStateAt(T),byId=Object.fromEntries(topo.nodes.map(n=>[n.id,n]));
+  const W=topo.w||900,H=topo.h||430;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  const active=SIM.run.events.filter(e=>e.t<=T&&T<e.t+e.d),recent=SIM.run.events.filter(e=>e.t+e.d<=T&&T-(e.t+e.d)<450);
+  const hot=new Set([...active.flatMap(e=>[e.from,e.to]),...recent.map(e=>e.to)]);
+  let s='<defs><marker id="simar" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0L9,4.5L0,9z" fill="#8a94a6"/></marker></defs>';
+  (topo.zones||[]).forEach(z=>{s+=`<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${z.x+12}" y="${z.y+17}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${sEsc(z.label)}</text>`});
+  topo.edges.forEach(([a,b])=>{const A=byId[a],B=byId[b];if(!A||!B)return;s+=`<line x1="${A.x+A.w/2}" y1="${A.y+A.h/2}" x2="${B.x+B.w/2}" y2="${B.y+B.h/2}" stroke="var(--line)" stroke-width="1.5"/>`});
+  topo.nodes.forEach(n=>{
+    const status=(st.status&&st.status[n.id])||'up',down=status==='down',isHot=hot.has(n.id),sel=SIM.selNode===n.id;
+    const lines=SIMM.lines(n.id,st)||[];
+    s+=`<g class="simn" data-id="${n.id}" style="cursor:pointer;${down?'opacity:.55':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${down?'var(--p5)':n.c||'var(--card)'}" stroke="${sel?'var(--acc)':isHot?'var(--acc2)':'var(--line)'}" stroke-width="${sel||isHot?3.5:1.8}"/>
+      <text x="${n.x+9}" y="${n.y+17}" font-weight="700" style="font-size:12.5px">${sEsc(n.label)}${down?' ✕':''}</text>${n.badge&&(n.label.length*7.6+String(typeof n.badge==='function'?n.badge(st):n.badge).length*5.8<n.w)?`<text x="${n.x+n.w-8}" y="${n.y+17}" text-anchor="end" style="font-size:10px;fill:var(--mut)">${sEsc(typeof n.badge==='function'?n.badge(st):n.badge)}</text>`:''}
+      ${lines.slice(0,Math.floor((n.h-24)/13)).map((l,i)=>`<text x="${n.x+9}" y="${n.y+32+i*13}" style="font-size:10.5px;${/^!/.test(l)?'fill:var(--bad)':''}">${sEsc(sShort(String(l).replace(/^!/,''),Math.floor((n.w-14)/6.3)))}</text>`).join('')}</g>`;
+  });
+  active.forEach(e=>{const A=byId[e.from],B=byId[e.to];if(!A||!B)return;const f=Math.min(1,(T-e.t)/Math.max(1,e.d)),ax=A.x+A.w/2,ay=A.y+A.h/2,bx=B.x+B.w/2,by=B.y+B.h/2;
+    if(e.from===e.to){s+=`<text x="${A.x+A.w/2}" y="${A.y-6}" text-anchor="middle" style="font-size:10.5px;fill:${SIMCOL[e.kind]||'#6b7280'};font-weight:700">${sEsc(sShort(e.msg,30))}</text>`;return}
+    const col=SIMCOL[e.kind]||'#6b7280';s+=`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${col}" stroke-width="2.5" opacity=".35"/><circle cx="${ax+(bx-ax)*f}" cy="${ay+(by-ay)*f}" r="7" fill="${col}" stroke="#fff" stroke-width="1.5"/><text x="${ax+(bx-ax)*f}" y="${ay+(by-ay)*f-11}" text-anchor="middle" style="font-size:10px;fill:${col};font-weight:700;paint-order:stroke;stroke:var(--card);stroke-width:3px">${sEsc(sShort(e.msg,26))}</text>`});
+  svg.innerHTML=s;
+  document.getElementById('simTv').textContent=(T/1000).toFixed(2)+' s / '+(SIM.end/1000).toFixed(1)+' s';
+  document.getElementById('simT').value=T;
+  // log
+  const evs=SIM.run.events,upTo=evs.filter(e=>e.t<=T),lastI=upTo.length-1;
+  document.getElementById('simLog').innerHTML=evs.map((e,i)=>`<div class="simev ${i===lastI?'cur':''} ${e.t>T?'fut':''}" data-i="${i}"><span class="simtag" style="background:${SIMCOL[e.kind]||'#6b7280'}">${sEsc(e.kind)}</span> <span class="mono">${(e.t/1000).toFixed(2)}s</span> ${sEsc(e.from)}${e.from===e.to?'':' → '+sEsc(e.to)}: ${sEsc(e.msg)}</div>`).join('')||'<div class="note">No actions yet.</div>';
+  const cur=document.querySelector('#simLog .cur');if(cur&&SIM.play)cur.scrollIntoView({block:'nearest'});
+  // inspector
+  const insp=document.getElementById('simInsp');
+  if(SIM.selNode){const det=SIMM.detail?SIMM.detail(SIM.selNode,st):SIMM.lines(SIM.selNode,st);insp.innerHTML=`<b>${sEsc(byId[SIM.selNode].label)}</b> at ${(T/1000).toFixed(2)}s<pre>${sEsc((det||[]).join('\n')||'(empty)')}</pre>`}
+  else if(SIM.sel!=null&&evs[SIM.sel]){const e=evs[SIM.sel];insp.innerHTML=`<b>${sEsc(e.msg)}</b><div class="note">${sEsc(e.from)} → ${sEsc(e.to)} · ${(e.t/1000).toFixed(2)}s (+${e.d} ms) · ${sEsc(e.kind)}</div>${e.cause?`<div class="caption" style="margin-top:6px"><b>Why:</b> ${sEsc(e.cause)}</div>`:''}<div class="note">state changes: ${e.fx.length?sEsc(e.fx.map(f=>SIMM.fxText?SIMM.fxText(f):f.op).join('; ')):'none (message only)'}</div>`}
+  else insp.innerHTML='<div class="note">Click a node to inspect its data, or click an event in the log to see why it happened.</div>';
+}
+function simTick(now){
+  if(!SIM.play){SIM.last=null;return}
+  if(SIM.last==null)SIM.last=now;const dt=now-SIM.last;SIM.last=now;SIM.T=Math.min(SIM.end,SIM.T+dt*SIM.speed);simDraw();
+  if(SIM.T>=SIM.end){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}
+  requestAnimationFrame(simTick);
+}
+function simBuildControls(){
+  const m=SIMM,nr=m.nodeRange;
+  const sc=document.getElementById('simScn');sc.innerHTML=m.scenarios.map((s,i)=>`<option value="${i}">${sEsc(s.name)}</option>`).join('');
+  const nn=document.getElementById('simN');nn.innerHTML=Array.from({length:nr[1]-nr[0]+1},(_,i)=>`<option value="${nr[0]+i}" ${nr[0]+i===nr[2]?'selected':''}>${nr[0]+i}</option>`).join('');document.getElementById('simNL').textContent=m.nodeLabel;
+  document.getElementById('simSet').innerHTML=(m.settings||[]).map(s=>`<label>${sEsc(s.label)} <select data-set="${s.id}">${s.opts.map(o=>`<option ${o===s.def?'selected':''}>${sEsc(o)}</option>`).join('')}</select></label>`).join('');
+  SIM.set=Object.fromEntries((m.settings||[]).map(s=>[s.id,s.def]));
+  document.getElementById('simOp').innerHTML=m.menu.map((o,i)=>`<option value="${i}">${sEsc(o.label)}</option>`).join('');
+  simArgs();
+}
+function simArgs(){const o=SIMM.menu[+document.getElementById('simOp').value];document.getElementById('simArgs').innerHTML=o.args.map((a,i)=>`<input type="text" data-a="${i}" value="${sEsc(a.d)}" placeholder="${sEsc(a.n)}" style="width:${a.w||80}px">`).join('')}
+function simLoadScenario(i){const s=SIMM.scenarios[i];document.getElementById('simAct').value=s.acts.join('\n');document.getElementById('simDesc').textContent=s.desc;SIM.T=0;SIM.sel=null;SIM.selNode=null;simRun();simDraw()}
+function simInit(){
+  if(!document.getElementById('simSvg'))return;
+  SIM.n=SIMM.nodeRange[2];simBuildControls();simLoadScenario(0);
+  document.getElementById('simScn').onchange=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simLoadScenario(+e.target.value)};
+  document.getElementById('simN').onchange=e=>{SIM.n=+e.target.value;SIM.T=0;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simRun();simDraw()};
+  document.getElementById('simSet').onchange=e=>{const t=e.target.closest('[data-set]');if(t){SIM.set[t.dataset.set]=t.value;simRun();simDraw()}};
+  document.getElementById('simOp').onchange=simArgs;
+  document.getElementById('simAdd').onclick=()=>{const o=SIMM.menu[+document.getElementById('simOp').value],vals=[...document.querySelectorAll('#simArgs input')].map(i=>i.value.trim()||'-');
+    const ta=document.getElementById('simAct'),t=Math.round(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0)+300);ta.value=(ta.value.trim()?ta.value.trim()+'\n':'')+`${t} ${o.op} ${vals.join(' ')}`.trim();SIM.T=Math.max(0,t-200);simRun();simDraw()};
+  document.getElementById('simAct').onchange=()=>{simRun();simDraw()};
+  document.getElementById('simPlay').onclick=()=>{if(SIM.play){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}if(SIM.T>=SIM.end)SIM.T=0;SIM.play=true;SIM.last=null;document.getElementById('simPlay').textContent='⏸ Pause';requestAnimationFrame(simTick)};
+  document.getElementById('simReset').onclick=()=>{SIM.play=false;SIM.T=0;document.getElementById('simPlay').textContent='▶ Play';simDraw()};
+  document.getElementById('simStep').onclick=()=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const nx=SIM.run.events.find(e=>e.t+e.d>SIM.T+1);SIM.T=nx?nx.t+nx.d:SIM.end;SIM.sel=nx?SIM.run.events.indexOf(nx):null;SIM.selNode=null;simDraw()};
+  document.getElementById('simSpeed').onchange=e=>{SIM.speed=+e.target.value};
+  document.getElementById('simT').oninput=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';SIM.T=+e.target.value;simDraw()};
+  document.getElementById('simLog').onclick=e=>{const d=e.target.closest('.simev');if(!d)return;const i=+d.dataset.i;SIM.sel=i;SIM.selNode=null;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const ev=SIM.run.events[i];SIM.T=ev.t+ev.d;simDraw()};
+  document.getElementById('simSvg').onclick=e=>{const g=e.target.closest('.simn');if(g){SIM.selNode=SIM.selNode===g.dataset.id?null:g.dataset.id;SIM.sel=null;simDraw()}};
+}
+
+window.simInit=simInit;window.__sim={SIM,simDraw,simRun};})();
+/* ===== overview: packets travelling along the connections ===== */
+(function(){
+const _ovr=ovRender;
+function pt(g,f){if(g.c){const u=1-f;return[u*u*g.p0[0]+2*u*f*g.c[0]+f*f*g.p1[0],u*u*g.p0[1]+2*u*f*g.c[1]+f*f*g.p1[1]]}return[g.p0[0]+(g.p1[0]-g.p0[0])*f,g.p0[1]+(g.p1[1]-g.p0[1])*f]}
+function findEdge(a,b){let e=OVS.edges.find(x=>x.from===a&&x.to===b);if(e)return{e,rev:false};e=OVS.edges.find(x=>x.from===b&&x.to===a);return e?{e,rev:true}:null}
+ovRender=function(){
+  _ovr();
+  if(OV.k<0||OV.kf==null)return;const svg=document.querySelector('#ovView svg');if(!svg)return;
+  const flow=OVS.flow,i=Math.min(flow.length-1,Math.floor(OV.kf)),f=OV.kf-Math.floor(OV.kf);let s='';
+  if(i>=1){const ed=findEdge(flow[i-1].n,flow[i].n);
+    if(ed){const g=ovGeom(ed.e),ff=Math.min(1,f*1.15),q=ed.rev?1-ff:ff;
+      for(let tr=3;tr>=1;tr--){const qq=ed.rev?Math.min(1,q+tr*.06):Math.max(0,q-tr*.06),p2=pt(g,qq);s+=`<circle cx="${p2[0]}" cy="${p2[1]}" r="${7-tr*1.4}" fill="var(--acc2)" opacity="${.5-tr*.12}"/>`}
+      const p=pt(g,q);s+=`<circle cx="${p[0]}" cy="${p[1]}" r="8" fill="var(--acc2)" stroke="#fff" stroke-width="2"/><text x="${p[0]}" y="${p[1]-13}" text-anchor="middle" style="font-size:11px;font-weight:700;fill:var(--acc2);paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(short(flow[i].t,44))}</text>`}}
+  svg.insertAdjacentHTML('beforeend',s);
+};
+const tr=document.getElementById('ovTrace');
+tr.onclick=()=>{stopAll();OV.sel=null;OV.k=0;OV.kf=0;animate(p=>{OV.kf=Math.min(OVS.flow.length-.001,p*OVS.flow.length);OV.k=Math.floor(OV.kf);ovRender()},OVS.flow.length*1500)};
+document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.kf=null;OV.sel=null;ovRender()};
+document.getElementById('ovView').addEventListener('click',e=>{if(e.target.closest('[data-node]'))OV.kf=null},true);
+})();
+
+/* ===== accordion: one drop-down per phase + detail (how / pros / cons / failure modes / watch) ===== */
+(function(){
+const g=id=>document.getElementById(id),esc2=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sec=g('phaseSec'),nav=g('nav'),barNav=g('prev').parentElement;
+const stage=document.createElement('div');stage.id='stage';
+const det=document.createElement('div');det.id='phDetail';
+stage.append(g('blurb'),g('phCtl'),barNav,g('phView'),det);
+nav.style.display='none';
+const acc=document.createElement('div');acc.id='acc';nav.after(acc);
+acc.innerHTML=PHASES.map((ph,i)=>`<details class="acc" data-i="${i}" style="--pc:var(--p${i%8})"><summary><span class="accn">${i+1}</span><span class="acct"><b>${esc2(ph.t)}</b><small>${esc2(ph.s)}${ph.f?' · '+esc2(ph.f):''}</small></span><span class="accg">${typeof DETAIL!=='undefined'&&DETAIL[i]?'pros · cons · failures':''}</span></summary><div class="accb"></div></details>`).join('');
+const items=[...acc.children];
+function renderDetail(k){
+  const d=typeof DETAIL!=='undefined'&&DETAIL[k];if(!d){det.innerHTML='';return}
+  const li=a=>'<ul>'+a.map(x=>`<li>${esc2(x)}</li>`).join('')+'</ul>';
+  det.innerHTML=`<h3 style="margin-top:16px">Deep dive: ${esc2(PHASES[k].t)}</h3>
+  <details class="dd" open><summary>How it works</summary><div class="ddb">${esc2(d.how)}</div></details>
+  <details class="dd" open><summary>Pros and cons</summary><div class="ddb pc"><div class="pro"><b>✓ Pros</b>${li(d.pros)}</div><div class="con"><b>✗ Cons</b>${li(d.cons)}</div></div></details>
+  <details class="dd"><summary>Failure modes (${d.fails.length})</summary><div class="ddb"><table class="fm"><tr><th>Failure mode</th><th>What you see</th><th>Mitigation</th></tr>${d.fails.map(f=>`<tr><td><b>${esc2(f.m)}</b></td><td>${esc2(f.s)}</td><td>${esc2(f.x)}</td></tr>`).join('')}</table></div></details>
+  <details class="dd"><summary>What to watch</summary><div class="ddb">${li(d.watch)}</div></details>`;
+}
+function place(k){
+  items.forEach((d,i)=>{d.open=i===k});
+  items[k].querySelector('.accb').appendChild(stage);
+}
+const _sp=showPhase;
+showPhase=function(k,p=1){place(k);_sp(k,p);renderDetail(k)};
+acc.addEventListener('click',e=>{const s=e.target.closest('summary');if(!s||!s.parentElement.classList.contains('acc'))return;e.preventDefault();
+  const d=s.parentElement,i=+d.dataset.i;
+  if(d.open){d.open=false;stopAll();return}
+  stopAll();showPhase(i);setTimeout(()=>d.scrollIntoView({behavior:'smooth',block:'start'}),30)});
+window.__accReady=true;
+})();
+
+showPhase(typeof cur==="number"&&cur>=0?cur:0);simInit();
 </script>
 </body>
 </html>

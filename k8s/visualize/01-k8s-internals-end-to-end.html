@@ -72,6 +72,26 @@ svg text{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;fill:var(--in
 .ove.flow{animation:flow .6s linear infinite}
 details.dd{border:1px solid var(--line);border-radius:10px;padding:8px 14px;margin-top:10px;background:var(--bg)}
 details.dd summary{cursor:pointer;font-weight:600}
+.simgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:900px){.simgrid{grid-template-columns:1fr}}.simgrid>div{min-width:0}
+.simlog{max-height:210px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:4px}.simev{font-size:12px;padding:2px 6px;border-radius:5px;cursor:pointer;border:1px solid transparent}.simev:hover{border-color:var(--line)}.simev.cur{background:color-mix(in srgb,var(--acc) 16%,var(--card));border-color:var(--acc)}.simev.fut{opacity:.45}
+.simtag{display:inline-block;color:#fff;font-size:10px;border-radius:4px;padding:0 5px}
+#acc{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+details.acc{border:1px solid var(--line);border-radius:12px;background:var(--bg);overflow:hidden}
+details.acc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 14px;background:color-mix(in srgb,var(--pc) 55%,var(--card))}
+details.acc>summary::-webkit-details-marker{display:none}
+details.acc>summary::after{content:'▾';margin-left:auto;color:var(--mut);transition:transform .15s}
+details.acc:not([open])>summary::after{transform:rotate(-90deg)}
+details.acc[open]{border-color:var(--acc2);box-shadow:0 0 0 1px var(--acc2)}
+.accn{flex:none;width:26px;height:26px;border-radius:50%;background:var(--card);border:2px solid var(--acc2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+.acct{display:flex;flex-direction:column;min-width:0}.acct small{color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.accg{font-size:11px;color:var(--mut);margin-left:auto;padding-right:6px;white-space:nowrap}@media(max-width:700px){.accg{display:none}}
+.accb{padding:12px 14px;background:var(--card)}
+.ddb{padding:8px 4px 4px;line-height:1.6}.ddb ul{margin:4px 0 0;padding-left:18px}.ddb li{margin:3px 0}
+.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:700px){.pc{grid-template-columns:1fr}}
+.pc .pro,.pc .con{border-radius:8px;padding:8px 12px;background:var(--bg);border-left:4px solid var(--ok)}.pc .con{border-left-color:var(--bad)}
+table.fm{width:100%;border-collapse:collapse;font-size:13px}table.fm th,table.fm td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}table.fm th{background:var(--bg);font-size:12px}
+@media(max-width:700px){table.fm{display:block;overflow-x:auto}}
+
 </style>
 </head>
 <body>
@@ -104,6 +124,19 @@ details.dd summary{cursor:pointer;font-weight:600}
   <div id="ovView"></div>
   <div class="chips" style="margin-top:6px"><span class="chip">solid = data flow</span><span class="chip">dashed = control / watch</span><span class="chip" style="border-color:var(--bad)">dotted = status / events</span></div>
   <div id="ovInfo"></div>
+</section>
+
+<section id="simSec">
+  <h2><em>▶</em>Live cluster simulation <span class="note" style="font-weight:400">watch inserts, updates and deletes travel between the nodes · edit the actions or inject failures</span></h2>
+  <div class="bar"><label>Scenario <select id="simScn"></select></label><label><span id="simNL">nodes</span> <select id="simN"></select></label><span id="simSet" class="bar" style="margin:0"></span>
+    <button class="primary" id="simPlay">▶ Play</button><button id="simStep">Step ›</button><button id="simReset">⏮</button><label>Speed <select id="simSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label></div>
+  <div class="note" id="simDesc" style="margin:0 0 6px"></div>
+  <svg id="simSvg" style="width:100%;border:1px solid var(--line);border-radius:10px;background:var(--bg)"></svg>
+  <div class="bar"><input type="range" id="simT" min="0" max="1000" value="0" step="10" style="flex:1"><span class="mono" id="simTv"></span></div>
+  <div id="simInsp" class="box" style="margin:8px 0"></div>
+  <div class="simgrid"><div><h3 style="margin-top:0">Actions <span class="note" style="font-weight:400">(time in ms, then op and arguments)</span></h3><textarea id="simAct" rows="7" spellcheck="false"></textarea>
+    <div class="bar"><select id="simOp"></select><span id="simArgs" class="bar" style="margin:0"></span><button id="simAdd">＋ add action</button></div></div>
+   <div><h3 style="margin-top:0">Event log <span class="note" style="font-weight:400">(click an event to see why)</span></h3><div id="simLog" class="simlog"></div></div></div>
 </section>
 
 <section id="phaseSec">
@@ -894,6 +927,356 @@ document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.sel=null;ov
 /* ================= init ================= */
 $('#src').value=SAMPLES.web;
 rebuild(true);
+
+/* ================= v2: live simulation, accordion, packets ================= */
+const DETAIL=[
+{how:"kubectl apply reads your YAML, does a client/server-side apply (it stores the last-applied state in the kubectl.kubernetes.io/last-applied-configuration annotation or in managedFields) and sends it to kube-apiserver over HTTPS. Nothing is told to 'run'. The API server stores a Deployment in etcd, and independent controllers, the scheduler and kubelets each react to watch events and move the cluster toward that desired state.",
+ pros:["Declarative: you state the end result and the system retries until it is reached","Loose coupling: components only talk to the API server, so each can crash and restart alone","Every step is an object or event you can inspect with kubectl get/describe","Re-applying the same manifest is idempotent, which makes GitOps workable"],
+ cons:["Eventual consistency: apply returns long before pods are actually running","Many hops make 'why is nothing happening' hard to localize without events and logs","A bad manifest is accepted if it passes validation, then fails later at runtime","Apply conflicts appear when several tools or people own the same fields"],
+ fails:[{m:"Manifest rejected",s:"error: ... is invalid, or unknown field / strict decoding error from kubectl apply",x:"Run kubectl apply --dry-run=server and kubectl diff; fix apiVersion, schema and selector/labels mismatch"},
+ {m:"Apply succeeds but nothing runs",s:"Deployment exists, READY 0/3, no pods or pods Pending",x:"kubectl describe deploy/rs, then check controller-manager and scheduler health and Events"},
+ {m:"Field ownership conflict",s:"Server-side apply error: Apply failed with 1 conflict ... conflict with another manager",x:"Decide the owner of the field; use --force-conflicts only deliberately or remove the other writer (HPA vs replicas)"},
+ {m:"Stale kubeconfig or auth failure",s:"Unauthorized / Forbidden or connection refused / timeout to the API server",x:"Check kubectl config current-context, token/cert expiry, VPN, and API server endpoint health"}],
+ watch:["kubectl get events --sort-by=.lastTimestamp: bad = Warning events right after apply","kubectl rollout status deploy/NAME: bad = hangs or progress deadline exceeded","kubectl get deploy,rs,pods -o wide: bad = READY below desired for a long time"]},
+
+{how:"Each request goes through the kube-apiserver handler chain: authentication (x509, bearer/OIDC/ServiceAccount token), authorization (RBAC checks Role/ClusterRole bindings for verb, resource, namespace), mutating admission (defaulting, sidecar injection via webhooks), schema validation, validating admission (ResourceQuota, LimitRange, Pod Security, validating webhooks), then the write to etcd. Rejection at any stage returns 401, 403, 422 or 409 and stores nothing.",
+ pros:["One enforcement point for security and policy, regardless of which client is calling","Admission lets platform teams inject defaults and block unsafe objects without changing apps","Fail early: bad requests never reach etcd or controllers","RBAC is additive and auditable through audit logs"],
+ cons:["The API server is a shared bottleneck: slow admission or webhooks slow every write","Webhooks add network hops and a new failure domain on the critical path","RBAC grows complex and over-broad ClusterRoles are common","Mutating webhooks can change objects in surprising ways (order matters)"],
+ fails:[{m:"Admission webhook outage",s:"Creates/updates fail with: failed calling webhook ... context deadline exceeded or connection refused",x:"Set failurePolicy and timeoutSeconds deliberately, exclude kube-system and the webhook's own namespace, run webhook HA with PDB"},
+ {m:"RBAC denied",s:"Error from server (Forbidden): user cannot create resource in namespace",x:"kubectl auth can-i --as=USER; add a minimal Role/RoleBinding instead of cluster-admin"},
+ {m:"ResourceQuota exceeded",s:"forbidden: exceeded quota, requested vs used vs limited; pods missing from ReplicaSet",x:"Raise the quota or lower requests; also make sure pods set requests/limits when a quota requires them"},
+ {m:"API server overload",s:"429 Too Many Requests, high request latency, slow kubectl",x:"Tune API Priority and Fairness, fix noisy clients/controllers, scale apiserver replicas, watch etcd latency"}],
+ watch:["apiserver_request_duration_seconds and apiserver_request_total by code: bad = rising 5xx/429 or p99 over 1s","apiserver_admission_webhook_rejection_count / admission_webhook latency: bad = timeouts","kubectl auth can-i --list --as=USER; check audit logs for Forbidden","kubectl describe quota -n NS: bad = used equals hard"]},
+
+{how:"etcd is a Raft-replicated key-value store, normally 3 or 5 members. Every object lives under /registry/... and each write bumps a global revision, exposed as resourceVersion. Updates are optimistic: the API server rejects a write whose resourceVersion is stale with 409 Conflict. Clients use list+watch from a resourceVersion; if it was compacted away, they get 410 Gone and must re-list.",
+ pros:["Strong consistency via Raft means a single agreed view of cluster state","resourceVersion gives lock-free optimistic concurrency between controllers","Watch streams push changes, so controllers do not poll","Revisions allow resuming a watch exactly where it left off"],
+ cons:["Writes need a quorum and a disk fsync, so slow disks hurt the entire cluster","Practical limits: about 8 GB default quota and a 1.5 MB object size cap","Compaction and defrag must be managed, and 410 Gone forces expensive re-lists","Large clusters with many watchers or big objects (Secrets, CRDs, Events) strain it"],
+ fails:[{m:"Quorum loss",s:"API server returns timeouts or 'etcdserver: no leader'; cluster is read-only or unavailable; running pods continue",x:"Restore majority of members or recover from snapshot; keep odd member count across failure zones; practice restores"},
+ {m:"Slow disk / high latency",s:"'etcdserver: request timed out', slow kubectl, leader elections flapping",x:"Use dedicated SSD/NVMe; watch fsync and backend commit durations; keep etcd off noisy neighbors"},
+ {m:"Database space exceeded",s:"etcdserver: mvcc: database space exceeded; writes refused (NOSPACE alarm)",x:"Compact, defrag, disarm the alarm; find the object hoarding space (events, huge CRs); raise quota-backend-bytes carefully"},
+ {m:"409 Conflict / 410 Gone",s:"Operation cannot be fulfilled ... object has been modified; or 'too old resource version' in controller logs",x:"Retry with a fresh GET (client-go RetryOnConflict); informers re-list automatically; avoid long-lived stale watches"}],
+ watch:["etcd_disk_wal_fsync_duration_seconds and backend_commit_duration: bad = p99 above ~10 ms / 25 ms","etcd_server_has_leader and leader_changes_seen_total: bad = 0 leader or frequent changes","etcd_mvcc_db_total_size_in_bytes vs quota: bad = above ~80 percent","etcdctl endpoint status -w table and endpoint health"]},
+
+{how:"kube-controller-manager runs many controllers (Deployment, ReplicaSet, Endpoints, Node, Job and others). Each uses informers with a local cache fed by watch, puts keys on a work queue, and in a reconcile function compares desired spec with observed status, then creates, patches or deletes objects. They are level-triggered: if an event is missed, the next resync or re-list still finds the gap. Deployment owns ReplicaSets, which own Pods through ownerReferences.",
+ pros:["Level-triggered loops self-heal: a lost event or a crashed controller is corrected on the next sync","Small single-purpose controllers compose into complex behavior","Same pattern works for your own CRDs and operators","Garbage collection via ownerReferences cleans children automatically"],
+ cons:["Reconciliation is asynchronous, so there is always a delay between change and effect","Two controllers editing the same field can fight each other forever","Controller-manager is leader-elected, so only one active instance does work","Errors are retried with backoff, which can hide a persistent problem in logs"],
+ fails:[{m:"Controller-manager down or leaderless",s:"Scaling or deleting pods has no effect; ReplicaSet does not replace deleted pods",x:"Check the kube-controller-manager pod and logs, lease in kube-system, and API connectivity; keep 3 control-plane nodes"},
+ {m:"Reconcile fight",s:"Replicas keep flipping, objects constantly modified, high API write rate",x:"Single owner per field (HPA owns replicas, remove replicas from GitOps manifest); inspect managedFields"},
+ {m:"Missed watch event",s:"Temporary drift until the next resync, such as a deleted pod not replaced immediately",x:"Expected to heal via resync/re-list; check informer lag and API server health if it persists"},
+ {m:"Stuck finalizers / orphan objects",s:"Object stays Terminating, namespace never deletes",x:"Find the finalizer and its controller; fix or remove the controller; patch the finalizer only as a last resort"}],
+ watch:["workqueue_depth and workqueue_work_duration_seconds per controller: bad = growing depth or long processing","kubectl get rs,deploy: bad = DESIRED differs from CURRENT for long","kubectl get lease -n kube-system: bad = stale renewTime for the controller-manager","kubectl describe deploy: look at Conditions (Progressing, Available) and Events"]},
+
+{how:"kube-scheduler watches pods with an empty spec.nodeName. For each one it runs Filter plugins (NodeResourcesFit using requests, taints and tolerations, nodeSelector/affinity, topology spread, PVC zone) to drop infeasible nodes, then Score plugins to rank the rest, and finally Binds by creating a Binding that sets spec.nodeName. Scheduling uses requests, not actual usage. If no node fits, the pod stays Pending with a FailedScheduling event.",
+ pros:["Pluggable framework: filters and scores can be tuned or extended with profiles","Resource requests give predictable placement and bin-packing control","Affinity, taints and topology spread express placement rules declaratively","Decoupled from kubelet: scheduling decision is just one field written to the API"],
+ cons:["Decisions rely on requests, which are often wrong, so nodes can be overcommitted or wasteful","Scheduling is a point-in-time choice; nothing rebalances later without the descheduler","Strict constraints (anti-affinity, zone volumes) can make pods unschedulable","One scheduler loop is a throughput limit on very large bursts"],
+ fails:[{m:"FailedScheduling: insufficient cpu/memory",s:"Pods Pending; event: 0/N nodes are available: N Insufficient cpu",x:"Lower requests if oversized, add nodes or enable Cluster Autoscaler, check kubectl describe node Allocated resources"},
+ {m:"Taint / selector mismatch",s:"Event: node(s) had untolerated taint or didn't match Pod's node affinity/selector",x:"Add tolerations or fix labels; check kubectl describe node for Taints"},
+ {m:"Volume node affinity conflict",s:"Pod Pending: node(s) had volume node affinity conflict; PVC bound in another zone",x:"Use WaitForFirstConsumer StorageClass; ensure capacity in the volume's zone"},
+ {m:"Scheduler not running",s:"New pods Pending with no events at all",x:"Check kube-scheduler pod and leader lease; restore control-plane node"}],
+ watch:["kubectl get pods --field-selector=status.phase=Pending and kubectl describe pod (FailedScheduling event)","scheduler_pending_pods and scheduler_pod_scheduling_duration_seconds: bad = rising queue or high latency","kubectl describe node: compare Allocated requests vs Allocatable","kubectl top nodes to compare real usage with requested"]},
+
+{how:"The kubelet on each node watches pods whose spec.nodeName is its node. It pulls images and creates the sandbox and containers through the CRI (containerd or CRI-O), mounts volumes, runs startup, liveness and readiness probes, and writes pod status back to the API. It also renews its Lease every ~10 s and posts node status. Failed containers are restarted per restartPolicy with exponential backoff up to 5 minutes.",
+ pros:["Node-local agent keeps working from its cache even if the control plane is briefly unreachable","CRI abstraction lets you swap container runtimes","Probes give the platform application-level health signals","Status reporting makes pod state visible and drives traffic via readiness"],
+ cons:["Image pulls, slow registries and big images delay startup","Bad probe settings cause needless restarts or premature traffic","Resource limits cause OOMKills and CPU throttling that look like app bugs","Kubelet trouble hides pods on that node from the control plane's view"],
+ fails:[{m:"ImagePullBackOff / ErrImagePull",s:"Pod stuck, event: Failed to pull image / manifest unknown / unauthorized",x:"Fix tag or registry, add imagePullSecrets, check registry reachability and rate limits"},
+ {m:"CrashLoopBackOff",s:"Restarts climb, back-off delay grows to 5 minutes, Last State terminated with exit code",x:"kubectl logs --previous; check config, dependencies, exit code, OOMKilled; add startupProbe for slow apps"},
+ {m:"Readiness never passes",s:"Pod Running but READY 0/1; removed from Service endpoints",x:"kubectl describe pod for probe failures; fix probe path/port/initialDelay; do not point readiness at external dependencies"},
+ {m:"OOMKilled / eviction",s:"Last State: OOMKilled, exit 137; or Evicted due to node pressure",x:"Raise memory limit or fix leak; set requests close to real use; watch node DiskPressure/MemoryPressure"}],
+ watch:["kubectl get pods -w and kubectl describe pod: bad = Waiting reasons, rising RESTARTS","kubectl logs POD --previous for crashed containers","kubelet_pod_start_duration_seconds and container_oom_events_total","kubectl get node: bad = NotReady, plus conditions like MemoryPressure"]},
+
+{how:"A Service gets a stable ClusterIP and a label selector. The EndpointSlice controller keeps EndpointSlices listing only pod IPs that are Ready. kube-proxy on every node watches Services and EndpointSlices and programs iptables (default, random probability rules) or IPVS rules so traffic to the ClusterIP is DNAT-ed to one ready pod. CoreDNS gives the Service a DNS name.",
+ pros:["Stable virtual IP and DNS name while pods come and go","Readiness gating means only healthy pods receive traffic","Rules are programmed on every node, so there is no central proxy to saturate","Simple model that works for any TCP/UDP workload"],
+ cons:["Connection-level balancing only, so long-lived HTTP/2 or gRPC connections can stay unbalanced","iptables mode scales linearly with Service count; rule sync gets slow in huge clusters","Rule updates are eventually consistent, so brief traffic to a gone pod is possible","Poor visibility: no per-request metrics or retries without a mesh"],
+ fails:[{m:"Empty endpoints",s:"Connection refused / timeout via the Service; kubectl get endpoints shows <none>",x:"Selector must match pod labels; pods must be Ready; check targetPort matches the containerPort"},
+ {m:"Traffic to terminating pod",s:"Errors or resets during deploys or scale-down",x:"preStop sleep, terminationGracePeriodSeconds, handle SIGTERM and drain connections; use readiness to fail fast"},
+ {m:"Stale kube-proxy rules",s:"Some nodes cannot reach a Service or hit dead pod IPs",x:"Check kube-proxy pod logs and sync duration; restart it; verify the CNI and conntrack"},
+ {m:"Unbalanced long-lived connections",s:"One pod gets most load while others idle",x:"Client-side balancing, connection max age, or a service mesh / L7 ingress"}],
+ watch:["kubectl get endpointslices -l kubernetes.io/service-name=NAME: bad = no ready addresses","kubectl describe svc NAME: check selector, ports, Endpoints","kubeproxy_sync_proxy_rules_duration_seconds: bad = seconds-long syncs","kubectl run curl test from inside the cluster and check CoreDNS logs"]},
+
+{how:"Changing the pod template changes its hash, so the Deployment controller creates a new ReplicaSet and scales it up while scaling the old one down. Pace is bounded by maxSurge (extra pods above desired) and maxUnavailable (pods allowed below desired), defaults 25 percent each. A new pod only counts as available after readiness (and minReadySeconds). Old ReplicaSets are kept (revisionHistoryLimit, default 10), enabling kubectl rollout undo.",
+ pros:["Zero-downtime updates when readiness probes and surge settings are right","Easy rollback to a previous ReplicaSet","Bad new version stalls the rollout and leaves old pods serving","Tunable speed vs capacity trade-off"],
+ cons:["Surge needs spare cluster capacity or the new pods stay Pending","No automatic rollback: a stuck rollout just reports ProgressDeadlineExceeded","Both versions run together, so schemas and APIs must be backward compatible","Not canary or traffic-weighted; that needs Argo Rollouts or a mesh"],
+ fails:[{m:"Broken new image",s:"New pods ImagePullBackOff or CrashLoopBackOff; rollout stalls; old pods keep serving",x:"kubectl rollout undo; fix the image; progressDeadlineSeconds surfaces the failure to CI"},
+ {m:"Readiness gap / dropped requests",s:"5xx or connection resets during deploy",x:"Accurate readiness probe, preStop delay, sufficient grace period, maxUnavailable 0 for strict availability"},
+ {m:"Surge pods Pending",s:"Rollout stuck at partial progress; FailedScheduling for new pods",x:"Free capacity, lower maxSurge, or let Cluster Autoscaler add nodes"},
+ {m:"Bad rollback target",s:"Undo goes to a ReplicaSet with the same bad config or trimmed history",x:"Keep revisionHistoryLimit adequate and annotate change causes; deploy via Git so state is reproducible"}],
+ watch:["kubectl rollout status deploy/NAME and kubectl rollout history: bad = ProgressDeadlineExceeded","kubectl get rs: bad = new RS stuck below desired, old RS not draining","kube_deployment_status_replicas_unavailable: bad = above 0 for long","kubectl describe deploy: Conditions and ReplicaSet events"]},
+
+{how:"The HPA controller syncs every 15 s by default. It reads metrics from metrics-server (CPU/memory) or custom/external metrics APIs and computes desired = ceil(current replicas * current metric / target). CPU utilization is relative to pod requests. It applies tolerance (about 10 percent), min/maxReplicas, the behavior policies and a scale-down stabilization window (default 300 s), and then patches the scale subresource of the Deployment.",
+ pros:["Capacity follows load automatically, cutting cost and manual toil","Scale-up is quick while scale-down is damped to avoid thrashing","Works with custom metrics such as queue length or RPS","Min/max bounds protect against runaway scaling"],
+ cons:["Needs CPU requests set, and utilization is measured against them","Reactive: new pods take time to schedule, pull images and become Ready","Metrics lag (scrape interval) delays decisions","Scaling replicas does not help if nodes are full or the bottleneck is a database"],
+ fails:[{m:"Metrics unavailable",s:"HPA shows <unknown>/70%; event FailedGetResourceMetric",x:"Install or fix metrics-server; ensure containers define resource requests; check the APIService v1beta1.metrics.k8s.io"},
+ {m:"HPA flapping",s:"Replica count oscillates up and down",x:"Increase scale-down stabilizationWindowSeconds, use behavior policies, widen target gap, smooth the metric"},
+ {m:"Scaled out but pods Pending",s:"Desired replicas high but available replicas stay low",x:"Enable Cluster Autoscaler or Karpenter; check quotas and FailedScheduling events"},
+ {m:"Fighting with replicas in Git",s:"GitOps resets replicas to a fixed number",x:"Remove spec.replicas from the manifest or ignore the field in the sync tool"}],
+ watch:["kubectl get hpa -w and kubectl describe hpa: bad = <unknown> targets, AbleToScale or ScalingActive false","kube_horizontalpodautoscaler_status_desired_replicas vs current: bad = long gap","kubectl top pods: compare real CPU with requests and target","Pending pods after scale-up: kubectl get pods --field-selector=status.phase=Pending"]},
+
+{how:"Each kubelet renews a Lease in kube-node-lease every ~10 s. If the node-lifecycle controller sees no update for node-monitor-grace-period (default 40 s), it sets Ready to Unknown, and adds the node.kubernetes.io/unreachable taint with NoSchedule and NoExecute. Pods get a default toleration of 300 s (tolerationSeconds), after which they are evicted; their ReplicaSet creates replacements elsewhere and the Endpoints controller removes the not-Ready pods from Services.",
+ pros:["Automatic recovery: lost capacity is recreated on healthy nodes","Taints and tolerations make eviction timing configurable per pod","Services stop sending traffic once pods are not Ready","Tolerating short blips avoids needless churn from brief network issues"],
+ cons:["Default ~5 minutes of delay before pods are evicted (40 s detection plus 300 s toleration)","Cannot tell a dead node from a partitioned one, so a pod may still run on the isolated node","Stateful pods with RWO volumes can wait on volume detach or need fencing","Mass failure (zone outage) causes a thundering herd of rescheduling, and eviction rate is limited"],
+ fails:[{m:"Slow eviction",s:"Pods stay Running/Unknown on a NotReady node for ~5 minutes; capacity short",x:"Lower tolerationSeconds for unreachable/not-ready taints on critical workloads; run enough replicas across nodes and zones"},
+ {m:"All replicas on one node",s:"Service outage when that node dies",x:"topologySpreadConstraints or pod anti-affinity; PodDisruptionBudget; multiple zones"},
+ {m:"StatefulSet / volume stuck",s:"Replacement pod Pending or ContainerCreating: Multi-Attach error",x:"Wait for detach, or force delete the pod only after confirming the node is really down; use node shutdown handling"},
+ {m:"Zone outage eviction throttling",s:"Many nodes NotReady, controller slows evictions (cluster unhealthy mode)",x:"Expected safety behavior; restore the zone, ensure spare capacity so rescheduled pods can fit"}],
+ watch:["kubectl get nodes: bad = NotReady; kubectl describe node for Conditions and taints","kube_node_status_condition{condition=Ready,status=true}==0 alert","kubectl get events: reasons NodeNotReady, TaintManagerEviction, Killing","kubectl get lease -n kube-node-lease: bad = stale renewTime"]}
+];
+
+(function(){
+const SIMM={
+ id:'k8s',nodeLabel:'worker nodes',nodeRange:[2,4,3],
+ settings:[{id:'strat',label:'update strategy',opts:['RollingUpdate','Recreate'],def:'RollingUpdate'},{id:'grace',label:'node-monitor grace',opts:['short (2.5s)','long (5s)'],def:'short (2.5s)'}],
+ menu:[{op:'C',label:'CREATE Deployment',args:[{n:'name',d:'web',w:50},{n:'replicas',d:'3',w:40},{n:'image',d:'v1',w:44}]},{op:'S',label:'SCALE (update replicas)',args:[{n:'name',d:'web',w:50},{n:'replicas',d:'5',w:40}]},{op:'U',label:'UPDATE image (rollout)',args:[{n:'name',d:'web',w:50},{n:'image',d:'v2',w:44}]},{op:'D',label:'DELETE Deployment',args:[{n:'name',d:'web',w:50}]},{op:'K',label:'kill worker node',args:[{n:'#',d:'1',w:40}]},{op:'H',label:'restart worker node',args:[{n:'#',d:'1',w:40}]}],
+ scenarios:[
+  {name:'create → update → delete',desc:'kubectl only writes desired state. Controllers, the scheduler and kubelets each watch the API server and react: Deployment → ReplicaSet → Pods → node binding → containers → Service endpoints. A rolling update replaces pods one at a time so the Service keeps ready endpoints; Recreate kills all first.',acts:['0 C web 3 v1','8500 U web v2','25000 D web']},
+  {name:'worker node fails (self-healing)',desc:'The node stops sending heartbeats, but the control plane still lists its pods as Running until the grace period expires. Then the node controller evicts them, the ReplicaSet creates replacements and the scheduler places them on healthy nodes. Try the longer grace period.',acts:['0 C web 4 v1','8000 K 1','21000 H 1','23000 S web 6']},
+ ],
+ topo(n){
+  const nodes=[{id:'cli',x:14,y:190,w:90,h:70,label:'kubectl'},{id:'api',x:170,y:170,w:140,h:110,label:'API server',badge:'auth→admit→persist'},{id:'etcd',x:170,y:14,w:140,h:100,label:'etcd',badge:'desired state'},{id:'ctl',x:370,y:14,w:150,h:100,label:'Controllers',badge:'reconcile loops'},{id:'sch',x:370,y:340,w:150,h:90,label:'Scheduler',badge:'filter + score'},{id:'svc',x:370,y:178,w:150,h:96,label:'Service',badge:'kube-proxy endpoints'}];
+  const bh=Math.min(120,Math.floor(430/n)-8),y0=(450-n*(bh+8))/2;
+  for(let i=0;i<n;i++)nodes.push({id:'w'+i,x:620,y:y0+i*(bh+8),w:260,h:bh,label:'worker '+i,badge:'kubelet'});
+  const edges=[['cli','api'],['api','etcd'],['api','ctl'],['api','sch'],['api','svc']];for(let i=0;i<n;i++)edges.push(['api','w'+i]);
+  return{nodes,edges,w:900,h:450,zones:[{x:156,y:2,w:380,h:124,label:'control plane'}]};
+ },
+ init(n){const st={status:{cli:'up',api:'up',etcd:'up',ctl:'up',sch:'up',svc:'up'},dep:{},pods:[],rv:0,bound:0,n};for(let i=0;i<n;i++)st.status['w'+i]='up';return st},
+ apply(st,f){st.rv++;switch(f.op){
+   case'dep':st.dep[f.name]={replicas:f.replicas,image:f.image};break;
+   case'depdel':delete st.dep[f.name];break;
+   case'pod+':st.pods.push({name:f.name,dep:f.dep,img:f.img,node:null,phase:'Pending'});break;
+   case'bind':{const p=st.pods.find(x=>x.name===f.name);if(p){p.node=f.node;st.bound++}break}
+   case'phase':{const p=st.pods.find(x=>x.name===f.name);if(p)p.phase=f.phase;break}
+   case'pod-':st.pods=st.pods.filter(x=>x.name!==f.name);break;
+   case'down':st.status[f.node]='down';break;
+   case'up':st.status[f.node]='up';break}},
+ fxText(f){return{dep:`etcd: Deployment ${f.name} replicas=${f.replicas} image=${f.image}`,depdel:`etcd: Deployment ${f.name} deleted`,'pod+':`etcd: Pod ${f.name} created (Pending)`,bind:`Pod ${f.name} bound to ${f.node}`,phase:`Pod ${f.name} → ${f.phase}`,'pod-':`Pod ${f.name} removed`,down:`${f.node} stops heartbeating`,up:`${f.node} Ready`}[f.op]||f.op},
+ run(acts,n,set){
+  const W=SIMM.init(n),ev=[],pend=[],ap=f=>SIMM.apply(W,f),grace=set.grace&&set.grace.startsWith('long')?5000:2500,recreate=set.strat==='Recreate';
+  const push=e=>{ev.push(e);if(e.fx.length)pend.push({at:e.t+e.d,e});return e};
+  const flush=t=>{pend.sort((x,y)=>x.at-y.at);while(pend.length&&pend[0].at<=t){pend.shift().e.fx.forEach(ap)}};
+  let seq=0;
+  const load=i=>W.pods.filter(p=>p.node==='w'+i).length+pend.filter(x=>x.e.fx.some(f=>f.op==='bind'&&f.node==='w'+i)).length;
+  const upNodes=()=>[...Array(n).keys()].filter(i=>W.status['w'+i]==='up');
+  // create one pod; returns time it becomes Ready
+  function podFlow(t,dep,img,why){
+   const name=`${dep}-${++seq}`;
+   push(E(t,300,'ctl','api',`create Pod ${name} (${img})`,'ctrl',[],why||'The ReplicaSet controller sees fewer pods than replicas and creates a Pod object.'));
+   push(E(t+300,300,'api','etcd',`persist Pod ${name} (Pending)`,'write',[{op:'pod+',name,dep,img}],'The pod exists only as a record in etcd. Nothing is running yet and no node is chosen.'));
+   push(E(t+600,350,'api','sch',`watch: unscheduled Pod ${name}`,'watch',[],'The scheduler watches for pods with no node.'));
+   flush(t+950);const ups=upNodes();
+   if(!ups.length){push(E(t+950,0,'sch','sch',`Pod ${name}: no node available (Pending)`,'fail',[],'FailedScheduling: every node is down or unfit. The pod stays Pending until a node returns.'));return null}
+   ups.sort((a,b)=>load(a)-load(b));const w=ups[0];
+   push(E(t+950,400,'sch','sch',`filter + score → worker ${w}`,'info',[],'Filter drops unfit nodes (resources, taints). Score ranks the rest; here the least-loaded wins.'));
+   push(E(t+1350,350,'sch','api',`bind ${name} → worker ${w}`,'write',[{op:'bind',name,node:'w'+w}],'The scheduler only writes a binding (spec.nodeName). It does not start anything.'));
+   push(E(t+1700,350,'api','w'+w,`watch: Pod ${name} assigned`,'watch',[],'The kubelet on that node watches for pods bound to it.'));
+   push(E(t+2050,900,'w'+w,'w'+w,`pull ${img}, start container`,'info',[{op:'phase',name,phase:'Running'}],'The kubelet asks the container runtime to pull the image and start the container, then runs probes.'));
+   push(E(t+2950,300,'w'+w,'api',`status: ${name} Ready`,'ack',[],'The kubelet reports Ready through the API server.'));
+   push(E(t+3250,300,'api','svc',`endpoint +${name}`,'watch',[],'The endpoints controller adds the pod IP; kube-proxy then starts routing traffic to it.'));
+   return{name,at:t+3550,node:w};
+  }
+  function killPod(t,name,why){const p=W.pods.find(x=>x.name===name),node=p&&p.node;
+   push(E(t,300,'api','svc',`endpoint −${name}`,'watch',[],'The pod is removed from Service endpoints first so no new traffic reaches it.'));
+   if(node)push(E(t+300,300,'api',node,`delete ${name}`,'watch',[{op:'phase',name,phase:'Terminating'}],why||'The kubelet receives SIGTERM, gives the app time to drain, then removes the container.'));
+   push(E(t+600,500,node||'api','api',`${name} gone`,'ack',[{op:'pod-',name}],'The pod object is removed after the container has stopped.'));return t+1100}
+  const live=dep=>W.pods.filter(p=>p.dep===dep&&p.phase!=='Terminating');
+  for(const a of acts){const t=a.t;flush(t);const name=a.args[0]||'web';
+   if(a.op==='C'){const r=Math.max(1,+a.args[1]||3),img=a.args[2]||'v1';
+    if(W.dep[name]){push(E(t,500,'cli','api',`create ${name}`,'write',[],'kubectl sends the manifest.'));push(E(t+500,300,'api','cli','AlreadyExists','fail',[],'Names are unique per namespace; use apply/update instead.'));continue}
+    push(E(t,450,'cli','api',`POST Deployment ${name} (replicas=${r}, ${img})`,'write',[],'kubectl submits desired state: "I want '+r+' pods".'));
+    push(E(t+450,400,'api','api','authenticate → authorize → admit → validate','info',[],'The API server pipeline: who are you, may you do this, mutating/validating admission, schema validation.'));
+    push(E(t+850,300,'api','etcd',`persist Deployment ${name}`,'write',[{op:'dep',name,replicas:r,image:img}],'Desired state is saved in etcd. This is the only durable record; everything else can be rebuilt from it.'));
+    push(E(t+1150,350,'api','ctl',`watch: Deployment ${name} added`,'watch',[],'Controllers hold watches on the API server, so they are told immediately instead of polling.'));
+    push(E(t+1500,300,'ctl','ctl',`Deployment → ReplicaSet (${r} pods)`,'ctrl',[],'The Deployment controller creates a ReplicaSet; the ReplicaSet controller then creates the Pods.'));
+    for(let i=0;i<r;i++)podFlow(t+1800+i*120,name,img);flush(t+1800)}
+   if(a.op==='S'){const r=Math.max(0,+a.args[1]||1);if(!W.dep[name])continue;const cur=live(name).length;
+    push(E(t,450,'cli','api',`scale ${name} → ${r}`,'write',[],'Scaling only changes spec.replicas.'));
+    push(E(t+450,300,'api','etcd',`persist replicas=${r}`,'write',[{op:'dep',name,replicas:r,image:W.dep[name].image}],'One field changes in etcd.'));
+    push(E(t+750,350,'api','ctl',`watch: ${name} changed`,'watch',[],'The ReplicaSet controller compares observed (${cur}) with desired (${r}) and closes the gap.'));
+    if(r>cur)for(let i=0;i<r-cur;i++)podFlow(t+1100+i*120,name,W.dep[name].image,`Desired ${r}, observed ${cur+i}: create another pod.`);
+    else live(name).slice(r-cur).forEach((p,i)=>killPod(t+1100+i*150,p.name))}
+   if(a.op==='U'){const img=a.args[1]||'v2';const d=W.dep[name];if(!d)continue;
+    push(E(t,450,'cli','api',`set image ${name} → ${img}`,'write',[],'A new pod template (image) is submitted.'));
+    push(E(t+450,300,'api','etcd',`persist ${name} image=${img}`,'write',[{op:'dep',name,replicas:d.replicas,image:img}],'Changing the pod template creates a NEW ReplicaSet; the old one is scaled down.'));
+    push(E(t+750,350,'api','ctl',`watch: ${name} changed`,'watch',[],'The Deployment controller starts a rollout.'));
+    const olds=live(name).filter(p=>p.img!==img);let c=t+1100;
+    if(recreate){push(E(c,300,'ctl','ctl','Recreate: stop ALL old pods first','ctrl',[],'Recreate has no overlap: simple, but the app is down between the last old pod stopping and the first new pod becoming Ready.'));let e0=c+300;olds.forEach((p,i)=>{e0=Math.max(e0,killPod(c+300+i*100,p.name))});
+     push(E(e0,0,'svc','svc','0 ready endpoints: traffic FAILS (downtime)','fail',[],'Every old pod is gone and the new ones are not Ready yet.'));for(let i=0;i<olds.length;i++)podFlow(e0+200+i*120,name,img,'Recreate: start the new version.');}
+    else{push(E(c,300,'ctl','ctl','RollingUpdate: surge 1, unavailable 0','ctrl',[],'Start one new pod, wait until Ready, only then stop one old pod. Capacity never drops below the desired count.'));
+     for(const o of olds){const f=podFlow(c+300,name,img,'Rollout step: surge one new pod.');if(!f)break;c=killPod(f.at,o.name,'Only after the new pod is Ready does the old one get terminated.')}}
+    flush(t+1100)}
+   if(a.op==='D'){const d=W.dep[name];if(!d)continue;
+    push(E(t,450,'cli','api',`DELETE Deployment ${name}`,'write',[],'kubectl asks to delete.'));
+    push(E(t+450,300,'api','etcd',`remove ${name}`,'write',[{op:'depdel',name}],'The Deployment is removed from etcd. Dependents carry an ownerReference, so garbage collection removes them.'));
+    push(E(t+750,350,'api','ctl',`GC: delete ReplicaSet and Pods`,'watch',[],'The garbage collector deletes everything owned by the Deployment.'));
+    live(name).forEach((p,i)=>killPod(t+1100+i*150,p.name));flush(t+1100)}
+   if(a.op==='K'){const i=+a.args[0]||0;if(i>=n||W.status['w'+i]!=='up')continue;const nd='w'+i;
+    for(let q=pend.length-1;q>=0;q--){const e=pend[q].e;if((e.from===nd||e.to===nd)&&pend[q].at>t){e.fx=e.fx.filter(f=>f.op==='bind'||f.op==='pod+');e.kind='fail';e.msg+=' ✕ node died';pend.splice(q,1)}}
+    push(E(t,0,nd,nd,`worker ${i} CRASHES (heartbeats stop)`,'fail',[{op:'down',node:nd}],'Power loss or network partition. The control plane does not know yet: its pods still look Running.'));flush(t);
+    const lost=W.pods.filter(p=>p.node===nd||(p.node===null&&false));
+    push(E(t+grace-400,400,'ctl','api','node-monitor: no heartbeat → NotReady','ctrl',[],`After the grace period (${grace/1000}s) the node controller marks the node NotReady and taints it. A longer grace period avoids false alarms but lengthens the outage.`));
+    const et=t+grace;
+    lost.forEach(p=>{push(E(et,350,'api','svc',`endpoint −${p.name} (node lost)`,'watch',[],'Pods on the dead node are removed from Service endpoints.'));push(E(et+350,300,'api','etcd',`evict ${p.name}`,'write',[{op:'pod-',name:p.name}],'The pod record is deleted; the dead kubelet cannot confirm it, so the control plane forgets it.'))});
+    flush(et+700);
+    const deps={};lost.forEach(p=>{deps[p.dep]=(deps[p.dep]||0)+1});
+    const rem=Object.keys(W.dep).reduce((c,k)=>c+live(k).length,0);
+    if(lost.length&&rem===0)push(E(t,0,'svc','svc','no ready endpoints left: traffic FAILS','fail',[],'All pods were on the failed node: this is why you spread replicas across nodes (topology spread / anti-affinity).'));
+    Object.entries(deps).forEach(([d,k])=>{if(!W.dep[d])return;const need=W.dep[d].replicas-live(d).length;for(let j=0;j<Math.max(0,need);j++)podFlow(et+800+j*120,d,W.dep[d].image,'Observed < desired after eviction: the ReplicaSet creates a replacement. Same loop, no special failure code.')});
+    flush(et+800)}
+   if(a.op==='H'){const i=+a.args[0]||0;if(i>=n)continue;push(E(t,500,'w'+i,'api',`worker ${i} registers, Ready`,'ack',[{op:'up',node:'w'+i}],'The kubelet comes back with no pods. Existing pods are not moved back; the scheduler simply uses it for new ones.'));flush(t+500)}
+  }
+  return{events:ev};
+ },
+ lines(id,st){
+  if(id==='cli')return[];
+  if(id==='etcd')return[`revision ${st.rv}`,...Object.entries(st.dep).map(([k,v])=>`deploy/${k} ×${v.replicas} ${v.image}`),`pods ${st.pods.length}`];
+  if(id==='api')return[`writes ${st.rv}`];
+  if(id==='ctl')return Object.entries(st.dep).map(([k,v])=>{const r=st.pods.filter(p=>p.dep===k&&p.phase==='Running').length;return`${k}: ${r}/${v.replicas} ready`});
+  if(id==='sch')return[`bound ${st.bound}`,`pending ${st.pods.filter(p=>!p.node).length}`];
+  if(id==='svc'){const r=st.pods.filter(p=>p.phase==='Running');return[`${r.length} endpoint(s)`,...r.slice(0,5).map(p=>p.name+' '+p.img)]}
+  return st.pods.filter(p=>p.node===id).slice(0,8).map(p=>`${p.name} ${p.img} ${p.phase==='Running'?'●':p.phase}`)},
+ detail(id,st){return SIMM.lines(id,st)}
+};
+
+/* =========================================================
+   LIVE CLUSTER SIMULATION (shared framework)
+   events on a timeline; packets travel between nodes; state is replayed up to time T
+   ========================================================= */
+function sHash(s){let h=2166136261;s=String(s);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h>>>0}
+const sEsc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sShort=(s,n)=>{s=String(s);return s.length>n?s.slice(0,n-1)+'…':s};
+const E=(t,d,from,to,msg,kind,fx,cause)=>({t,d,from,to,msg,kind,fx:fx||[],cause:cause||''});
+const SIM={n:0,set:{},run:null,T:0,play:false,sel:null,selNode:null,speed:1,last:null};
+const SIMCOL={write:'#2f6fed',ack:'#1a9b5a',read:'#e25a1c',data:'#e25a1c',repl:'#9b4fd0',ctl:'#6b7280',fail:'#d64545',info:'#c9a400',sched:'#0f9d8a',watch:'#8a6fd0',ctrl:'#6b7280',trunc:'#d64545'};
+function simParse(text){return text.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#')).map(l=>{const p=l.split(/\s+/);return{t:Number(p[0])||0,op:(p[1]||'').toUpperCase(),args:p.slice(2),raw:l}}).sort((a,b)=>a.t-b.t)}
+function simRun(){
+  const acts=simParse(document.getElementById('simAct').value);
+  try{SIM.run=SIMM.run(acts,SIM.n,SIM.set);SIM.run.events.sort((a,b)=>a.t-b.t||a.d-b.d)}catch(e){SIM.run={events:[],end:0,err:e.message};console.error(e)}
+  SIM.end=Math.max(1000,(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0))+600);
+  const sl=document.getElementById('simT');sl.max=SIM.end;if(SIM.T>SIM.end)SIM.T=SIM.end;
+}
+function simStateAt(T){const st=SIMM.init(SIM.n,SIM.set);for(const e of SIM.run.events){if(e.t+e.d<=T)e.fx.forEach(f=>SIMM.apply(st,f))}return st}
+function simDraw(){
+  const svg=document.getElementById('simSvg');if(!svg||!SIM.run)return;
+  const T=SIM.T,topo=SIMM.topo(SIM.n),st=simStateAt(T),byId=Object.fromEntries(topo.nodes.map(n=>[n.id,n]));
+  const W=topo.w||900,H=topo.h||430;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  const active=SIM.run.events.filter(e=>e.t<=T&&T<e.t+e.d),recent=SIM.run.events.filter(e=>e.t+e.d<=T&&T-(e.t+e.d)<450);
+  const hot=new Set([...active.flatMap(e=>[e.from,e.to]),...recent.map(e=>e.to)]);
+  let s='<defs><marker id="simar" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0L9,4.5L0,9z" fill="#8a94a6"/></marker></defs>';
+  (topo.zones||[]).forEach(z=>{s+=`<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${z.x+12}" y="${z.y+17}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${sEsc(z.label)}</text>`});
+  topo.edges.forEach(([a,b])=>{const A=byId[a],B=byId[b];if(!A||!B)return;s+=`<line x1="${A.x+A.w/2}" y1="${A.y+A.h/2}" x2="${B.x+B.w/2}" y2="${B.y+B.h/2}" stroke="var(--line)" stroke-width="1.5"/>`});
+  topo.nodes.forEach(n=>{
+    const status=(st.status&&st.status[n.id])||'up',down=status==='down',isHot=hot.has(n.id),sel=SIM.selNode===n.id;
+    const lines=SIMM.lines(n.id,st)||[];
+    s+=`<g class="simn" data-id="${n.id}" style="cursor:pointer;${down?'opacity:.55':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${down?'var(--p5)':n.c||'var(--card)'}" stroke="${sel?'var(--acc)':isHot?'var(--acc2)':'var(--line)'}" stroke-width="${sel||isHot?3.5:1.8}"/>
+      <text x="${n.x+9}" y="${n.y+17}" font-weight="700" style="font-size:12.5px">${sEsc(n.label)}${down?' ✕':''}</text>${n.badge&&(n.label.length*7.6+String(typeof n.badge==='function'?n.badge(st):n.badge).length*5.8<n.w)?`<text x="${n.x+n.w-8}" y="${n.y+17}" text-anchor="end" style="font-size:10px;fill:var(--mut)">${sEsc(typeof n.badge==='function'?n.badge(st):n.badge)}</text>`:''}
+      ${lines.slice(0,Math.floor((n.h-24)/13)).map((l,i)=>`<text x="${n.x+9}" y="${n.y+32+i*13}" style="font-size:10.5px;${/^!/.test(l)?'fill:var(--bad)':''}">${sEsc(sShort(String(l).replace(/^!/,''),Math.floor((n.w-14)/6.3)))}</text>`).join('')}</g>`;
+  });
+  active.forEach(e=>{const A=byId[e.from],B=byId[e.to];if(!A||!B)return;const f=Math.min(1,(T-e.t)/Math.max(1,e.d)),ax=A.x+A.w/2,ay=A.y+A.h/2,bx=B.x+B.w/2,by=B.y+B.h/2;
+    if(e.from===e.to){s+=`<text x="${A.x+A.w/2}" y="${A.y-6}" text-anchor="middle" style="font-size:10.5px;fill:${SIMCOL[e.kind]||'#6b7280'};font-weight:700">${sEsc(sShort(e.msg,30))}</text>`;return}
+    const col=SIMCOL[e.kind]||'#6b7280';s+=`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${col}" stroke-width="2.5" opacity=".35"/><circle cx="${ax+(bx-ax)*f}" cy="${ay+(by-ay)*f}" r="7" fill="${col}" stroke="#fff" stroke-width="1.5"/><text x="${ax+(bx-ax)*f}" y="${ay+(by-ay)*f-11}" text-anchor="middle" style="font-size:10px;fill:${col};font-weight:700;paint-order:stroke;stroke:var(--card);stroke-width:3px">${sEsc(sShort(e.msg,26))}</text>`});
+  svg.innerHTML=s;
+  document.getElementById('simTv').textContent=(T/1000).toFixed(2)+' s / '+(SIM.end/1000).toFixed(1)+' s';
+  document.getElementById('simT').value=T;
+  // log
+  const evs=SIM.run.events,upTo=evs.filter(e=>e.t<=T),lastI=upTo.length-1;
+  document.getElementById('simLog').innerHTML=evs.map((e,i)=>`<div class="simev ${i===lastI?'cur':''} ${e.t>T?'fut':''}" data-i="${i}"><span class="simtag" style="background:${SIMCOL[e.kind]||'#6b7280'}">${sEsc(e.kind)}</span> <span class="mono">${(e.t/1000).toFixed(2)}s</span> ${sEsc(e.from)}${e.from===e.to?'':' → '+sEsc(e.to)}: ${sEsc(e.msg)}</div>`).join('')||'<div class="note">No actions yet.</div>';
+  const cur=document.querySelector('#simLog .cur');if(cur&&SIM.play)cur.scrollIntoView({block:'nearest'});
+  // inspector
+  const insp=document.getElementById('simInsp');
+  if(SIM.selNode){const det=SIMM.detail?SIMM.detail(SIM.selNode,st):SIMM.lines(SIM.selNode,st);insp.innerHTML=`<b>${sEsc(byId[SIM.selNode].label)}</b> at ${(T/1000).toFixed(2)}s<pre>${sEsc((det||[]).join('\n')||'(empty)')}</pre>`}
+  else if(SIM.sel!=null&&evs[SIM.sel]){const e=evs[SIM.sel];insp.innerHTML=`<b>${sEsc(e.msg)}</b><div class="note">${sEsc(e.from)} → ${sEsc(e.to)} · ${(e.t/1000).toFixed(2)}s (+${e.d} ms) · ${sEsc(e.kind)}</div>${e.cause?`<div class="caption" style="margin-top:6px"><b>Why:</b> ${sEsc(e.cause)}</div>`:''}<div class="note">state changes: ${e.fx.length?sEsc(e.fx.map(f=>SIMM.fxText?SIMM.fxText(f):f.op).join('; ')):'none (message only)'}</div>`}
+  else insp.innerHTML='<div class="note">Click a node to inspect its data, or click an event in the log to see why it happened.</div>';
+}
+function simTick(now){
+  if(!SIM.play){SIM.last=null;return}
+  if(SIM.last==null)SIM.last=now;const dt=now-SIM.last;SIM.last=now;SIM.T=Math.min(SIM.end,SIM.T+dt*SIM.speed);simDraw();
+  if(SIM.T>=SIM.end){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}
+  requestAnimationFrame(simTick);
+}
+function simBuildControls(){
+  const m=SIMM,nr=m.nodeRange;
+  const sc=document.getElementById('simScn');sc.innerHTML=m.scenarios.map((s,i)=>`<option value="${i}">${sEsc(s.name)}</option>`).join('');
+  const nn=document.getElementById('simN');nn.innerHTML=Array.from({length:nr[1]-nr[0]+1},(_,i)=>`<option value="${nr[0]+i}" ${nr[0]+i===nr[2]?'selected':''}>${nr[0]+i}</option>`).join('');document.getElementById('simNL').textContent=m.nodeLabel;
+  document.getElementById('simSet').innerHTML=(m.settings||[]).map(s=>`<label>${sEsc(s.label)} <select data-set="${s.id}">${s.opts.map(o=>`<option ${o===s.def?'selected':''}>${sEsc(o)}</option>`).join('')}</select></label>`).join('');
+  SIM.set=Object.fromEntries((m.settings||[]).map(s=>[s.id,s.def]));
+  document.getElementById('simOp').innerHTML=m.menu.map((o,i)=>`<option value="${i}">${sEsc(o.label)}</option>`).join('');
+  simArgs();
+}
+function simArgs(){const o=SIMM.menu[+document.getElementById('simOp').value];document.getElementById('simArgs').innerHTML=o.args.map((a,i)=>`<input type="text" data-a="${i}" value="${sEsc(a.d)}" placeholder="${sEsc(a.n)}" style="width:${a.w||80}px">`).join('')}
+function simLoadScenario(i){const s=SIMM.scenarios[i];document.getElementById('simAct').value=s.acts.join('\n');document.getElementById('simDesc').textContent=s.desc;SIM.T=0;SIM.sel=null;SIM.selNode=null;simRun();simDraw()}
+function simInit(){
+  if(!document.getElementById('simSvg'))return;
+  SIM.n=SIMM.nodeRange[2];simBuildControls();simLoadScenario(0);
+  document.getElementById('simScn').onchange=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simLoadScenario(+e.target.value)};
+  document.getElementById('simN').onchange=e=>{SIM.n=+e.target.value;SIM.T=0;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';simRun();simDraw()};
+  document.getElementById('simSet').onchange=e=>{const t=e.target.closest('[data-set]');if(t){SIM.set[t.dataset.set]=t.value;simRun();simDraw()}};
+  document.getElementById('simOp').onchange=simArgs;
+  document.getElementById('simAdd').onclick=()=>{const o=SIMM.menu[+document.getElementById('simOp').value],vals=[...document.querySelectorAll('#simArgs input')].map(i=>i.value.trim()||'-');
+    const ta=document.getElementById('simAct'),t=Math.round(SIM.run.events.reduce((m,e)=>Math.max(m,e.t+e.d),0)+300);ta.value=(ta.value.trim()?ta.value.trim()+'\n':'')+`${t} ${o.op} ${vals.join(' ')}`.trim();SIM.T=Math.max(0,t-200);simRun();simDraw()};
+  document.getElementById('simAct').onchange=()=>{simRun();simDraw()};
+  document.getElementById('simPlay').onclick=()=>{if(SIM.play){SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';return}if(SIM.T>=SIM.end)SIM.T=0;SIM.play=true;SIM.last=null;document.getElementById('simPlay').textContent='⏸ Pause';requestAnimationFrame(simTick)};
+  document.getElementById('simReset').onclick=()=>{SIM.play=false;SIM.T=0;document.getElementById('simPlay').textContent='▶ Play';simDraw()};
+  document.getElementById('simStep').onclick=()=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const nx=SIM.run.events.find(e=>e.t+e.d>SIM.T+1);SIM.T=nx?nx.t+nx.d:SIM.end;SIM.sel=nx?SIM.run.events.indexOf(nx):null;SIM.selNode=null;simDraw()};
+  document.getElementById('simSpeed').onchange=e=>{SIM.speed=+e.target.value};
+  document.getElementById('simT').oninput=e=>{SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';SIM.T=+e.target.value;simDraw()};
+  document.getElementById('simLog').onclick=e=>{const d=e.target.closest('.simev');if(!d)return;const i=+d.dataset.i;SIM.sel=i;SIM.selNode=null;SIM.play=false;document.getElementById('simPlay').textContent='▶ Play';const ev=SIM.run.events[i];SIM.T=ev.t+ev.d;simDraw()};
+  document.getElementById('simSvg').onclick=e=>{const g=e.target.closest('.simn');if(g){SIM.selNode=SIM.selNode===g.dataset.id?null:g.dataset.id;SIM.sel=null;simDraw()}};
+}
+
+window.simInit=simInit;window.__sim={SIM,simDraw,simRun};})();
+/* ===== overview: packets travelling along the connections ===== */
+(function(){
+const _ovr=ovRender;
+function pt(g,f){if(g.c){const u=1-f;return[u*u*g.p0[0]+2*u*f*g.c[0]+f*f*g.p1[0],u*u*g.p0[1]+2*u*f*g.c[1]+f*f*g.p1[1]]}return[g.p0[0]+(g.p1[0]-g.p0[0])*f,g.p0[1]+(g.p1[1]-g.p0[1])*f]}
+function findEdge(a,b){let e=OVS.edges.find(x=>x.from===a&&x.to===b);if(e)return{e,rev:false};e=OVS.edges.find(x=>x.from===b&&x.to===a);return e?{e,rev:true}:null}
+ovRender=function(){
+  _ovr();
+  if(OV.k<0||OV.kf==null)return;const svg=document.querySelector('#ovView svg');if(!svg)return;
+  const flow=OVS.flow,i=Math.min(flow.length-1,Math.floor(OV.kf)),f=OV.kf-Math.floor(OV.kf);let s='';
+  if(i>=1){const ed=findEdge(flow[i-1].n,flow[i].n);
+    if(ed){const g=ovGeom(ed.e),ff=Math.min(1,f*1.15),q=ed.rev?1-ff:ff;
+      for(let tr=3;tr>=1;tr--){const qq=ed.rev?Math.min(1,q+tr*.06):Math.max(0,q-tr*.06),p2=pt(g,qq);s+=`<circle cx="${p2[0]}" cy="${p2[1]}" r="${7-tr*1.4}" fill="var(--acc2)" opacity="${.5-tr*.12}"/>`}
+      const p=pt(g,q);s+=`<circle cx="${p[0]}" cy="${p[1]}" r="8" fill="var(--acc2)" stroke="#fff" stroke-width="2"/><text x="${p[0]}" y="${p[1]-13}" text-anchor="middle" style="font-size:11px;font-weight:700;fill:var(--acc2);paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(short(flow[i].t,44))}</text>`}}
+  svg.insertAdjacentHTML('beforeend',s);
+};
+const tr=document.getElementById('ovTrace');
+tr.onclick=()=>{stopAll();OV.sel=null;OV.k=0;OV.kf=0;animate(p=>{OV.kf=Math.min(OVS.flow.length-.001,p*OVS.flow.length);OV.k=Math.floor(OV.kf);ovRender()},OVS.flow.length*1500)};
+document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.kf=null;OV.sel=null;ovRender()};
+document.getElementById('ovView').addEventListener('click',e=>{if(e.target.closest('[data-node]'))OV.kf=null},true);
+})();
+
+/* ===== accordion: one drop-down per phase + detail (how / pros / cons / failure modes / watch) ===== */
+(function(){
+const g=id=>document.getElementById(id),esc2=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sec=g('phaseSec'),nav=g('nav'),barNav=g('prev').parentElement;
+const stage=document.createElement('div');stage.id='stage';
+const det=document.createElement('div');det.id='phDetail';
+stage.append(g('blurb'),g('phCtl'),barNav,g('phView'),det);
+nav.style.display='none';
+const acc=document.createElement('div');acc.id='acc';nav.after(acc);
+acc.innerHTML=PHASES.map((ph,i)=>`<details class="acc" data-i="${i}" style="--pc:var(--p${i%8})"><summary><span class="accn">${i+1}</span><span class="acct"><b>${esc2(ph.t)}</b><small>${esc2(ph.s)}${ph.f?' · '+esc2(ph.f):''}</small></span><span class="accg">${typeof DETAIL!=='undefined'&&DETAIL[i]?'pros · cons · failures':''}</span></summary><div class="accb"></div></details>`).join('');
+const items=[...acc.children];
+function renderDetail(k){
+  const d=typeof DETAIL!=='undefined'&&DETAIL[k];if(!d){det.innerHTML='';return}
+  const li=a=>'<ul>'+a.map(x=>`<li>${esc2(x)}</li>`).join('')+'</ul>';
+  det.innerHTML=`<h3 style="margin-top:16px">Deep dive: ${esc2(PHASES[k].t)}</h3>
+  <details class="dd" open><summary>How it works</summary><div class="ddb">${esc2(d.how)}</div></details>
+  <details class="dd" open><summary>Pros and cons</summary><div class="ddb pc"><div class="pro"><b>✓ Pros</b>${li(d.pros)}</div><div class="con"><b>✗ Cons</b>${li(d.cons)}</div></div></details>
+  <details class="dd"><summary>Failure modes (${d.fails.length})</summary><div class="ddb"><table class="fm"><tr><th>Failure mode</th><th>What you see</th><th>Mitigation</th></tr>${d.fails.map(f=>`<tr><td><b>${esc2(f.m)}</b></td><td>${esc2(f.s)}</td><td>${esc2(f.x)}</td></tr>`).join('')}</table></div></details>
+  <details class="dd"><summary>What to watch</summary><div class="ddb">${li(d.watch)}</div></details>`;
+}
+function place(k){
+  items.forEach((d,i)=>{d.open=i===k});
+  items[k].querySelector('.accb').appendChild(stage);
+}
+const _sp=showPhase;
+showPhase=function(k,p=1){place(k);_sp(k,p);renderDetail(k)};
+acc.addEventListener('click',e=>{const s=e.target.closest('summary');if(!s||!s.parentElement.classList.contains('acc'))return;e.preventDefault();
+  const d=s.parentElement,i=+d.dataset.i;
+  if(d.open){d.open=false;stopAll();return}
+  stopAll();showPhase(i);setTimeout(()=>d.scrollIntoView({behavior:'smooth',block:'start'}),30)});
+window.__accReady=true;
+})();
+
+showPhase(typeof cur==="number"&&cur>=0?cur:0);simInit();
 </script>
 </body>
 </html>
