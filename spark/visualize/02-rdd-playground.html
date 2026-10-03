@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spark RDD Playground</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2230;--mut:#667085;--line:#d9dee7;--acc:#e25a1c;--acc2:#2f6fed;--ok:#1a9b5a;--bad:#d64545;
+--p0:#dbe9ff;--p1:#ffe6cf;--p2:#d9f4e3;--p3:#f1defa;--p4:#fff3b8;--p5:#ffd9de;--p6:#d6f2f2;--p7:#e6e6e6;
+--t0:#2f6fed;--t1:#e25a1c;--t2:#1a9b5a;--t3:#9b4fd0;--t4:#c9a400;--t5:#d6456b;--t6:#12a1a1;--t7:#6b7280}
+@media(prefers-color-scheme:dark){:root{--bg:#10141c;--card:#181e29;--ink:#e8ecf3;--mut:#93a0b5;--line:#2b3445;--acc:#ff7a3d;--acc2:#6c9bff;--ok:#43c783;--bad:#ff6b6b;
+--p0:#1f3556;--p1:#53361c;--p2:#1d4630;--p3:#44274f;--p4:#524a17;--p5:#552630;--p6:#17454a;--p7:#3a3f48}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
+header,main{max-width:1100px;margin:auto;padding:0 16px}
+header{padding-top:26px}
+h1{margin:0 0 4px;font-size:25px}h1 span{color:var(--acc)}
+header p{margin:0;color:var(--mut)}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-top:16px}
+section h2{margin:0 0 4px;font-size:17px}
+section h2 em{font-style:normal;background:var(--acc);color:#fff;border-radius:6px;padding:1px 8px;font-size:12px;margin-right:8px;vertical-align:2px}
+.sub{color:var(--mut);margin:0 0 12px;font-size:14px}
+button,select,input[type=text],textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 10px}
+button{cursor:pointer}button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
+button.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+label{color:var(--mut);font-size:13px}
+.mono,code,textarea,pre,input.code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+textarea{width:100%;resize:vertical}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;margin:0;max-height:300px}
+.strip{position:relative;display:flex;height:34px;border-radius:6px;overflow:hidden;border:1px solid var(--line);margin:10px 0 4px}
+.seg{position:relative;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600}
+.tick{position:absolute;top:0;bottom:0;width:1px;background:var(--ink);opacity:.35}
+.tick.h{background:var(--acc);opacity:1;width:2px}
+.cut{position:absolute;top:-2px;bottom:-2px;width:3px;background:var(--bad);z-index:2}
+.parts{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin-top:10px}
+.part{border:1.5px solid var(--line);border-radius:8px;padding:8px;min-width:0}
+.part h4{margin:0 0 6px;font-size:12.5px}
+.row{display:block;padding:2px 6px;margin:2px 0;border-radius:5px;border:1px solid var(--line);background:var(--bg);font-family:ui-monospace,monospace;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row.x{color:var(--mut);border-style:dashed}
+.tag{display:inline-block;font-size:10.5px;padding:0 6px;border-radius:5px;background:var(--acc2);color:#fff;margin-left:4px}
+.step{display:grid;grid-template-columns:28px 90px 1fr auto auto;gap:8px;align-items:center;margin:6px 0}
+.step .n{width:24px;height:24px;border-radius:50%;background:var(--acc);color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center}
+input.code{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 9px;color:var(--ink)}
+input.err{border-color:var(--bad)}
+.badge{font-size:12px;color:var(--mut);white-space:nowrap}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+.stat{border:1px solid var(--line);border-radius:8px;padding:5px 12px;font-size:12.5px;color:var(--mut)}
+.stat b{font-size:19px;display:block;color:var(--ink)}
+.stat.zero b{color:var(--ok)}.stat.live b{color:var(--acc)}
+table{border-collapse:collapse;width:100%;font-size:13px}td,th{border:1px solid var(--line);padding:4px 8px;text-align:right}th:first-child,td:first-child{text-align:left}
+.note{font-size:13px;color:var(--mut);margin:8px 0 0}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+.trace{border-bottom:1px solid var(--line);padding:5px 0;font-size:12px}
+.trace .seg2{display:inline-block;margin:1px 2px;padding:1px 7px;border-radius:5px;border:1px solid var(--line);font-family:ui-monospace,monospace;max-width:100%;vertical-align:top}
+.trace .drop{color:var(--bad);border-style:dashed}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+h3{font-size:14px;margin:18px 0 4px}
+
+/* animation */
+.lane{display:grid;grid-template-columns:34px 1fr;gap:8px;align-items:start;margin:10px 0}
+.lane .lh{font-weight:700;font-size:12px;padding:6px 0;text-align:center;border-radius:6px}
+.track{position:relative;display:flex;gap:34px;min-height:78px;padding:8px 6px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.track::before{content:"";position:absolute;left:30px;right:30px;top:39px;border-top:2px dashed var(--line)}
+.nd{position:relative;flex:1;min-width:0;height:60px;margin:auto 0;border:2px solid var(--line);border-radius:8px;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:4px;font-size:12px;z-index:1;transition:border-color .2s,box-shadow .2s}
+.nd .nm{font-weight:700;font-size:11.5px}
+.nd .ct{margin-top:auto;margin-bottom:3px;font-family:ui-monospace,monospace;color:var(--mut);font-size:11px}
+.nd.pulse{border-color:var(--acc);box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 30%,transparent)}
+.nd.idle{opacity:.45}
+.tok{position:absolute;z-index:3;width:20px;height:20px;border-radius:50%;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;
+ transition:left var(--dur,300ms) ease-in-out,top var(--dur,300ms) ease-in-out,opacity var(--dur,300ms),transform var(--dur,300ms);box-shadow:0 1px 4px #0005}
+.tok.drop{background:var(--bad)!important;opacity:0;transform:scale(.4)}
+.tok.done{opacity:0;transform:scale(1.5)}
+.cap{font-family:ui-monospace,monospace;font-size:11.5px;color:var(--mut);min-height:18px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cap b{color:var(--ink)}
+@media(max-width:720px){.step{grid-template-columns:28px 1fr}.step .badge,.step button{grid-column:2}.track{gap:14px}}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>Spark</span> RDD Playground</h1>
+  <p>Load your own CSV / JSONL / JSON, build a pipeline with real closures, and watch each partition get read and each row flow through the transformations.</p>
+</header>
+<main>
+
+<section>
+  <h2><em>1</em>Source: your data</h2>
+  <p class="sub">Paste content or pick a file (≤ 1 MB, processed entirely in your browser).</p>
+  <div class="bar">
+    <input type="file" id="file" accept=".csv,.json,.jsonl,.ndjson,.txt,.log">
+    <button data-sample="csv">CSV sample</button><button data-sample="jsonl">JSONL sample</button><button data-sample="json">JSON array sample</button>
+    <label>Format <select id="fmt"><option value="auto">auto-detect</option><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="text">text</option><option value="json">JSON array</option></select></label>
+    <label>Partitions <input type="range" id="P" min="1" max="8" value="3"> <b id="Pv">3</b></label>
+    <label><input type="checkbox" id="num" checked> coerce numeric strings to numbers (playground convenience)</label>
+  </div>
+  <textarea id="src" rows="7" spellcheck="false"></textarea>
+  <div id="srcInfo" class="note"></div>
+  <div id="strip"></div>
+  <div id="parts" class="parts"></div>
+</section>
+
+<section>
+  <h2><em>2</em>Pipeline: lazy lineage</h2>
+  <p class="sub">Every step is a child RDD; closures are JavaScript (<code>r</code> is the Row). Building the pipeline does <b>not</b> read the file or call any closure: watch the counters below.</p>
+  <div id="steps"></div>
+  <div class="bar">
+    <button data-add="Map">+ Map</button><button data-add="Filter">+ Filter</button>
+    <button data-add="FlatMap">+ FlatMap</button><button data-add="KeyBy">+ KeyBy</button>
+  </div>
+  <div class="stats">
+    <div class="stat" id="stState"><b>-</b>state</div>
+    <div class="stat" id="stRead"><b>0</b>source records streamed</div>
+    <div class="stat" id="stParts"><b>0</b>source partitions read</div>
+    <div class="stat" id="stCalls"><b>0</b>closure calls</div>
+  </div>
+  <div class="bar">
+    <label>Run on <select id="runPart"></select></label>
+    <button class="primary" id="run">▶ Run simulated action (Collect)</button>
+    <button id="resetRun">Reset</button>
+  </div>
+  <p class="note">Feature 01 has <b>no actions</b>. This button simulates an action from a later feature so you can see how the lineage would execute. Pick "only partition k" to see the reader touch exactly one partition.</p>
+  <div id="err" class="note bad"></div>
+</section>
+
+<section id="animSec" style="display:none">
+  <h2><em>3</em>Animation: rows flowing through the pipeline</h2>
+  <p class="sub">One lane per partition, running in parallel. Inside a lane, rows are pulled <b>one at a time</b> through all fused steps (iterator model) before the next row starts. Dropped rows turn red; <code>FlatMap</code> splits a token into several.</p>
+  <div class="bar">
+    <button class="primary" id="aPlay">⏸ Pause</button>
+    <button id="aRestart">↻ Restart</button>
+    <label>Speed <input type="range" id="aSpeed" min="0.25" max="4" step="0.25" value="1"> <b id="aSpeedV">1×</b></label>
+    <label>Rows per partition <select id="aN"><option>3</option><option selected>6</option><option>12</option><option>30</option></select></label>
+  </div>
+  <div id="lanes"></div>
+  <p class="note" id="aNote"></p>
+</section>
+
+<section id="resSec" style="display:none">
+  <h2><em>4</em>Results per partition</h2>
+  <p class="sub">Choose an observation point: the source output, or the output after any step.</p>
+  <div class="tabs" id="stageTabs"></div>
+  <div id="stageParts" class="parts"></div>
+  <h3>Row count after each stage</h3>
+  <div id="matrix"></div>
+  <h3>Journey of each row <label>in partition <select id="trP"></select></label></h3>
+  <p class="note" style="margin-top:0">Narrow transformations are pipelined per row: a row goes through the whole step chain before the next row is pulled. No stage is materialized.</p>
+  <div id="trace"></div>
+</section>
+
+<section>
+  <h2><em>5</em><code>Describe()</code> snapshot</h2>
+  <pre id="desc"></pre>
+</section>
+</main>
+
+<script>
+const $=s=>document.querySelector(s);
+const pc=i=>`var(--p${i%8})`, tc=i=>`var(--t${i%8})`;
+const SAMPLES={
+csv:`id,name,city,age,amount
+1,An,HCM,28,120
+2,Binh,HN,17,45
+3,Chi,HCM,35,300
+4,Dung,DN,41,80
+5,Em,HN,22,210
+6,Phuc,HCM,19,60
+7,Giang,DN,30,500
+8,Hoa,HN,26,150
+9,Khoa,HCM,52,95
+10,Lan,DN,33,410`,
+jsonl:`{"id":1,"user":"An","tags":["spark","rdd"],"score":8}
+{"id":2,"user":"Binh","tags":["scylla"],"score":5}
+{"id":3,"user":"Chi","tags":["spark","shuffle","dag"],"score":9}
+{"id":4,"user":"Dung","tags":[],"score":3}
+{"id":5,"user":"Em","tags":["rdd"],"score":7}
+{"id":6,"user":"Phuc","tags":["dag","stage"],"score":6}`,
+json:`[{"id":1,"item":"a","qty":3},{"id":2,"item":"b","qty":1},{"id":3,"item":"c","qty":7},{"id":4,"item":"d","qty":2},{"id":5,"item":"e","qty":9},{"id":6,"item":"f","qty":4},{"id":7,"item":"g","qty":6}]`};
+const DEFAULT_STEPS={
+csv:[['Filter','r.amount > 100'],['Map','({...r, amount_k: r.amount/1000})'],['KeyBy','r.city']],
+jsonl:[['Filter','r.score >= 5'],['FlatMap','r.tags.map(t => ({user:r.user, tag:t}))']],
+json:[['Filter','r.qty > 2'],['Map','({...r, qty2: r.qty*2})']]};
+const TEMPLATE={Map:'({...r})',Filter:'true',FlatMap:'[r, r]',KeyBy:'r.id'};
+const OPDOC={Map:'exactly 1 row',Filter:'0 or 1 row',FlatMap:'0..N rows',KeyBy:'1 keyed row {key,value}'};
+
+let steps=[],src=null,run=null;
+const enc=new TextEncoder(),dec=new TextDecoder();
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const J=x=>{try{return JSON.stringify(x)}catch{return String(x)}};
+
+/* ---------- source ---------- */
+function detect(t){const s=t.trim();if(s.startsWith('['))return'json';const l=s.split(/\r?\n/)[0]||'';if(l.startsWith('{'))return'jsonl';if(l.includes(','))return'csv';return'text'}
+function csvSplit(l){const o=[];let c='',q=false;for(let i=0;i<l.length;i++){const ch=l[i];if(q){if(ch==='"'){if(l[i+1]==='"'){c+='"';i++}else q=false}else c+=ch}else if(ch==='"')q=true;else if(ch===','){o.push(c);c=''}else c+=ch}o.push(c);return o}
+const conv=v=>($('#num').checked&&typeof v==='string'&&/^-?\d+(\.\d+)?$/.test(v.trim()))?Number(v):v;
+
+function buildSource(){
+  const text=$('#src').value,P=+$('#P').value;
+  let fmt=$('#fmt').value;if(fmt==='auto')fmt=detect(text);
+  const out={fmt,P,partitions:[],error:null};
+  if(!text.trim()){out.error='No data yet.';return out}
+  if(fmt==='json'){
+    let arr;try{arr=JSON.parse(text)}catch(e){out.error='Invalid JSON: '+e.message;return out}
+    if(!Array.isArray(arr)){out.error='JSON must be an array.';return out}
+    out.kind='memory';
+    const base=Math.floor(arr.length/P),ex=arr.length%P;let s=0;
+    for(let p=0;p<P;p++){const sz=base+(p<ex?1:0);out.partitions.push({index:p,rows:arr.slice(s,s+sz),lines:null});s+=sz}
+    out.total=arr.length;return out;
+  }
+  out.kind='file';
+  const bytes=enc.encode(text),L=bytes.length;
+  if(L>1048576){out.error='File is larger than 1 MB.';return out}
+  out.L=L;
+  out.ranges=Array.from({length:P},(_,i)=>[Math.floor(L*i/P),Math.floor(L*(i+1)/P)]);
+  const lines=[];let st=0;
+  for(let i=0;i<L;i++)if(bytes[i]===10){lines.push({s:st,e:i+1,ce:(i>st&&bytes[i-1]===13)?i-1:i});st=i+1}
+  if(st<L)lines.push({s:st,e:L,ce:L});
+  let headers=null;
+  if(fmt==='csv'&&lines.length){lines[0].header=true;headers=csvSplit(dec.decode(bytes.slice(lines[0].s,lines[0].ce)))}
+  out.headers=headers;
+  for(let p=0;p<P;p++)out.partitions.push({index:p,range:out.ranges[p],lines:[],rows:[]});
+  let skipped=0;
+  for(const ln of lines){
+    ln.txt=dec.decode(bytes.slice(ln.s,ln.ce));
+    const p=out.ranges.findIndex(r=>ln.s>=r[0]&&ln.s<r[1]);
+    ln.crosses=ln.e>out.ranges[p][1];
+    out.partitions[p].lines.push(ln);
+    if(ln.header)continue;
+    if(!ln.txt.trim()){skipped++;ln.blank=true;continue}
+    let row;
+    try{
+      if(fmt==='jsonl')row=JSON.parse(ln.txt);
+      else if(fmt==='csv'){const v=csvSplit(ln.txt);row={};headers.forEach((h,i)=>row[h]=conv(v[i]??''))}
+      else row={line:ln.txt};
+    }catch(e){row={_decode_error:e.message,raw:ln.txt}}
+    out.partitions[p].rows.push(row);
+  }
+  out.total=out.partitions.reduce((s,p)=>s+p.rows.length,0);out.skipped=skipped;out.nlines=lines.length;
+  return out;
+}
+
+function renderSource(){
+  src=buildSource();clearRun();
+  const info=$('#srcInfo');
+  if(src.error){info.innerHTML=`<span class="bad">${esc(src.error)}</span>`;$('#strip').innerHTML='';$('#parts').innerHTML='';fillRunPart();renderDesc();return}
+  const label={csv:'CSV',jsonl:'JSONL',text:'text',json:'JSON array'}[src.fmt];
+  info.innerHTML=src.kind==='memory'
+    ?`<b>${label}</b> → <b>memory source</b>: ${src.total} rows split contiguously into ${src.P} partitions. (The Feature 01 file reader is line-oriented, so a JSON array goes through the memory path.)`
+    :`<b>${label}</b> → <b>file source</b>: ${src.L} bytes, ${src.nlines} lines${src.headers?` (line 0 is the header; columns: ${esc(src.headers.join(', '))})`:''} → ${src.total} rows${src.skipped?`, ${src.skipped} blank line(s) skipped`:''}. Cut into ${src.P} byte ranges.`;
+  if(src.kind==='file'){
+    let h='<div class="strip">';
+    src.ranges.forEach((r,i)=>{const w=(r[1]-r[0])/src.L*100;h+=`<div class="seg" style="width:${w}%;background:${pc(i)}">P${i}</div>`});
+    src.partitions.forEach(p=>p.lines.forEach(l=>{h+=`<div class="tick ${l.header?'h':''}" style="left:${l.s/src.L*100}%" title="line starts at byte ${l.s}"></div>`}));
+    src.ranges.slice(1).forEach(r=>{h+=`<div class="cut" style="left:${r[0]/src.L*100}%" title="range boundary at byte ${r[0]}"></div>`});
+    h+='</div><div class="note" style="margin-top:0">Red bar = byte-range boundary (may cut mid-line). Black tick = where a line starts. A line belongs to the partition containing its start tick and is read past the boundary if needed.</div>';
+    $('#strip').innerHTML=h;
+  }else $('#strip').innerHTML='';
+  $('#parts').innerHTML=src.partitions.map((p,i)=>{
+    const rows=p.rows.slice(0,6).map(r=>`<span class="row" title="${esc(J(r))}">${esc(J(r))}</span>`).join('');
+    const hdr=src.kind==='file'?` · bytes [${p.range[0]},${p.range[1]})`:'';
+    const cr=src.kind==='file'?p.lines.filter(l=>l.crosses).length:0;
+    return `<div class="part" style="background:${pc(i)}"><h4>partition ${i} · ${p.rows.length} rows${hdr}${cr?'<span class="tag">reads past boundary</span>':''}</h4>${rows}${p.rows.length>6?`<span class="note">… +${p.rows.length-6} rows</span>`:''}</div>`}).join('');
+  fillRunPart();renderDesc();
+}
+
+/* ---------- pipeline ---------- */
+function renderSteps(){
+  $('#steps').innerHTML=`<div class="step"><span class="n" style="background:var(--acc2)">0</span><b>Source</b><span class="mono">${src&&!src.error?src.kind+' · '+src.fmt+' · '+src.P+' partitions':'-'}</span><span></span><span></span></div>`+
+  steps.map((s,i)=>`<div class="step"><span class="n">${i+1}</span>
+    <select data-i="${i}" class="opSel">${Object.keys(OPDOC).map(o=>`<option ${o===s.op?'selected':''}>${o}</option>`).join('')}</select>
+    <input class="code ${s.err?'err':''}" data-i="${i}" value="${esc(s.code)}" spellcheck="false" placeholder="expression or r => ...">
+    <span class="badge">${run?`${run.calls[i]} calls`:'not called'} · ${OPDOC[s.op]}</span>
+    <button data-del="${i}">✕</button></div>`).join('');
+  document.querySelectorAll('.opSel').forEach(e=>e.onchange=()=>{steps[+e.dataset.i].op=e.value;onPipe()});
+  document.querySelectorAll('input.code').forEach(e=>e.oninput=()=>{steps[+e.dataset.i].code=e.value;onPipe(true)});
+  document.querySelectorAll('[data-del]').forEach(e=>e.onclick=()=>{steps.splice(+e.dataset.del,1);onPipe()});
+}
+function onPipe(keepFocus){clearRun();if(!keepFocus)renderSteps();else document.querySelectorAll('.step .badge').forEach((b,i)=>b.textContent='not called · '+OPDOC[steps[i].op]);renderDesc()}
+document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{steps.push({op:b.dataset.add,code:TEMPLATE[b.dataset.add]});onPipe()});
+
+function compile(code){
+  const c=code.trim();
+  if(/^(\(?[\w\s,{}\[\]]*\)?\s*=>|function)/.test(c))return new Function('return ('+c+')')();
+  return new Function('r','return ('+c+')');
+}
+function apply(op,f,row){
+  const v=f(row);
+  if(op==='Map')return[v];
+  if(op==='Filter')return v?[row]:[];
+  if(op==='FlatMap'){if(!Array.isArray(v))throw new Error('FlatMap must return an array');return v}
+  if(op==='KeyBy')return[{key:v,value:row}];
+}
+
+/* ---------- run ---------- */
+function fillRunPart(){
+  const el=$('#runPart');if(!src||src.error){el.innerHTML='';return}
+  el.innerHTML='<option value="all">all partitions</option>'+src.partitions.map(p=>`<option value="${p.index}">only partition ${p.index}</option>`).join('');
+}
+function clearRun(){stopAnim();run=null;$('#resSec').style.display='none';$('#animSec').style.display='none';$('#err').textContent='';setStats()}
+function setStats(){
+  const live=!!run,cls='stat '+(live?'live':'zero');
+  $('#stState').innerHTML=live?'<b>Executed</b>state':'<b>Lazy</b>state';$('#stState').className=cls;
+  $('#stRead').innerHTML=`<b>${live?run.read:0}</b>source records streamed`;$('#stRead').className=cls;
+  $('#stParts').innerHTML=`<b>${live?run.partsRead.length:0}</b>source partitions read`;$('#stParts').className=cls;
+  const t=live?run.calls.reduce((a,b)=>a+b,0):0;
+  $('#stCalls').innerHTML=`<b>${t}</b>closure calls`;$('#stCalls').className=cls;
+}
+$('#resetRun').onclick=()=>{clearRun();renderSteps()};
+$('#run').onclick=()=>{
+  if(!src||src.error)return;
+  $('#err').textContent='';
+  const fns=[];
+  for(const [i,s] of steps.entries()){try{fns.push(compile(s.code));s.err=false}catch(e){s.err=true;$('#err').textContent=`Step ${i+1} (${s.op}) syntax error: ${e.message}`;renderSteps();return}}
+  const which=$('#runPart').value;
+  const targets=src.partitions.filter(p=>which==='all'||p.index===+which);
+  const r={calls:steps.map(()=>0),read:0,partsRead:targets.map(p=>p.index),out:[],trace:{}};
+  for(let s=0;s<=steps.length;s++)r.out.push(src.partitions.map(()=>null));
+  let fail=null;
+  for(const p of targets){
+    r.out[0][p.index]=[];steps.forEach((_,i)=>r.out[i+1][p.index]=[]);r.trace[p.index]=[];
+    for(const row of p.rows){
+      r.read++;r.out[0][p.index].push(row);
+      let cur=[row];const segs=[];
+      for(let i=0;i<steps.length;i++){
+        const nxt=[];
+        for(const x of cur){
+          r.calls[i]++;
+          try{nxt.push(...apply(steps[i].op,fns[i],x))}
+          catch(e){fail=fail||`Step ${i+1} (${steps[i].op}) runtime error on row ${J(x)}: ${e.message}`;steps[i].err=true}
+        }
+        segs.push(nxt);cur=nxt;r.out[i+1][p.index].push(...nxt);
+      }
+      r.trace[p.index].push({src:row,segs});
+    }
+  }
+  run=r;if(fail)$('#err').textContent=fail;
+  setStats();renderSteps();renderResults(0);
+  $('#animSec').style.display='block';$('#resSec').style.display='block';
+  startAnim();
+};
+
+function renderResults(stage){
+  const names=['Source',...steps.map((s,i)=>`${i+1}. ${s.op}`)];
+  $('#stageTabs').innerHTML=names.map((n,i)=>`<button data-st="${i}" class="${i===stage?'on':''}">${n}</button>`).join('');
+  document.querySelectorAll('[data-st]').forEach(b=>b.onclick=()=>renderResults(+b.dataset.st));
+  $('#stageParts').innerHTML=src.partitions.map(p=>{
+    const o=run.out[stage][p.index];
+    if(!o)return`<div class="part" style="opacity:.55"><h4>partition ${p.index} · <i>not read</i></h4></div>`;
+    return`<div class="part" style="background:${pc(p.index)}"><h4>partition ${p.index} · ${o.length} rows</h4>${o.slice(0,12).map(r=>`<span class="row" title="${esc(J(r))}">${esc(J(r))}</span>`).join('')||'<span class="row x">∅</span>'}${o.length>12?`<span class="note">… +${o.length-12}</span>`:''}</div>`}).join('');
+  let h='<table><tr><th>stage</th>'+src.partitions.map(p=>`<th>P${p.index}</th>`).join('')+'<th>total</th></tr>';
+  names.forEach((n,s)=>{let t=0;h+=`<tr><td>${n}</td>`+src.partitions.map(p=>{const o=run.out[s][p.index];if(o)t+=o.length;return`<td>${o?o.length:'–'}</td>`}).join('')+`<td><b>${t}</b></td></tr>`});
+  $('#matrix').innerHTML=h+'</table>';
+  const tp=$('#trP'),cur=tp.value;
+  tp.innerHTML=run.partsRead.map(i=>`<option value="${i}">${i}</option>`).join('');if(cur&&run.partsRead.includes(+cur))tp.value=cur;
+  renderTrace();
+}
+function renderTrace(){
+  const p=+$('#trP').value,t=run.trace[p]||[];
+  $('#trace').innerHTML=t.slice(0,40).map(({src:s,segs})=>{
+    let h=`<span class="seg2">${esc(J(s))}</span>`;
+    segs.forEach((o,i)=>{
+      h+=` → <b style="font-size:11px">${steps[i].op}</b> `;
+      if(!o.length)h+=`<span class="seg2 drop">∅ dropped</span>`;
+      else h+=o.slice(0,3).map(x=>`<span class="seg2">${esc(J(x))}</span>`).join('')+(o.length>3?` <span class="tag">+${o.length-3}</span>`:'');
+    });
+    return`<div class="trace">${h}</div>`}).join('')+(t.length>40?`<p class="note">… showing 40 of ${t.length} rows</p>`:'');
+}
+$('#trP').onchange=renderTrace;
+
+/* ---------- animation ---------- */
+let gen=0,paused=false,speed=1;
+class Abort extends Error{}
+function stopAnim(){gen++;paused=false}
+async function wait(ms,g){
+  await new Promise(r=>setTimeout(r,ms/speed));
+  while(paused&&g===gen)await new Promise(r=>setTimeout(r,80));
+  if(g!==gen)throw new Abort();
+}
+const sleepFrame=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+
+function startAnim(){
+  stopAnim();const g=gen;paused=false;$('#aPlay').textContent='⏸ Pause';
+  const names=['Source',...steps.map(s=>s.op),'Output'];
+  const limit=+$('#aN').value;
+  $('#lanes').innerHTML=src.partitions.map(p=>{
+    const active=run.partsRead.includes(p.index);
+    return`<div class="lane" data-p="${p.index}"><div class="lh" style="background:${pc(p.index)}">P${p.index}</div><div>
+      <div class="track">${names.map((n,k)=>`<div class="nd ${active?'':'idle'}" data-k="${k}"><span class="nm">${n}</span><span class="ct">0</span></div>`).join('')}</div>
+      <div class="cap">${active?'waiting…':'partition not read'}</div></div></div>`}).join('');
+  $('#aNote').textContent=`Animating the first ${limit} rows of each partition; counters jump to the real totals when a lane finishes.`;
+  const lanes=[...document.querySelectorAll('.lane')].filter(l=>run.partsRead.includes(+l.dataset.p));
+  Promise.all(lanes.map(l=>laneLoop(l,g,limit))).catch(e=>{if(!(e instanceof Abort))console.error(e)});
+}
+
+function nodePos(track,k,tokH=20){const n=track.querySelector(`.nd[data-k="${k}"]`);return{x:n.offsetLeft+n.offsetWidth/2-10,y:n.offsetTop+n.offsetHeight/2-10,node:n}}
+function place(t,pos,j,m){const step=Math.min(22,56/Math.max(m,1));t.style.left=pos.x+'px';t.style.top=(pos.y+(j-(m-1)/2)*step)+'px'}
+function bump(node,delta){const c=node.querySelector('.ct');c.textContent=(+c.textContent)+delta;node.classList.add('pulse');setTimeout(()=>node.classList.remove('pulse'),260/speed)}
+function mkTok(track,p,label,title){const t=document.createElement('div');t.className='tok';t.style.background=tc(p);t.textContent=label;t.title=title;track.appendChild(t);return t}
+function fmtCap(s){return s.length>90?s.slice(0,89)+'…':s}
+
+async function laneLoop(lane,g,limit){
+  const p=+lane.dataset.p,track=lane.querySelector('.track'),cap=lane.querySelector('.cap');
+  const trace=run.trace[p],K=steps.length+1;
+  track.style.setProperty('--dur',(300/speed)+'ms');
+  await wait(400,g);
+  const n=Math.min(limit,trace.length);
+  for(let i=0;i<n;i++){
+    const {src:row,segs}=trace[i];
+    track.style.setProperty('--dur',(300/speed)+'ms');
+    const p0=nodePos(track,0);
+    let toks=[mkTok(track,p,i,J(row))];
+    place(toks[0],p0,0,1);bump(p0.node,1);
+    cap.innerHTML=`<b>read</b> ${esc(fmtCap(J(row)))}`;
+    await sleepFrame();await wait(180,g);
+    let dead=false;
+    for(let s=0;s<steps.length&&!dead;s++){
+      const pos=nodePos(track,s+1);
+      toks.forEach((t,j)=>place(t,pos,j,toks.length));
+      await wait(340,g);
+      const out=segs[s];
+      while(toks.length>out.length){const t=toks.pop();t.classList.add('drop');setTimeout(()=>t.remove(),400/speed)}
+      while(toks.length<out.length&&out.length>0){const t=mkTok(track,p,i+'.'+toks.length,'');place(t,pos,toks.length,toks.length+1);toks.push(t);await sleepFrame()}
+      toks.forEach((t,j)=>{t.title=J(out[j]);place(t,pos,j,toks.length)});
+      bump(pos.node,out.length);
+      cap.innerHTML=out.length?`<b>${steps[s].op}</b> → ${out.length>1?out.length+' rows: ':''}${esc(fmtCap(J(out[0])))}`:`<b>${steps[s].op}</b> → <span class="bad">dropped</span>`;
+      if(!out.length)dead=true;
+      await wait(220,g);
+    }
+    if(!dead){
+      const pos=nodePos(track,K);
+      toks.forEach((t,j)=>place(t,pos,j,toks.length));
+      await wait(340,g);
+      bump(pos.node,toks.length);
+      toks.forEach(t=>t.classList.add('done'));
+      cap.innerHTML=`<b>collected</b> ${toks.length} row(s)`;
+      const tk=toks;setTimeout(()=>tk.forEach(t=>t.remove()),400/speed);
+    }
+    await wait(150,g);
+  }
+  // fast-forward counters to real totals
+  const totals=[run.out[0][p].length,...steps.map((_,k)=>run.out[k+1][p].length)];
+  totals.push(totals[totals.length-1]);
+  track.querySelectorAll('.nd').forEach((nd,k)=>nd.querySelector('.ct').textContent=totals[k]);
+  cap.innerHTML=trace.length>n?`<b>done</b> · animated ${n} of ${trace.length} rows, counters show full totals`:`<b>done</b> · all ${trace.length} rows processed`;
+}
+$('#aPlay').onclick=()=>{paused=!paused;$('#aPlay').textContent=paused?'▶ Play':'⏸ Pause'};
+$('#aRestart').onclick=()=>{if(run)startAnim()};
+$('#aN').onchange=()=>{if(run)startAnim()};
+$('#aSpeed').oninput=e=>{speed=+e.target.value;$('#aSpeedV').textContent=speed+'×';document.querySelectorAll('.track').forEach(t=>t.style.setProperty('--dur',(300/speed)+'ms'))};
+
+/* ---------- describe ---------- */
+function renderDesc(){
+  if(!src||src.error){$('#desc').textContent='(no valid source yet)';return}
+  const d=[{id:0,kind:'source',parents:[],numPartitions:src.P,source:{kind:src.kind,format:src.fmt,...(src.kind==='file'?{bytes:src.L}:{rows:src.total})},
+    partitions:src.partitions.map(p=>({index:p.index,...(src.kind==='file'?{byteRange:p.range}:{rowCount:p.rows.length})}))}];
+  steps.forEach((s,i)=>d.push({id:i+1,kind:s.op.toLowerCase(),parents:[i],numPartitions:src.P,dependency:'narrow (1-1)'}));
+  const dbg=[...d].reverse().map((n,i)=>(i?'   '.repeat(i-1)+'+- ':'')+`RDD#${n.id} ${n.kind} [${n.numPartitions} partitions]`).join('\n');
+  $('#desc').textContent=JSON.stringify(d,null,2)+'\n\n// debug string (≈ RDD.toDebugString)\n'+dbg+'\n\n// No closures and no pointers to the internal graph: metadata only.';
+}
+
+/* ---------- wiring ---------- */
+function loadSample(k){$('#src').value=SAMPLES[k];$('#fmt').value='auto';steps=DEFAULT_STEPS[k].map(([op,code])=>({op,code}));renderSource();renderSteps()}
+document.querySelectorAll('[data-sample]').forEach(b=>b.onclick=()=>loadSample(b.dataset.sample));
+$('#src').oninput=()=>{renderSource();renderSteps()};
+$('#fmt').onchange=$('#num').onchange=()=>{renderSource();renderSteps()};
+$('#P').oninput=()=>{$('#Pv').textContent=$('#P').value;renderSource();renderSteps()};
+$('#file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$('#src').value=r.result;
+  const n=f.name.toLowerCase();$('#fmt').value=n.endsWith('.csv')?'csv':(n.endsWith('.jsonl')||n.endsWith('.ndjson'))?'jsonl':'auto';
+  renderSource();renderSteps()};r.readAsText(f)};
+loadSample('csv');
+</script>
+</body>
+</html>

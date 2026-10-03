@@ -1,0 +1,899 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kubernetes Internals End-to-End</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2230;--mut:#667085;--line:#d9dee7;--acc:#326ce5;--acc2:#e25a1c;--ok:#1a9b5a;--bad:#d64545;
+--p0:#dbe9ff;--p1:#ffe6cf;--p2:#d9f4e3;--p3:#f1defa;--p4:#fff3b8;--p5:#ffd9de;--p6:#d6f2f2;--p7:#e6e6e6;
+--t0:#2f6fed;--t1:#e25a1c;--t2:#1a9b5a;--t3:#9b4fd0;--t4:#c9a400;--t5:#d6456b;--t6:#12a1a1;--t7:#6b7280}
+@media(prefers-color-scheme:dark){:root{--bg:#10141c;--card:#181e29;--ink:#e8ecf3;--mut:#93a0b5;--line:#2b3445;--acc:#6c9bff;--acc2:#ff7a3d;--ok:#43c783;--bad:#ff6b6b;
+--p0:#1f3556;--p1:#53361c;--p2:#1d4630;--p3:#44274f;--p4:#524a17;--p5:#552630;--p6:#17454a;--p7:#3a3f48}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
+header,main{max-width:1180px;margin:auto;padding:0 16px}
+header{padding-top:24px}
+h1{margin:0 0 4px;font-size:25px}h1 span{color:var(--acc)}
+header p{margin:0;color:var(--mut)}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-top:16px}
+section>h2{margin:0 0 6px;font-size:17px}
+section>h2 em{font-style:normal;background:var(--acc);color:#fff;border-radius:6px;padding:1px 8px;font-size:12px;margin-right:8px;vertical-align:2px}
+h3{font-size:14px;margin:14px 0 6px}
+button,select,input[type=text],textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 10px}
+button{cursor:pointer}button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
+button.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
+button:disabled{opacity:.45;cursor:default}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+label{color:var(--mut);font-size:13px}
+.mono,code,pre,textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+textarea{width:100%;resize:vertical}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;margin:0;max-height:320px;white-space:pre}
+.note{font-size:13px;color:var(--mut);margin:6px 0 0}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+.box{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--bg);min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{font-family:ui-monospace,monospace;font-size:11.5px;border:1px solid var(--line);border-radius:5px;padding:1px 7px;background:var(--card)}
+.tag{display:inline-block;font-size:10.5px;padding:0 6px;border-radius:5px;background:var(--acc);color:#fff;margin-left:4px;font-weight:400}
+.tag.r{background:var(--bad)}.tag.g{background:var(--ok)}.tag.o{background:var(--acc2)}.tag.m{background:var(--t7)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.g2>div{min-width:0;overflow-x:auto}
+@media(max-width:820px){.g2{grid-template-columns:1fr}}
+table{border-collapse:collapse;width:100%;font-size:12.5px}td,th{border:1px solid var(--line);padding:3px 7px;text-align:left;vertical-align:top}
+td.n,th.n{text-align:right}
+svg{display:block;width:100%}
+svg text{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;fill:var(--ink)}
+.jobgrid{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:10px}
+.jobgrid>span,.jobgrid>label{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.nv{flex:1;min-width:112px;border:1.5px solid var(--line);border-radius:10px;padding:6px 8px;cursor:pointer;background:var(--bg);font-size:12px;line-height:1.3}
+.nv b{display:block;font-size:12.5px}.nv small{color:var(--mut)}
+.nv.act{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 12%,var(--card))}
+.nv.done b::after{content:" ✓";color:var(--ok)}
+.blurb{padding:10px 12px;border-left:5px solid var(--acc);background:var(--bg);border-radius:8px;margin:6px 0 10px;font-size:14px}
+.blurb .ft{color:var(--mut);font-size:12px;margin-top:3px}
+.caption{margin:8px 0;padding:9px 12px;border-radius:8px;background:var(--bg);border-left:5px solid var(--acc);font-size:14.5px;min-height:44px}
+.caption.bad{border-left-color:var(--bad)}.caption.good{border-left-color:var(--ok)}
+.row{display:block;padding:2px 6px;margin:2px 0;border-radius:5px;border:1px solid var(--line);background:var(--bg);font-family:ui-monospace,monospace;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.big{font-size:28px;font-weight:700}
+.bar2{height:14px;border-radius:4px;display:inline-block;vertical-align:middle}
+.lrow{display:flex;align-items:center;gap:6px;margin:4px 0}.lrow>b{min-width:80px;font-size:12px;color:var(--mut)}
+.pod{display:inline-block;border:2px solid var(--line);border-radius:7px;padding:1px 6px;margin:2px;font-family:ui-monospace,monospace;font-size:10.5px;background:var(--card);vertical-align:top}
+.pod.ready{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,var(--card))}.pod.run{border-color:var(--t4)}
+.pod.pend{border-style:dashed;color:var(--mut)}.pod.term{border-color:var(--bad);text-decoration:line-through;opacity:.7}.pod.err{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,var(--card))}
+.node{border:2px solid var(--line);border-radius:10px;padding:8px;background:var(--bg);min-width:0}
+.node.dead{border-color:var(--bad);opacity:.75}
+.ovn{cursor:pointer}.ovn rect{stroke:var(--line);stroke-width:1.5;transition:opacity .2s}
+.ovn.sel rect{stroke:var(--acc);stroke-width:3.5}.ovn.cur rect{stroke:var(--ink);stroke-width:3}
+.ovn.act rect{stroke:var(--acc);stroke-width:4}
+.ove{fill:none;stroke:#8a94a6;stroke-width:1.8}.ove.ctl{stroke-dasharray:6 4}.ove.async{stroke-dasharray:2 4;stroke:var(--bad)}.ove.act{stroke:var(--acc);stroke-width:3.5}
+@keyframes flow{to{stroke-dashoffset:-20}}.flow{stroke-dasharray:6 4;animation:flow .6s linear infinite}
+.ove.flow{animation:flow .6s linear infinite}
+details.dd{border:1px solid var(--line);border-radius:10px;padding:8px 14px;margin-top:10px;background:var(--bg)}
+details.dd summary{cursor:pointer;font-weight:600}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>Kubernetes</span> Internals · End-to-End</h1>
+  <p>Paste a Deployment + Service manifest and watch a real in-browser control plane act on it: API server pipeline, etcd with watches, controllers, scheduler, kubelet, kube-proxy, rolling updates, autoscaling and node failure.</p>
+</header>
+<main>
+
+<section>
+  <h2><em>1</em>Your manifest &amp; cluster</h2>
+  <div class="bar">
+    <button data-sample="web">Web (nginx)</button><button data-sample="api">API (nodeSelector + big requests)</button><button data-sample="bad">Worker (bad image)</button>
+    <label>Worker nodes <select id="nn"><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+    <label><input type="checkbox" id="taint"> taint last node (dedicated=gpu:NoSchedule)</label>
+  </div>
+  <textarea id="src" rows="16" spellcheck="false"></textarea>
+  <div class="note" id="srcInfo"></div>
+  <div class="bar">
+    <button class="primary" id="playAll">▶ Play all 10 phases</button>
+    <button id="pauseBtn" disabled>⏸ Pause</button>
+    <label>Speed <input type="range" id="speed" min="0.25" max="4" step="0.25" value="1"> <b id="speedV">1×</b></label>
+    <span class="note" id="statLine"></span>
+  </div>
+</section>
+
+<section>
+  <h2><em>◎</em>Architecture overview <span class="note" style="font-weight:400">components and how they connect · colors match the phases below</span></h2>
+  <div class="bar"><button class="primary" id="ovTrace">▶ Trace kubectl apply through the cluster</button><button id="ovClear">Clear</button><span class="note" id="ovCap"></span></div>
+  <div id="ovView"></div>
+  <div class="chips" style="margin-top:6px"><span class="chip">solid = data flow</span><span class="chip">dashed = control / watch</span><span class="chip" style="border-color:var(--bad)">dotted = status / events</span></div>
+  <div id="ovInfo"></div>
+</section>
+
+<section id="phaseSec">
+  <h2><em>2</em>Inside the cluster, phase by phase</h2>
+  <div class="nav" id="nav"></div>
+  <div class="blurb" id="blurb"></div>
+  <div class="bar" id="phCtl"></div>
+  <div class="bar"><button id="prev">‹ Prev</button><button class="primary" id="anim">▶ Animate this phase</button><button id="nextB">Next ›</button></div>
+  <div id="phView"></div>
+</section>
+</main>
+
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const J=x=>{try{return JSON.stringify(x)}catch{return String(x)}};
+const C=o=>JSON.parse(JSON.stringify(o));
+const pc=i=>`var(--p${((i%8)+8)%8})`,tc=i=>`var(--t${((i%8)+8)%8})`;
+const cmp=(a,b)=>a<b?-1:a>b?1:0;
+const short=(s,n=40)=>{s=String(s);return s.length>n?s.slice(0,n-1)+'…':s};
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+function fnv(s){let h=2166136261;s=String(s);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h>>>0}
+const b36=(n,l)=>n.toString(36).padStart(l,'0').slice(-l);
+const sec=t=>(t/1000).toFixed(1)+'s';
+
+/* =========================================================
+   MINI YAML (maps, lists, scalars, simple flow collections)
+   ========================================================= */
+function scalar(v){
+  v=v.trim();
+  if(v.startsWith('{')&&v.endsWith('}')){const o={};const body=v.slice(1,-1).trim();if(!body)return o;body.split(/,(?![^\[]*\])/).forEach(p=>{const i=p.indexOf(':');o[p.slice(0,i).trim()]=scalar(p.slice(i+1))});return o}
+  if(v.startsWith('[')&&v.endsWith(']')){const body=v.slice(1,-1).trim();return body?body.split(',').map(scalar):[]}
+  if((v.startsWith('"')&&v.endsWith('"'))||(v.startsWith("'")&&v.endsWith("'")))return v.slice(1,-1);
+  if(/^-?\d+$/.test(v))return parseInt(v,10);if(/^-?\d+\.\d+$/.test(v))return parseFloat(v);
+  if(v==='true')return true;if(v==='false')return false;if(v==='null'||v==='~')return null;return v;
+}
+function parseDoc(src){
+  const lines=src.split('\n').map(l=>l.replace(/\s+#.*$/,'').replace(/\s+$/,'')).filter(l=>l.trim()&&!l.trim().startsWith('#')).map(l=>({ind:l.match(/^ */)[0].length,t:l.trim()}));
+  let i=0;
+  const isItem=l=>l.t==='-'||l.t.startsWith('- ');
+  function block(){return isItem(lines[i])?list(lines[i].ind):map(lines[i].ind)}
+  function map(ind){const o={};
+    while(i<lines.length&&lines[i].ind===ind&&!isItem(lines[i])){
+      const m=/^([^:]+?):(?:\s+(.*))?$/.exec(lines[i].t);if(!m)throw new Error('cannot parse line: '+lines[i].t);
+      const k=m[1].trim(),v=m[2]===undefined?'':m[2];i++;
+      if(v===''){if(i<lines.length&&(lines[i].ind>ind||(lines[i].ind===ind&&isItem(lines[i]))))o[k]=block();else o[k]=null}else o[k]=scalar(v);
+    }return o}
+  function list(ind){const a=[];
+    while(i<lines.length&&lines[i].ind===ind&&isItem(lines[i])){
+      const rest=lines[i].t.replace(/^-\s*/,'');
+      if(rest===''){i++;a.push(block())}
+      else if(/^[^:"']+:(\s|$)/.test(rest)){lines[i]={ind:ind+2,t:rest};a.push(map(ind+2))}
+      else{a.push(scalar(rest));i++}
+    }return a}
+  if(!lines.length)return null;return block();
+}
+function parseYAML(text){return text.split(/^---\s*$/m).map(s=>s.trim()).filter(Boolean).map(parseDoc).filter(Boolean)}
+
+/* =========================================================
+   MANIFEST NORMALISATION
+   ========================================================= */
+const qty=(v,kind)=>{if(v==null)return 0;v=String(v);if(kind==='cpu')return v.endsWith('m')?parseInt(v):Math.round(parseFloat(v)*1000);const m=/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|M|G)?$/.exec(v);if(!m)return 0;const n=parseFloat(m[1]);return m[2]==='Gi'?n*1024:m[2]==='Ki'?n/1024:m[2]==='G'?n*953:n};
+const pct=(v,R,up)=>{if(typeof v==='string'&&v.endsWith('%')){const x=parseFloat(v)/100*R;return up?Math.ceil(x):Math.floor(x)}return parseInt(v)||0};
+function normalize(docs){
+  const dep=docs.find(d=>d.kind==='Deployment'),svc=docs.find(d=>d.kind==='Service');
+  if(!dep)throw new Error('The manifest needs a Deployment.');
+  const spec=dep.spec||{},tpl=spec.template||{},ps=tpl.spec||{},cs=(ps.containers||[]);
+  if(!cs.length)throw new Error('Deployment has no containers.');
+  const R=spec.replicas==null?1:spec.replicas,ru=(spec.strategy&&spec.strategy.rollingUpdate)||{};
+  const labels=(tpl.metadata&&tpl.metadata.labels)||{};
+  const d={kind:'Deployment',metadata:{name:dep.metadata.name,labels:dep.metadata.labels||{}},spec:{replicas:R,selector:{matchLabels:(spec.selector&&spec.selector.matchLabels)||labels},
+    strategy:{maxSurge:pct(ru.maxSurge==null?'25%':ru.maxSurge,R,true),maxUnavailable:pct(ru.maxUnavailable==null?'25%':ru.maxUnavailable,R,false)},
+    template:{metadata:{labels},spec:{containers:cs.map(c=>({name:c.name,image:c.image,cpu:qty(c.resources&&c.resources.requests&&c.resources.requests.cpu,'cpu'),mem:qty(c.resources&&c.resources.requests&&c.resources.requests.memory,'mem'),readyDelay:c.readinessProbe?(((c.readinessProbe.initialDelaySeconds)==null?2:c.readinessProbe.initialDelaySeconds)*1000):0})),
+      nodeSelector:ps.nodeSelector||{},tolerations:ps.tolerations||[],graceMs:(ps.terminationGracePeriodSeconds==null?2:Math.min(ps.terminationGracePeriodSeconds,5))*1000}}}};
+  let s=null;if(svc){const p=((svc.spec||{}).ports||[{port:80}])[0];s={kind:'Service',metadata:{name:svc.metadata.name},spec:{selector:(svc.spec||{}).selector||labels,port:p.port||80,targetPort:p.targetPort||p.port||80,clusterIP:'10.96.'+(fnv(svc.metadata.name)%200)+'.'+(fnv(svc.metadata.name+'x')%250)}}}
+  return{dep:d,svc:s,raw:dep};
+}
+const SAMPLES={
+web:`apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    app: web
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: nginx:1.25
+        resources:
+          requests:
+            cpu: 200m
+            memory: 128Mi
+        readinessProbe:
+          initialDelaySeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  selector:
+    app: web
+  ports:
+  - port: 80
+    targetPort: 8080
+`,
+api:`apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: api
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      nodeSelector:
+        disk: ssd
+      containers:
+      - name: api
+        image: myorg/api:2.4.1
+        resources:
+          requests:
+            cpu: 700m
+            memory: 1Gi
+        readinessProbe:
+          initialDelaySeconds: 4
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  selector:
+    app: api
+  ports:
+  - port: 443
+    targetPort: 8443
+`,
+bad:`apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: worker
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+      - name: worker
+        image: myorg/worker:bad-tag
+        resources:
+          requests:
+            cpu: 300m
+            memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+spec:
+  selector:
+    app: worker
+  ports:
+  - port: 9000
+`};
+
+/* =========================================================
+   SCHEDULER ALGORITHM (shared: pure + inside the simulator)
+   ========================================================= */
+function filterScore(nodes,bound,pod,policy){
+  return nodes.map(n=>{
+    const fails=[];
+    if(!n.ready)fails.push('node not ready');
+    (n.taints||[]).forEach(t=>{if(['NoSchedule','NoExecute'].includes(t.effect)&&!(pod.tolerations||[]).some(x=>x.key===t.key))fails.push(`taint ${t.key}:${t.effect}`)});
+    Object.entries(pod.nodeSelector||{}).forEach(([k,v])=>{if(n.labels[k]!==v)fails.push(`nodeSelector ${k}=${v}`)});
+    const mine=bound.filter(b=>b.node===n.name),used={cpu:mine.reduce((a,b)=>a+b.cpu,0),mem:mine.reduce((a,b)=>a+b.mem,0)};
+    if(used.cpu+pod.cpu>n.cpu)fails.push(`Insufficient cpu (${n.cpu-used.cpu}m free, needs ${pod.cpu}m)`);
+    if(used.mem+pod.mem>n.mem)fails.push(`Insufficient memory (${Math.round(n.mem-used.mem)}Mi free, needs ${pod.mem}Mi)`);
+    const free=((n.cpu-used.cpu-pod.cpu)/n.cpu+(n.mem-used.mem-pod.mem)/n.mem)/2*100;
+    const same=mine.filter(b=>b.owner===pod.owner).length;
+    const score=fails.length?null:(policy.pack?100-free:free)-(policy.spread?same*8:0);
+    return{name:n.name,fails,score,used,free,same};
+  });
+}
+function pickNode(rows){const ok=rows.filter(r=>!r.fails.length).sort((a,b)=>b.score-a.score||cmp(a.name,b.name));return ok.length?ok[0].name:null}
+
+/* =========================================================
+   CLUSTER SIMULATOR: etcd + API server + controllers + scheduler + kubelet + proxy
+   ========================================================= */
+const MATCH=(sel,lab)=>Object.entries(sel||{}).every(([k,v])=>lab&&lab[k]===v);
+class Sim{
+  constructor(o){
+    this.o=o;this.t=0;this.q=[];this.k=0;this.log=[];this.kv=new Map();this.rev=0;this.pend=new Set();this.uidn=1;this.cn=0;
+    this.hb={};this.alive={};this.imgs={};this.kl={};this.cont={};this.rules={};this.ruleLog=[];this.schedLog=[];this.wlog=[];this.snaps=[];this.ipn={};this.hpaLog=[];this.recon=[];this.drop=null;this.hpa=null;this.evictLog=[];
+    o.nodes.forEach((n,i)=>{this.alive[n.name]=true;this.hb[n.name]=0;this.imgs[n.name]=new Set();this.rules[n.name]=[];this.ipn[n.name]=2;
+      this.write({kind:'Node',metadata:{name:n.name,labels:{'kubernetes.io/hostname':n.name,...n.labels}},spec:{taints:C(n.taints||[]),cpu:n.cpu,mem:n.mem,idx:i},status:{ready:true}},'create','kubelet/'+n.name,null,true);
+      this.heartbeat(n.name)});
+    this.at(1000,()=>this.nodeCtl());this.at(250,()=>this.snap());this.at(o.resync||6000,()=>this.resync());
+  }
+  at(dt,fn){this.q.push({t:this.t+dt,k:this.k++,fn})}
+  run(until){while(this.q.length){let bi=0;for(let i=1;i<this.q.length;i++){const a=this.q[i],b=this.q[bi];if(a.t<b.t||(a.t===b.t&&a.k<b.k))bi=i}const e=this.q[bi];if(e.t>until)break;this.q.splice(bi,1);this.t=e.t;e.fn()}this.t=until}
+  emit(from,to,msg,kind='call'){this.log.push({t:this.t,from,to,msg,kind})}
+  key(kind,name){return`/registry/${kind.toLowerCase()}s/${name}`}
+  get(kind,name){const e=this.kv.get(this.key(kind,name));return e?C(e.obj):null}
+  list(kind){const pre=`/registry/${kind.toLowerCase()}s/`;return[...this.kv.entries()].filter(([k])=>k.startsWith(pre)).map(([k,e])=>C(e.obj))}
+  write(obj,verb,who,expectRv,quiet){
+    const k=this.key(obj.kind,obj.metadata.name),cur=this.kv.get(k);
+    if(verb==='create'&&cur)return{err:409};
+    if(expectRv!=null&&(!cur||cur.obj.metadata.rv!==expectRv))return{err:409};
+    this.rev++;obj.metadata.rv=this.rev;if(!obj.metadata.uid)obj.metadata.uid='uid-'+(this.uidn++);if(!obj.metadata.createdRv)obj.metadata.createdRv=this.rev;
+    this.kv.set(k,{obj:C(obj)});
+    if(!quiet){this.emit(who,'apiserver',`${verb==='create'?'POST':'PUT'} ${obj.kind}/${obj.metadata.name}`);this.emit('apiserver','etcd',`write ${k.replace('/registry/','')} → rev ${this.rev}`,'store')}
+    const ev={type:cur?'MODIFIED':'ADDED',obj:C(obj)};this.at(4,()=>this.dispatch(ev));return{ok:true,obj:C(obj)};
+  }
+  remove(kind,name,who){const k=this.key(kind,name),cur=this.kv.get(k);if(!cur)return;this.rev++;this.kv.delete(k);this.emit(who,'apiserver',`DELETE ${kind}/${name}`);this.emit('apiserver','etcd',`delete ${k.replace('/registry/','')} → rev ${this.rev}`,'store');const o=C(cur.obj);o.metadata.rv=this.rev;this.at(4,()=>this.dispatch({type:'DELETED',obj:o}))}
+  patch(kind,name,fn,who,quiet){const o=this.get(kind,name);if(!o)return null;fn(o);const r=this.write(o,'update',who,o.metadata.rv,quiet);return r.ok?r.obj:null}
+  enq(ctrl,key){const id=ctrl+'|'+key;if(this.pend.has(id))return;this.pend.add(id);const d=ctrl.startsWith('kube-proxy')?800:ctrl.startsWith('kubelet')?5:2;this.at(d,()=>{this.pend.delete(id);this.handle(ctrl,key)})}
+  dispatch(ev){
+    const o=ev.obj,k=o.kind,n=o.metadata.name;this.wlog.push({t:this.t,type:ev.type,kind:k,name:n,rv:o.metadata.rv});
+    const own=(o.metadata.ownerRefs||[])[0];
+    if(k==='Deployment')this.enq('deployment-controller',n);
+    if(k==='ReplicaSet'){this.enq('replicaset-controller',n);if(own)this.enq('deployment-controller',own.name)}
+    if(k==='Pod'){
+      const dropped=this.drop&&this.t>=this.drop.from&&this.t<this.drop.until&&ev.type==='DELETED';
+      if(own&&!dropped)this.enq('replicaset-controller',own.name);else if(own&&dropped)this.emit('informer','replicaset-controller','⚠ watch event DELETED Pod/'+n+' LOST (connection hiccup)','lost');
+      if(!o.spec.nodeName&&o.status.phase==='Pending'&&!o.metadata.deletionTs)this.enq('scheduler',n);
+      if(o.spec.nodeName)this.enq('kubelet:'+o.spec.nodeName,n);
+      this.list('Service').forEach(s=>{if(MATCH(s.spec.selector,o.metadata.labels))this.enq('endpoints-controller',s.metadata.name)});
+      if(own&&!dropped){const rs=this.get('ReplicaSet',own.name);if(rs&&rs.metadata.ownerRefs&&rs.metadata.ownerRefs[0])this.enq('deployment-controller',rs.metadata.ownerRefs[0].name)}
+    }
+    if(k==='Service')this.enq('endpoints-controller',n);
+    if(k==='Endpoints')this.o.nodes.forEach(nd=>this.enq('kube-proxy:'+nd.name,n));
+  }
+  resync(){this.list('ReplicaSet').forEach(r=>this.enq('replicaset-controller',r.metadata.name));this.list('Deployment').forEach(d=>this.enq('deployment-controller',d.metadata.name));this.list('Service').forEach(s=>this.enq('endpoints-controller',s.metadata.name));this.at(this.o.resync||6000,()=>this.resync())}
+  handle(ctrl,key){
+    if(ctrl==='deployment-controller')this.syncDeployment(key);
+    else if(ctrl==='replicaset-controller')this.syncRS(key);
+    else if(ctrl==='scheduler')this.schedule(key);
+    else if(ctrl.startsWith('kubelet:'))this.kubelet(ctrl.slice(8),key);
+    else if(ctrl==='endpoints-controller')this.syncEndpoints(key);
+    else if(ctrl.startsWith('kube-proxy:'))this.proxySync(ctrl.slice(11),key);
+  }
+  owned(o,kind,name){return(o.metadata.ownerRefs||[]).some(r=>r.kind===kind&&r.name===name)}
+  /* ---- Deployment controller (rolling update) ---- */
+  syncDeployment(name){
+    const d=this.get('Deployment',name);if(!d)return;
+    const tpl=d.spec.template,hash=b36(fnv(J(tpl)),8).slice(0,8),rsName=`${name}-${hash}`;
+    const all=this.list('ReplicaSet').filter(r=>this.owned(r,'Deployment',name)),nw=all.find(r=>r.metadata.name===rsName),old=all.filter(r=>r!==nw).sort((a,b)=>a.metadata.createdRv-b.metadata.createdRv);
+    const R=d.spec.replicas,surge=d.spec.strategy.maxSurge,unav=d.spec.strategy.maxUnavailable,sumOf=(xs,f)=>xs.reduce((a,x)=>a+f(x),0);
+    this.recon.push({t:this.t,ctrl:'deployment-controller',key:name,obs:`RS ${all.length} (new ${nw?nw.spec.replicas:'-'}, old ${sumOf(old,x=>x.spec.replicas)}) ready ${sumOf(all,x=>x.status.readyReplicas||0)}`,des:`${R} replicas, new template ${hash}`,act:''});
+    const rec=this.recon[this.recon.length-1];
+    if(!nw){const initial=Math.max(0,Math.min(R,R+surge-sumOf(old,x=>x.spec.replicas)));
+      const rs={kind:'ReplicaSet',metadata:{name:rsName,labels:{...tpl.metadata.labels,'pod-template-hash':hash},ownerRefs:[{kind:'Deployment',name}],revision:all.length+1},spec:{replicas:initial,selector:d.spec.selector,template:C(tpl)},status:{replicas:0,readyReplicas:0}};
+      this.write(rs,'create','deployment-controller');rec.act=`create ReplicaSet ${rsName} with ${initial} replica(s)`;return}
+    const total=sumOf(all,x=>x.spec.replicas),maxTotal=R+surge;let acts=[];
+    let up=Math.min(R-nw.spec.replicas,Math.max(0,maxTotal-total));if(up<0)up=Math.min(0,R-nw.spec.replicas);
+    if(up!==0){this.patch('ReplicaSet',nw.metadata.name,o=>o.spec.replicas=nw.spec.replicas+up,'deployment-controller');acts.push(`scale new RS ${nw.spec.replicas} → ${nw.spec.replicas+up} (surge limit ${maxTotal})`)}
+    const nwNow=Math.max(nw.spec.replicas+up,0),newUnavail=Math.max(0,nwNow-(nw.status.readyReplicas||0)),totalNow=total+up;let budget=Math.max(0,totalNow-(R-unav)-newUnavail);
+    for(const o of old){if(o.spec.replicas===0)continue;const unready=Math.max(0,o.spec.replicas-(o.status.readyReplicas||0));const dec=Math.min(o.spec.replicas,unready+budget);if(dec<=0)continue;budget-=Math.max(0,dec-unready);this.patch('ReplicaSet',o.metadata.name,x=>x.spec.replicas=o.spec.replicas-dec,'deployment-controller');acts.push(`scale old RS ${o.metadata.name.slice(-6)} ${o.spec.replicas} → ${o.spec.replicas-dec} (minAvailable ${R-unav})`)}
+    const ready=sumOf(all,x=>x.status.readyReplicas||0),st={replicas:sumOf(all,x=>x.status.replicas||0),updated:nw.status.replicas||0,ready,available:ready};
+    if(J(st)!==J(d.status||{})){this.patch('Deployment',name,o=>o.status=st,'deployment-controller',true)}
+    rec.act=acts.join('; ')||'no change';
+  }
+  /* ---- ReplicaSet controller ---- */
+  syncRS(name){
+    const rs=this.get('ReplicaSet',name);if(!rs)return;
+    const pods=this.list('Pod').filter(p=>this.owned(p,'ReplicaSet',name)&&!p.metadata.deletionTs),want=rs.spec.replicas,diff=want-pods.length;
+    const rec={t:this.t,ctrl:'replicaset-controller',key:name,obs:`${pods.length} active pod(s)`,des:`${want} replica(s)`,act:''};this.recon.push(rec);
+    if(diff>0){const names=[];for(let i=0;i<diff;i++){const pn=`${name}-${b36(fnv(name+':'+(++this.cn)),5)}`;names.push(pn);
+      const ps=C(rs.spec.template.spec),c=ps.containers[0];
+      this.write({kind:'Pod',metadata:{name:pn,labels:C(rs.spec.template.metadata.labels),ownerRefs:[{kind:'ReplicaSet',name}]},spec:{image:c.image,cpu:c.cpu,mem:c.mem,readyDelay:c.readyDelay,nodeSelector:ps.nodeSelector,tolerations:ps.tolerations,graceMs:ps.graceMs,nodeName:null},status:{phase:'Pending',ready:false,reason:'Pending'}},'create','replicaset-controller')}
+      rec.act=`create ${diff} pod(s): ${names.map(n=>n.slice(-5)).join(', ')}`}
+    else if(diff<0){const victims=pods.slice().sort((a,b)=>((a.spec.nodeName?1:0)-(b.spec.nodeName?1:0))||((a.status.ready?1:0)-(b.status.ready?1:0))||(b.metadata.createdRv-a.metadata.createdRv)).slice(0,-diff);victims.forEach(p=>this.markDelete(p.metadata.name,'replicaset-controller'));rec.act=`delete ${-diff} pod(s): ${victims.map(p=>p.metadata.name.slice(-5)).join(', ')}`}
+    else rec.act='no change';
+    const act=this.list('Pod').filter(p=>this.owned(p,'ReplicaSet',name)&&!p.metadata.deletionTs),st={replicas:act.length,readyReplicas:act.filter(p=>p.status.ready).length};
+    if(J(st)!==J(rs.status||{}))this.patch('ReplicaSet',name,o=>o.status=st,'replicaset-controller',true);
+  }
+  markDelete(name,who){const p=this.get('Pod',name);if(!p)return;if(!p.spec.nodeName||!this.alive[p.spec.nodeName]&&false){this.remove('Pod',name,who);return}this.patch('Pod',name,o=>o.metadata.deletionTs=this.t,who)}
+  /* ---- scheduler ---- */
+  nodeStates(){return this.list('Node').map(n=>({name:n.metadata.name,cpu:n.spec.cpu,mem:n.spec.mem,labels:n.metadata.labels,taints:n.spec.taints,ready:n.status.ready}))}
+  boundPods(){return this.list('Pod').filter(p=>p.spec.nodeName&&!p.metadata.deletionTs).map(p=>({node:p.spec.nodeName,cpu:p.spec.cpu,mem:p.spec.mem,owner:(p.metadata.ownerRefs||[{}])[0].name}))}
+  schedule(name){
+    const p=this.get('Pod',name);if(!p||p.spec.nodeName||p.metadata.deletionTs||p.status.phase!=='Pending')return;
+    const pod={cpu:p.spec.cpu,mem:p.spec.mem,nodeSelector:p.spec.nodeSelector,tolerations:p.spec.tolerations,owner:(p.metadata.ownerRefs||[{}])[0].name};
+    const rows=filterScore(this.nodeStates(),this.boundPods(),pod,this.o.policy||{spread:true}),pick=pickNode(rows);
+    this.schedLog.push({t:this.t,pod:name,rows,chosen:pick});
+    if(!pick){const msg=`0/${rows.length} nodes available: `+Object.entries(rows.flatMap(r=>r.fails.map(f=>f.replace(/ \(.*\)/,''))).reduce((a,f)=>(a[f]=(a[f]||0)+1,a),{})).map(([f,n])=>n+' '+f).join(', ');
+      if(p.status.reason!=='Unschedulable'||p.status.message!==msg){this.emit('scheduler','apiserver',`Pod ${name.slice(-5)} Unschedulable: ${msg}`,'status');this.patch('Pod',name,o=>{o.status.reason='Unschedulable';o.status.message=msg},'scheduler',true)}this.at(3000,()=>this.enq('scheduler',name));return}
+    this.emit('scheduler','scheduler',`filter+score ${rows.length} nodes → ${pick} (score ${rows.find(r=>r.name===pick).score.toFixed(0)})`,'self');
+    this.patch('Pod',name,o=>{o.spec.nodeName=pick;o.status.reason='Scheduled'},'scheduler');
+  }
+  /* ---- kubelet ---- */
+  kubelet(node,name){
+    if(!this.alive[node])return;const p=this.get('Pod',name),st=this.kl[name],who='kubelet/'+node;
+    if(!p)return;if(p.spec.nodeName!==node)return;
+    if(p.metadata.deletionTs){if(!st||!st.killing){this.kl[name]={...(st||{}),killing:true};this.emit(who,'runtime',`SIGTERM ${name.slice(-5)} (grace ${p.spec.graceMs} ms)`);
+      this.at(p.spec.graceMs,()=>{if(!this.alive[node])return;if(this.cont[name]&&this.cont[name].to==null)this.cont[name].to=this.t;this.emit(who,'runtime',`container ${name.slice(-5)} stopped`);this.remove('Pod',name,who)})}return}
+    if(st&&st.started)return;this.kl[name]={started:true};
+    const mk=(f,ms,fn)=>this.at(ms,()=>{if(!this.alive[node])return;const q=this.get('Pod',name);if(!q||q.metadata.deletionTs)return;fn(q)});
+    this.patch('Pod',name,o=>{o.status.reason='ContainerCreating'},who,true);
+    const bad=/bad/.test(p.spec.image);
+    if(bad){const attempt=(n)=>{this.emit(who,'runtime',`pull ${p.spec.image} → manifest unknown`,'status');this.patch('Pod',name,o=>{o.status.reason=n===0?'ErrImagePull':'ImagePullBackOff'},who);mk(null,Math.min(20000,3000*Math.pow(2,n)),()=>attempt(n+1))};mk(null,1200,()=>attempt(0));return}
+    const pull=this.imgs[node].has(p.spec.image)?100:1400+(fnv(p.spec.image)%600);
+    this.emit(who,'runtime',this.imgs[node].has(p.spec.image)?`image ${p.spec.image} already on node`:`pull image ${p.spec.image}`);
+    mk(null,pull,()=>{this.imgs[node].add(p.spec.image);this.emit(who,'runtime',`CRI create+start container for ${name.slice(-5)}`);
+      mk(null,300,()=>{const ip=`10.244.${this.get('Node',node).spec.idx}.${this.ipn[node]++}`;this.patch('Pod',name,o=>{o.status.phase='Running';o.status.podIP=ip;o.status.reason='Started';o.status.startedAt=this.t},who);this.cont[name]={from:this.t,to:null,node};
+        mk(null,p.spec.readyDelay,()=>{this.emit(who,'apiserver',`readiness probe passed → Pod ${name.slice(-5)} Ready`,'status');this.patch('Pod',name,o=>{o.status.ready=true;o.status.reason='Ready'},who)})})});
+  }
+  /* ---- endpoints controller + kube-proxy ---- */
+  syncEndpoints(name){
+    const s=this.get('Service',name);if(!s)return;
+    const addrs=this.list('Pod').filter(p=>MATCH(s.spec.selector,p.metadata.labels)&&p.status.phase==='Running'&&p.status.ready&&!p.metadata.deletionTs).map(p=>p.status.podIP).sort();
+    const cur=this.get('Endpoints',name);this.recon.push({t:this.t,ctrl:'endpoints-controller',key:name,obs:`${addrs.length} ready pod(s)`,des:'endpoints = ready pods',act:cur&&J(cur.spec.addrs)===J(addrs)?'no change':`update endpoints [${addrs.join(', ')}]`});
+    if(cur&&J(cur.spec.addrs)===J(addrs))return;
+    if(!cur)this.write({kind:'Endpoints',metadata:{name},spec:{addrs}},'create','endpoints-controller');else this.patch('Endpoints',name,o=>o.spec.addrs=addrs,'endpoints-controller');
+  }
+  proxySync(node,name){if(!this.alive[node])return;const e=this.get('Endpoints',name);if(!e)return;this.rules[node]=e.spec.addrs.slice();this.ruleLog.push({t:this.t,node,addrs:e.spec.addrs.slice()});this.emit('kube-proxy/'+node,'kube-proxy/'+node,`programmed iptables: ${e.spec.addrs.length} endpoint(s)`,'self')}
+  /* ---- node lifecycle ---- */
+  heartbeat(n){this.at(2000,()=>{if(this.alive[n]){this.hb[n]=this.t;this.heartbeat(n)}})}
+  nodeCtl(){
+    this.o.nodes.forEach(n=>{const nd=this.get('Node',n.name);if(!nd)return;const stale=this.t-this.hb[n.name]>this.o.nodeGrace;
+      if(stale&&nd.status.ready){this.patch('Node',n.name,o=>{o.status.ready=false;o.spec.taints.push({key:'node.kubernetes.io/unreachable',effect:'NoExecute'})},'node-controller');this.emit('node-controller','apiserver',`node ${n.name} NotReady (no heartbeat for ${sec(this.t-this.hb[n.name])}) + taint unreachable:NoExecute`,'status');
+        this.at(this.o.evictAfter,()=>{const n2=this.get('Node',n.name);if(n2&&!n2.status.ready){const ps=this.list('Pod').filter(p=>p.spec.nodeName===n.name&&!p.metadata.deletionTs);this.evictLog.push({t:this.t,node:n.name,pods:ps.length});this.emit('node-controller','apiserver',`evict ${ps.length} pod(s) from ${n.name} (toleration expired)`,'status');ps.forEach(p=>this.patch('Pod',p.metadata.name,o=>o.metadata.deletionTs=this.t,'node-controller'))}})}
+      if(!stale&&!nd.status.ready){this.patch('Node',n.name,o=>{o.status.ready=true;o.spec.taints=o.spec.taints.filter(t=>t.key!=='node.kubernetes.io/unreachable')},'node-controller');this.emit('node-controller','apiserver',`node ${n.name} Ready again`,'status')}});
+    this.at(1000,()=>this.nodeCtl());
+  }
+  killNode(n){this.alive[n]=false;this.emit('chaos',n,`node ${n} goes down (kubelet stops, containers die)`,'lost');Object.entries(this.cont).forEach(([p,c])=>{if(c.node===n&&c.to==null)c.to=this.t})}
+  reviveNode(n){this.alive[n]=true;this.hb[n]=this.t;this.emit('chaos',n,`node ${n} is back`,'self');this.heartbeat(n);this.list('Pod').filter(p=>p.spec.nodeName===n).forEach(p=>this.enq('kubelet:'+n,p.metadata.name))}
+  /* ---- HPA ---- */
+  startHPA(h){this.hpa=h;this.at(h.period,()=>this.hpaTick())}
+  hpaTick(){
+    const h=this.hpa,d=this.get('Deployment',h.dep);if(!d)return;
+    const pods=this.list('Pod').filter(p=>MATCH(d.spec.selector.matchLabels,p.metadata.labels)&&p.status.phase==='Running'&&p.status.ready&&!p.metadata.deletionTs),ready=pods.length,cur=d.spec.replicas;
+    const req=d.spec.template.spec.containers[0].cpu,load=h.load(this.t),use=ready?load/ready:0,util=ready?use/req*100:0;
+    let raw=ready?Math.ceil(cur*util/h.target):cur;if(Math.abs(util/h.target-1)<=0.1)raw=cur;
+    raw=clamp(raw,h.min,h.max);this.hpaWin=(this.hpaWin||[]);this.hpaWin.push({t:this.t,v:raw});this.hpaWin=this.hpaWin.filter(x=>x.t>=this.t-h.stab);
+    let des=raw;if(raw<cur)des=Math.max(...this.hpaWin.map(x=>x.v),raw);if(raw>cur)des=Math.min(raw,Math.max(cur*2,cur+4));
+    des=clamp(des,h.min,h.max);
+    this.hpaLog.push({t:this.t,load,ready,cur,util,raw,des});
+    if(des!==cur){this.emit('hpa','apiserver',`scale Deployment ${cur} → ${des} (cpu ${util.toFixed(0)}% vs target ${h.target}%)`,'status');this.patch('Deployment',h.dep,o=>o.spec.replicas=des,'hpa')}
+    this.at(h.period,()=>this.hpaTick());
+  }
+  /* ---- snapshots ---- */
+  snap(){
+    const pods=this.list('Pod').map(p=>({name:p.metadata.name,node:p.spec.nodeName,rs:(p.metadata.ownerRefs||[{}])[0].name,phase:p.status.phase,ready:!!p.status.ready,reason:p.status.reason,term:!!p.metadata.deletionTs,ip:p.status.podIP}));
+    const rs=this.list('ReplicaSet').map(r=>({name:r.metadata.name,desired:r.spec.replicas,ready:r.status.readyReplicas||0,have:r.status.replicas||0,rev:r.metadata.revision}));
+    const ep=(this.get('Endpoints',this.o.svcName)||{spec:{addrs:[]}}).spec.addrs.length;
+    this.snaps.push({t:this.t,pods,rs,ep,nodes:this.list('Node').map(n=>({name:n.metadata.name,ready:n.status.ready,alive:this.alive[n.metadata.name]})),dep:(this.get('Deployment',this.o.depName)||{spec:{replicas:0}}).spec.replicas});
+    this.at(250,()=>this.snap());
+  }
+}
+/* ================= scenarios (cached) ================= */
+const OPT={ctrlAct:'delete',dropWatch:false,ssel:'fill',srep:8,spolicy:'spread',ssel2:'',lcase:'normal',rcase:'good',rsurge:-1,runav:-1,rback:false,
+  tgrace:2,hload:'spike',htarget:60,hmin:2,hmax:12,hstab:20,nfail:0,nevict:6,nrecover:false,preq:'valid',econf:'conflict',ecompact:6,hT:0.5};
+let S=null;const _sc=new Map();
+function nodeList(){
+  const n=+$('#nn').value,labels=i=>({zone:['a','b','c','a','b'][i],...(i===0?{disk:'ssd'}:{}),...(i===1?{disk:'ssd'}:{})});
+  return Array.from({length:n},(_,i)=>({name:'node-'+i,cpu:2000,mem:4096,labels:labels(i),taints:($('#taint').checked&&i===n-1)?[{key:'dedicated',value:'gpu',effect:'NoSchedule'}]:[]}));
+}
+function newSim(extra={}){
+  const nodes=nodeList(),sim=new Sim({nodes,svcName:S.svc?S.svc.metadata.name:'',depName:S.dep.metadata.name,nodeGrace:8000,evictAfter:OPT.nevict*1000,resync:6000,policy:{spread:true},...extra});
+  const dep=C(S.dep);dep.spec.template.spec.graceMs=OPT.tgrace*1000;
+  sim.write(dep,'create','kubectl');if(S.svc)sim.write(C(S.svc),'create','kubectl');return sim;
+}
+function cached(key,fn){const k=key+'|'+S.key;if(_sc.has(k))return _sc.get(k);const v=fn();_sc.set(k,v);if(_sc.size>14)_sc.delete(_sc.keys().next().value);return v}
+const simApply=()=>cached('apply',()=>{const s=newSim();s.run(16000);return s});
+function simRollout(){return cached('rollout'+OPT.rcase+OPT.rsurge+OPT.runav+OPT.rback+OPT.tgrace,()=>{
+  const s=newSim();s.run(14000);const d=s.get('Deployment',S.dep.metadata.name);
+  if(OPT.rsurge>=0||OPT.runav>=0)s.patch('Deployment',d.metadata.name,o=>{if(OPT.rsurge>=0)o.spec.strategy.maxSurge=OPT.rsurge;if(OPT.runav>=0)o.spec.strategy.maxUnavailable=OPT.runav},'kubectl');
+  const img=OPT.rcase==='bad'?d.spec.template.spec.containers[0].image.split(':')[0]+':bad-v3':d.spec.template.spec.containers[0].image.split(':')[0]+':v2';
+  s.at(100,()=>{s.emit('kubectl','apiserver',`kubectl set image → ${img}`);s.patch('Deployment',d.metadata.name,o=>o.spec.template.spec.containers[0].image=img,'kubectl')});
+  if(OPT.rback)s.at(18000,()=>{s.emit('kubectl','apiserver','kubectl rollout undo');s.patch('Deployment',d.metadata.name,o=>o.spec.template.spec.containers[0].image=d.spec.template.spec.containers[0].image,'kubectl')});
+  s.run(14000+55000);s.rolloutStart=14000;return s})}
+function simNodeFail(){return cached('nf'+OPT.nfail+OPT.nevict+OPT.nrecover+OPT.tgrace,()=>{
+  const s=newSim();s.run(14000);const names=nodeList().map(n=>n.name);const pods=s.list('Pod');const cnt={};pods.forEach(p=>cnt[p.spec.nodeName]=(cnt[p.spec.nodeName]||0)+1);
+  const victim=names[Math.min(OPT.nfail,names.length-1)]||Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
+  s.victim=victim;s.at(100,()=>s.killNode(victim));if(OPT.nrecover)s.at(100+30000,()=>s.reviveNode(victim));s.run(14000+55000);s.failAt=14100;return s})}
+function simHPA(){return cached('hpa'+OPT.hload+OPT.htarget+OPT.hmin+OPT.hmax+OPT.hstab+S.dep.spec.template.spec.containers[0].cpu,()=>{
+  const req=S.dep.spec.template.spec.containers[0].cpu,base=req*1.2,prof={spike:t=>t<20000?base:t<60000?base*7:base,ramp:t=>base*(1+Math.min(6,Math.max(0,(t-15000)/12000))),steady:t=>base*2};
+  const s=newSim();s.write({kind:'HPA',metadata:{name:'hpa'},spec:{}},'create','kubectl',null,true);s.run(8000);
+  s.startHPA({dep:S.dep.metadata.name,period:3000,min:OPT.hmin,max:OPT.hmax,target:OPT.htarget,stab:OPT.hstab*1000,load:t=>prof[OPT.hload](t)});s.run(110000);return s})}
+function simCtrl(){return cached('ctrl'+OPT.ctrlAct+OPT.dropWatch,()=>{
+  const s=newSim();s.run(14000);s.mark=s.t;const d=S.dep.metadata.name,pods=s.list('Pod').filter(p=>p.spec.nodeName);const rsn=s.list('ReplicaSet')[0].metadata.name;
+  if(OPT.dropWatch)s.drop={from:14000,until:14400};
+  if(OPT.ctrlAct==='delete'){const v=pods[0].metadata.name;s.at(100,()=>{s.emit('chaos','apiserver',`kubectl delete pod ${v.slice(-5)} --force`);s.remove('Pod',v,'kubectl')})}
+  else if(OPT.ctrlAct==='scale'){s.at(100,()=>{s.emit('kubectl','apiserver',`kubectl scale --replicas=${S.dep.spec.replicas+2}`);s.patch('Deployment',d,o=>o.spec.replicas=S.dep.spec.replicas+2,'kubectl')})}
+  else{s.at(100,()=>{s.emit('kubectl','apiserver','kubectl edit: set replicas back to '+Math.max(1,S.dep.spec.replicas-1));s.patch('Deployment',d,o=>o.spec.replicas=Math.max(1,S.dep.spec.replicas-1),'kubectl')})}
+  s.run(14000+14000);return s})}
+function simLife(){return cached('life'+OPT.lcase,()=>{
+  const nodes=nodeList(),dep=C(S.dep);dep.spec.replicas=1;dep.spec.strategy={maxSurge:1,maxUnavailable:0};
+  const c=dep.spec.template.spec.containers[0];if(OPT.lcase==='bad')c.image=c.image.split(':')[0]+':bad-tag';if(OPT.lcase==='slow')c.readyDelay=9000;if(OPT.lcase==='normal'&&!c.readyDelay)c.readyDelay=3000;
+  const s=new Sim({nodes,svcName:S.svc?S.svc.metadata.name:'',depName:dep.metadata.name,nodeGrace:8000,evictAfter:6000,resync:6000,policy:{spread:true}});s.write(dep,'create','kubectl');if(S.svc)s.write(C(S.svc),'create','kubectl');s.run(30000);return s})}
+
+/* ================= build ================= */
+function build(){
+  const o={};
+  const text=$('#src').value;
+  try{const docs=parseYAML(text);const n=normalize(docs);o.dep=n.dep;o.svc=n.svc;o.docs=docs}catch(e){o.error='Manifest error: '+e.message;return o}
+  o.key=text+'|'+$('#nn').value+'|'+$('#taint').checked;return o;
+}
+
+/* ================= player ================= */
+let gen=0,paused=false,speed=1,cur=0,playingAll=false;
+function animate(draw,dur){const g=++gen;let el=0,last=null;return new Promise(res=>{function frame(now){if(g!==gen){res(false);return}if(last===null)last=now;const dt=now-last;last=now;if(!paused)el+=dt*speed;const p=Math.min(1,el/dur);draw(p);if(p<1)requestAnimationFrame(frame);else res(true)}requestAnimationFrame(frame)})}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms/speed));
+const podCls=p=>p.term?'term':/Err|BackOff/.test(p.reason||'')?'err':p.ready?'ready':p.phase==='Running'?'run':'pend';
+const podChip=p=>`<span class="pod ${podCls(p)}" title="${esc(p.name)} · ${esc(p.reason||p.phase)}${p.ip?' · '+p.ip:''}">${esc(p.name.slice(-5))}${p.term?' ✕':!p.ready&&p.phase==='Running'?' …':''}</span>`;
+function snapAt(sim,t){let b=sim.snaps[0];for(const s of sim.snaps){if(s.t<=t)b=s;else break}return b}
+
+/* =========================================================
+   PHASE 1: kubectl apply end-to-end
+   ========================================================= */
+const LANES=['kubectl','apiserver','etcd','deployment-controller','replicaset-controller','scheduler','kubelet','endpoints-controller','kube-proxy'];
+const laneOf=n=>n.startsWith('kubelet')||n==='runtime'||n.startsWith('node-')&&false?'kubelet':n.startsWith('kube-proxy')?'kube-proxy':LANES.includes(n)?n:null;
+function draw1(p){
+  const sim=simApply(),ready=sim.snaps.find(s=>s.pods.length&&s.pods.filter(x=>x.ready).length>=S.dep.spec.replicas);
+  const tEnd=ready?ready.t+300:12000;
+  const rows=[];sim.log.filter(l=>l.t<=tEnd).forEach(l=>{const a=laneOf(l.from),b=laneOf(l.to);if(!a||!b||l.kind==='self'&&false)return;const k=a+'>'+b+'>'+l.msg.replace(/[a-z0-9]{5,8}\b/g,'*').replace(/\d+(\.\d+)?/g,'#');const last=rows[rows.length-1];
+    if(last&&last.k===k){last.n++}else rows.push({t:l.t,a,b,msg:l.msg,k,n:1,kind:l.kind})});
+  const show=rows.slice(0,48),k=p>=1?show.length:Math.ceil(p*show.length),RH=19,W=900,lx=i=>60+i*((W-100)/(LANES.length-1));
+  let sv=`<svg viewBox="0 0 ${W+60} ${30+show.length*RH+10}" style="max-height:${30+show.length*RH+20}px">`;
+  LANES.forEach((l,i)=>{sv+=`<text x="${lx(i)}" y="12" text-anchor="middle" style="font-size:9.5px;font-weight:700">${esc(l.replace('-controller','-ctrl'))}</text><line x1="${lx(i)}" x2="${lx(i)}" y1="18" y2="${30+show.length*RH}" stroke="var(--line)" stroke-dasharray="3 3"/>`});
+  show.slice(0,k).forEach((r,i)=>{const y=34+i*RH,ai=LANES.indexOf(r.a),bi=LANES.indexOf(r.b),x1=lx(ai),x2=lx(bi);
+    if(ai===bi)sv+=`<circle cx="${x1}" cy="${y}" r="4" fill="${tc(ai)}"/><text x="${x1+8}" y="${y+4}" style="font-size:9.5px">${esc(short(r.msg,60))}${r.n>1?' ×'+r.n:''}</text>`;
+    else{const col=r.kind==='store'?'var(--t7)':r.kind==='status'?'var(--bad)':tc(ai);sv+=`<line x1="${x1}" x2="${x2}" y1="${y}" y2="${y}" stroke="${col}" stroke-width="1.8"/><path d="M${x2},${y} l${x2>x1?-7:7},-4 l0,8z" fill="${col}"/><text x="${(x1+x2)/2}" y="${y-3}" text-anchor="middle" style="font-size:9.5px;paint-order:stroke;stroke:var(--card);stroke-width:3px">${esc(short(r.msg,56))}${r.n>1?' ×'+r.n:''}</text>`}
+    sv+=`<text x="0" y="${y+4}" style="font-size:9px;fill:var(--mut)">${sec(r.t)}</text>`});
+  sv+='</svg>';
+  const fin=snapAt(sim,tEnd),dep=sim.get('Deployment',S.dep.metadata.name),ep=S.svc?sim.get('Endpoints',S.svc.metadata.name):null;
+  return`<div class="caption">${esc(S.dep.metadata.name)}: <span class="mono">kubectl apply</span> → ${show[Math.max(0,k-1)]?esc(show[Math.max(0,k-1)].msg):''} <b>(${show[Math.max(0,k-1)]?sec(show[Math.max(0,k-1)].t):''})</b>. ${p>=1?`All ${S.dep.spec.replicas} pod(s) ready after <b>${sec(tEnd)}</b>.`:''}</div>
+  <div class="g2" style="grid-template-columns:1.7fr 1fr"><div>${sv}</div>
+  <div><h3 style="margin-top:0">Resulting state (t=${sec(tEnd)})</h3>${(fin.nodes).map(n=>`<div class="node ${n.alive?'':'dead'}" style="margin-bottom:6px"><b>${n.name}</b> <span class="tag ${n.ready?'g':'r'}">${n.ready?'Ready':'NotReady'}</span><div>${fin.pods.filter(x=>x.node===n.name).map(podChip).join('')||'<span class="note">no pods</span>'}</div></div>`).join('')}${fin.pods.some(x=>!x.node)?`<div class="node"><b>Pending (unscheduled)</b><div>${fin.pods.filter(x=>!x.node).map(podChip).join('')}</div></div>`:''}
+  <table><tr><td>Deployment</td><td class="mono">${dep&&dep.status?esc(J(dep.status)):'-'}</td></tr><tr><td>Endpoints</td><td class="mono">${ep?esc(ep.spec.addrs.join(', ')||'(none ready)'):'-'}</td></tr><tr><td>etcd revision</td><td class="mono">${sim.rev}</td></tr></table></div></div>
+  <div class="note">Nothing here is imperative: <b>kubectl only writes desired state</b>. Each component watches the API server for objects it cares about and writes the next piece of state, so the whole rollout emerges from independent reconcile loops.</div>`;
+}
+
+/* =========================================================
+   PHASE 2: API SERVER PIPELINE
+   ========================================================= */
+const USERS={'tok-alice':{name:'alice',groups:['system:masters'],role:'cluster-admin'},'tok-bob':{name:'bob',groups:['dev'],role:'developer'},'tok-carol':{name:'carol',groups:['viewers'],role:'viewer'}};
+const RBAC={'cluster-admin':[['*','*']],developer:[['create','deployments'],['get','deployments'],['update','deployments'],['list','pods']],viewer:[['get','deployments'],['list','pods'],['list','deployments']]};
+function pipeline(req,etcdRv){
+  const st=[];const dep=C(req.obj);let obj=dep;
+  const user=USERS[req.token];
+  if(!user){st.push({n:'Authentication',ok:false,msg:'401 Unauthorized: invalid or missing bearer token'});return{st,code:401}}
+  st.push({n:'Authentication',ok:true,msg:`token → user "${user.name}" (groups: ${user.groups.join(', ')})`});
+  const allowed=(RBAC[user.role]||[]).some(([v,r])=>(v==='*'||v===req.verb)&&(r==='*'||r===req.res));
+  if(!allowed){st.push({n:'Authorization (RBAC)',ok:false,msg:`403 Forbidden: ${user.name} (role ${user.role}) cannot ${req.verb} ${req.res}`});return{st,code:403}}
+  st.push({n:'Authorization (RBAC)',ok:true,msg:`role ${user.role} allows ${req.verb} ${req.res}`});
+  // mutating admission
+  const before=C(obj),added=[];
+  const sp=obj.spec;if(sp.replicas==null){sp.replicas=1;added.push('spec.replicas=1')}
+  if(!obj.metadata.namespace){obj.metadata.namespace='default';added.push('metadata.namespace=default')}
+  sp.template.spec.containers.forEach(c=>{if(!c.pullPolicy){c.pullPolicy=/:latest$/.test(c.image)?'Always':'IfNotPresent';added.push(`${c.name}.imagePullPolicy=${c.pullPolicy}`)}if(!c.limitsCpu){c.limitsCpu=Math.max(c.cpu*2,100)+'m';added.push(`${c.name}.limits.cpu=${c.limitsCpu} (LimitRange)`)}});
+  if(sp.template.spec.termination==null){sp.template.spec.termination=30;added.push('terminationGracePeriodSeconds=30')}
+  st.push({n:'Mutating admission',ok:true,msg:added.length?`injected defaults: ${added.join(', ')}`:'nothing to inject'});
+  // validation
+  const errs=[];if(sp.replicas<0)errs.push('spec.replicas: must be >= 0');
+  if(!MATCH(sp.selector.matchLabels,sp.template.metadata.labels)||!Object.keys(sp.selector.matchLabels||{}).length)errs.push('spec.selector: does not match template.metadata.labels');
+  if(!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(obj.metadata.name))errs.push('metadata.name: must be a DNS-1123 label');
+  if(errs.length){st.push({n:'Schema validation',ok:false,msg:'422 Unprocessable: '+errs.join('; ')});return{st,code:422}}
+  st.push({n:'Schema validation',ok:true,msg:'object is well-formed'});
+  // validating admission: ResourceQuota
+  const needCpu=sp.replicas*sp.template.spec.containers.reduce((a,c)=>a+c.cpu,0),quota=4000;
+  if(needCpu>quota){st.push({n:'Validating admission (ResourceQuota)',ok:false,msg:`403 exceeded quota: requests.cpu ${needCpu}m > ${quota}m for namespace default`});return{st,code:403}}
+  st.push({n:'Validating admission (ResourceQuota)',ok:true,msg:`requests.cpu ${needCpu}m ≤ quota ${quota}m`});
+  // persist
+  if(req.stale){st.push({n:'Persist to etcd',ok:false,msg:`409 Conflict: object has been modified (you sent resourceVersion ${etcdRv-3}, current is ${etcdRv}); re-read and retry`});return{st,code:409}}
+  st.push({n:'Persist to etcd',ok:true,msg:`write /registry/deployments/default/${obj.metadata.name} → resourceVersion ${etcdRv+1}`});
+  st.push({n:'Response + watch fan-out',ok:true,msg:`201 Created; watchers (deployment-controller) receive ADDED @rev ${etcdRv+1}`});
+  return{st,code:201,obj,before,added};
+}
+function draw2(p){
+  const k={valid:{token:'tok-alice',verb:'create',res:'deployments'},notoken:{token:'tok-none',verb:'create',res:'deployments'},viewer:{token:'tok-carol',verb:'create',res:'deployments'},quota:{token:'tok-bob',verb:'create',res:'deployments',mut:o=>o.spec.replicas=400},selector:{token:'tok-bob',verb:'create',res:'deployments',mut:o=>o.spec.template.metadata.labels={app:'other'}},stale:{token:'tok-bob',verb:'update',res:'deployments',stale:true}}[OPT.preq];
+  const obj=C(S.dep);if(k.mut)k.mut(obj);obj.spec.template.spec.termination=null;
+  const R=pipeline({...k,obj},40),show=Math.max(1,Math.ceil(p*R.st.length)),last=R.st[Math.min(show,R.st.length)-1];
+  const stages=['Authentication','Authorization (RBAC)','Mutating admission','Schema validation','Validating admission (ResourceQuota)','Persist to etcd','Response + watch fan-out'];
+  const boxes=stages.map((s,i)=>{const r=R.st.find(x=>x.n===s),idx=R.st.indexOf(r),vis=r&&idx<show,col=!r?'var(--line)':!vis?'var(--line)':r.ok?'var(--ok)':'var(--bad)';return`<div class="row" style="border-color:${col};${r&&vis?'':'opacity:.4'}"><b>${i+1}. ${esc(s)}</b>${vis?` · <span class="${r.ok?'ok':'bad'}">${r.ok?'✔':'✘'}</span> ${esc(r.msg)}`:''}</div>`}).join('');
+  return`<div class="caption ${R.code>=400?'bad':'good'}">${esc(k.verb.toUpperCase())} ${k.res} as <b>${esc((USERS[k.token]||{name:'(anonymous)'}).name)}</b> → <b>HTTP ${R.code}</b>${R.code>=400?' — the request stops at the first failing stage and nothing is written to etcd':''}</div>
+  <div class="g2"><div><h3 style="margin-top:0">Request pipeline</h3>${boxes}</div>
+  <div><h3 style="margin-top:0">Mutating admission: defaults injected into your Deployment</h3>${R.added&&R.added.length?`<pre>${esc(R.added.join('\n'))}</pre>`:'<div class="note">(request rejected before mutation, or nothing to add)</div>'}<h3>What gets stored</h3><pre>${esc(J({kind:'Deployment',metadata:{name:S.dep.metadata.name,namespace:'default',resourceVersion:R.code===201?'41':'-'},spec:{replicas:obj.spec.replicas,strategy:S.dep.spec.strategy,selector:obj.spec.selector,containers:obj.spec.template.spec.containers.map(c=>({name:c.name,image:c.image,requests:{cpu:c.cpu+'m',memory:c.mem+'Mi'}}))}}))}</pre></div></div>
+  <div class="note">Every request goes through the same chain: <b>authenticate</b> who you are, <b>authorize</b> (RBAC) what you may do, <b>mutating admission</b> fills defaults, the object is <b>validated</b>, <b>validating admission</b> (quotas, policies) can still reject it, and only then is it persisted to etcd and fanned out to watchers. The API server is the only component that talks to etcd.</div>`;
+}
+
+/* =========================================================
+   PHASE 3: ETCD + WATCH
+   ========================================================= */
+function draw3(p){
+  const sim=simApply();
+  if(OPT.econf==='conflict'){
+    const steps=[['A','GET Deployment/'+S.dep.metadata.name,'rv 12'],['B','GET Deployment/'+S.dep.metadata.name,'rv 12'],['A','PUT replicas=5, If-Match rv 12','OK → rv 13'],['B','PUT image=v2, If-Match rv 12','409 Conflict (object is at rv 13)'],['B','GET Deployment/'+S.dep.metadata.name,'rv 13 (replicas=5)'],['B','PUT replicas=5,image=v2, If-Match rv 13','OK → rv 14']];
+    const k=Math.max(1,Math.ceil(p*steps.length));
+    return`<div class="caption">Two clients update the same object. etcd/API server use <b>optimistic concurrency</b>: a write carries the resourceVersion it was based on; if the object changed since, it is rejected (409) instead of silently overwriting.</div><table><tr><th>#</th><th>client</th><th>request</th><th>result</th></tr>${steps.slice(0,k).map((s,i)=>`<tr style="${s[2].startsWith('409')?'background:color-mix(in srgb,var(--bad) 14%,var(--card))':''}"><td>${i+1}</td><td><b>${s[0]}</b></td><td class="mono">${esc(s[1])}</td><td class="mono ${s[2].startsWith('409')?'bad':''}">${esc(s[2])}</td></tr>`).join('')}</table>
+    <div class="note">This is why controllers re-read and retry: no locks, no lost updates. Compare-and-swap on resourceVersion is the only concurrency primitive the whole control plane relies on.</div>`;
+  }
+  if(OPT.econf==='watch'){
+    const ev=sim.wlog.filter(e=>e.kind==='Pod'||e.kind==='ReplicaSet'||e.kind==='Deployment').slice(0,22),n=ev.length;
+    const cut=Math.floor(n*0.45),resumeRv=ev[cut]?ev[cut].rv:0,comp=OPT.ecompact*Math.floor(n/10)+ev[0].rv,gone=resumeRv<comp;
+    const k=Math.ceil(p*n);
+    return`<div class="caption">A client watches Pods from the start. Its connection drops after event ${cut+1} (resourceVersion ${resumeRv}); it reconnects asking for events <b>after ${resumeRv}</b>. etcd compacted history up to revision <b>${comp}</b> → ${gone?'<b class="bad">410 Gone: history is gone, the client must re-LIST and start a new watch</b>':'<b class="ok">the server can replay the missed events</b>'}.</div>
+    <div class="g2"><div><table><tr><th>#</th><th>rev</th><th>event</th><th>object</th></tr>${ev.slice(0,k).map((e,i)=>`<tr style="${i===cut?'background:var(--p4)':''}${i>cut&&gone?';opacity:.5':''}"><td>${i+1}</td><td class="n">${e.rv}</td><td>${e.type}</td><td class="mono">${e.kind}/${esc(e.name.slice(-12))}</td></tr>`).join('')}</table></div>
+    <div><div class="box"><b>Informer algorithm</b><ol style="margin:6px 0 0 18px;padding:0"><li>LIST all objects → remember resourceVersion</li><li>WATCH from that resourceVersion; apply ADDED/MODIFIED/DELETED to a local cache</li><li>On disconnect: re-WATCH from the last seen rv</li><li>On 410 Gone: LIST again (full resync) and continue</li></ol></div><div class="note">Controllers never poll etcd; they react to this event stream, backed by a periodic resync as a safety net (phase 4).</div></div></div>`;
+  }
+  const keys=[...sim.kv.keys()].sort(),show=Math.max(1,Math.ceil(p*keys.length));
+  return`<div class="caption">etcd is a versioned key-value store: every write bumps one global <b>revision</b>, and each object remembers the revision of its last change (its <b>resourceVersion</b>). After this rollout etcd is at revision <b>${sim.rev}</b> and holds ${keys.length} keys.</div>
+  <div class="g2"><div><table><tr><th>key</th><th class="n">resourceVersion</th></tr>${keys.slice(0,show).map(k=>`<tr><td class="mono">${esc(k)}</td><td class="n">${sim.kv.get(k).obj.metadata.rv}</td></tr>`).join('')}</table></div>
+  <div><h3 style="margin-top:0">Watch events emitted so far (${sim.wlog.length})</h3>${sim.wlog.slice(0,12).map(e=>`<span class="row">rev ${e.rv} · ${e.type} · ${e.kind}/${esc(e.name.slice(-14))}</span>`).join('')}</div></div>
+  <div class="note">Because all state lives in etcd and only the API server writes to it, restarting any controller loses nothing: it re-lists and rebuilds its cache. Pick “update race” or “watch resume” above.</div>`;
+}
+
+/* =========================================================
+   PHASE 4: CONTROLLERS / RECONCILE
+   ========================================================= */
+function draw4(p){
+  const sim=simCtrl(),t0=14000,tEnd=28000,T=t0+p*(tEnd-t0);
+  const rec=sim.recon.filter(r=>r.t>=t0&&r.t<=T),state=snapAt(sim,T),before=snapAt(sim,t0-100);
+  const kinds={delete:'a pod is deleted by hand',scale:'replicas is raised by 2',edit:'replicas is lowered by 1'};
+  const lost=sim.log.filter(l=>l.kind==='lost'&&l.t<=T);
+  return`<div class="caption">Event: <b>${kinds[OPT.ctrlAct]}</b>${OPT.dropWatch?' <span class="bad">and the watch event is LOST</span>':''}. Controllers do not execute commands; each loop compares <b>observed</b> state with <b>desired</b> state and takes the smallest step to close the gap (level-triggered, so it is safe to run twice).</div>
+  <div class="g2"><div><h3 style="margin-top:0">Reconcile log</h3><table><tr><th>t</th><th>controller</th><th>observed → desired</th><th>action</th></tr>${rec.slice(-12).map(r=>`<tr><td>${sec(r.t-t0)}</td><td>${esc(r.ctrl.replace('-controller',''))}</td><td class="mono">${esc(r.obs)} → ${esc(r.des)}</td><td class="mono">${esc(r.act||'…')}</td></tr>`).join('')||'<tr><td colspan="4">…</td></tr>'}</table>
+    ${lost.map(l=>`<div class="note bad">${sec(l.t-t0)} ${esc(l.msg)}</div>`).join('')}${OPT.dropWatch&&T>t0+6000?'<div class="note ok">The periodic informer resync (every 6 s here, 10–15 min in real clusters) re-enqueued the ReplicaSet and the missing pod was recreated anyway.</div>':''}</div>
+  <div><h3 style="margin-top:0">Cluster state at +${((T-t0)/1000).toFixed(1)}s</h3>${state.nodes.map(n=>`<div class="node" style="margin-bottom:6px"><b>${n.name}</b><div>${state.pods.filter(x=>x.node===n.name).map(podChip).join('')||'<span class="note">no pods</span>'}</div></div>`).join('')}<div class="note">desired replicas: <b>${state.dep}</b> · ReplicaSets: ${state.rs.map(r=>r.name.slice(-5)+' '+r.ready+'/'+r.desired).join(', ')}</div></div></div>
+  <div class="note">Ownership chain: Deployment → ReplicaSet → Pods (ownerReferences). Deleting a Pod is simply a change that makes observed ≠ desired, so the ReplicaSet controller recreates it. Edge-triggered systems break when an event is missed; level-triggered controllers heal on the next pass or resync.</div>`;
+}
+
+/* =========================================================
+   PHASE 5: SCHEDULER
+   ========================================================= */
+function schedFill(){
+  const nodes=nodeList().map(n=>({...n,ready:true})),tpl=S.dep.spec.template.spec,c=tpl.containers[0],bound=[],steps=[];
+  const pol={spread:OPT.spolicy==='spread',pack:OPT.spolicy==='pack'};
+  for(let i=0;i<OPT.srep;i++){const pod={cpu:c.cpu,mem:c.mem,nodeSelector:tpl.nodeSelector,tolerations:tpl.tolerations,owner:'app'},rows=filterScore(nodes,bound,pod,pol),pick=pickNode(rows);steps.push({i,rows,pick});if(pick)bound.push({node:pick,cpu:pod.cpu,mem:pod.mem,owner:'app'})}
+  return{nodes,steps,bound,c};
+}
+function draw5(p){
+  if(!S.dep)return'';
+  const F=schedFill(),k=p>=1?F.steps.length:Math.max(1,Math.ceil(p*F.steps.length)),st=F.steps[k-1],used=n=>{const m=F.steps.slice(0,k).filter(s=>s.pick===n.name);return{cpu:m.length*F.c.cpu,mem:m.length*F.c.mem,n:m.length}};
+  const pending=F.steps.slice(0,k).filter(s=>!s.pick).length;
+  return`<div class="caption">Pod ${k}/${F.steps.length} (requests ${F.c.cpu}m cpu, ${F.c.mem}Mi): the scheduler <b>filters</b> nodes that cannot run it, <b>scores</b> the rest, and <b>binds</b> the pod to the best one. ${st.pick?`→ <b>${st.pick}</b>`:'<b class="bad">→ no feasible node: the pod stays Pending</b>'}</div>
+  <div class="g2"><div><table><tr><th>node</th><th>filter result</th><th class="n">score</th></tr>${st.rows.map(r=>`<tr style="${r.name===st.pick?'background:var(--p2)':''}"><td><b>${r.name}</b></td><td>${r.fails.length?'<span class="bad">✘ '+esc(r.fails.join('; '))+'</span>':'<span class="ok">✔ feasible</span>'}</td><td class="n">${r.score==null?'-':r.score.toFixed(0)}</td></tr>`).join('')}</table>
+  <div class="note">Policy: ${OPT.spolicy==='spread'?'LeastAllocated + spread replicas of the same app':OPT.spolicy==='pack'?'MostAllocated (bin-packing)':'LeastAllocated'}. Filters: node Ready, taints/tolerations, nodeSelector, free cpu/memory against <i>requests</i>.</div></div>
+  <div>${F.nodes.map(n=>{const u=used(n);return`<div class="node" style="margin-bottom:6px"><b>${n.name}</b> <span class="note">${esc(Object.entries(n.labels).map(([a,b])=>a+'='+b).join(' '))}${n.taints.length?' · taint '+n.taints[0].key:''}</span><div class="lrow"><b style="min-width:34px">cpu</b><span class="bar2" style="width:${u.cpu/n.cpu*60}%;background:var(--t0)"></span><span class="mono">${u.cpu}/${n.cpu}m</span></div><div class="lrow"><b style="min-width:34px">mem</b><span class="bar2" style="width:${u.mem/n.mem*60}%;background:var(--t2)"></span><span class="mono">${Math.round(u.mem)}/${n.mem}Mi</span></div><div>${Array.from({length:u.n},(_,i)=>`<span class="pod ready">pod</span>`).join('')}</div></div>`}).join('')}${pending?`<div class="node"><b>Pending</b> ${Array.from({length:pending},()=>'<span class="pod pend">pod</span>').join('')}</div>`:''}</div></div>
+  <div class="note">Scheduling decisions use the <b>requests</b> declared in the manifest, not actual usage. Edit requests, add a nodeSelector, or taint the last node (job panel) to see Pending pods and "0/N nodes available" reasons.</div>`;
+}
+
+/* =========================================================
+   PHASE 6: KUBELET + POD LIFECYCLE
+   ========================================================= */
+function draw6(p){
+  const sim=simLife(),pod=sim.snaps.length?sim.list('Pod')[0]:null,tl=[],find=(f)=>{for(const s of sim.snaps){const x=s.pods[0];if(x&&f(x))return s.t}return null};
+  const tPend=find(x=>true),tSched=find(x=>x.node),tCreating=find(x=>x.reason==='ContainerCreating'||/Err|BackOff/.test(x.reason||'')),tRun=find(x=>x.phase==='Running'),tReady=find(x=>x.ready);
+  const T=p*Math.min(30000,Math.max(12000,(tReady||14000)+2500)),W=620,xs=t=>10+t/Math.min(30000,Math.max(12000,(tReady||14000)+2500))*W;
+  const seg=(a,b,col,l)=>a==null?'':`<rect x="${xs(a)}" y="30" width="${Math.max(2,xs(Math.min(b==null?T:b,T))-xs(a))}" height="26" fill="${col}" opacity="${a<=T?1:0}"><title>${l}</title></rect><text x="${xs(a)+3}" y="47" style="font-size:9.5px;fill:#fff;opacity:${a<=T?1:0}">${l}</text>`;
+  const sv=`<svg viewBox="0 0 650 90" style="max-height:100px">${seg(tPend,tSched,'var(--t7)','Pending')}${seg(tSched,tCreating||tRun,'var(--t4)','Scheduled')}${seg(tCreating,tRun||(OPT.lcase==='bad'?30000:null),OPT.lcase==='bad'?'var(--bad)':'var(--t3)',OPT.lcase==='bad'?'ErrImagePull → BackOff':'pull image + create')}${seg(tRun,tReady,'var(--t1)','Running (not ready)')}${seg(tReady,null,'var(--ok)','Ready · gets traffic')}<line x1="${xs(T)}" x2="${xs(T)}" y1="10" y2="70" stroke="var(--ink)" opacity=".5"/><text x="10" y="82" style="fill:var(--mut);font-size:10px">time since apply (s)</text></svg>`;
+  const log=sim.log.filter(l=>l.t<=T&&(l.from.startsWith('kubelet')||l.to==='runtime'||l.from==='scheduler')).slice(-9);
+  const now=snapAt(sim,T).pods[0];
+  return`<div class="caption">One pod, from <span class="mono">Pending</span> to <span class="mono">Ready</span>. State now: <b>${esc(now?(now.ready?'Running · Ready':now.reason||now.phase):'-')}</b>. ${OPT.lcase==='bad'?'<b class="bad">The image tag does not exist: the kubelet keeps retrying with exponential back-off and the pod never becomes Ready.</b>':OPT.lcase==='slow'?'The readiness probe has a long initialDelay, so the pod runs but receives no traffic for a while.':'The kubelet pulls the image, asks the container runtime (CRI) to start it, then readiness probing decides when it can serve.'}</div>${sv}
+  <div class="g2"><div><h3 style="margin-top:0">Kubelet / runtime activity</h3>${log.map(l=>`<span class="row">${sec(l.t)} · ${esc(l.from)} → ${esc(l.to)}: ${esc(l.msg)}</span>`).join('')||'<span class="note">…</span>'}</div>
+  <div><h3 style="margin-top:0">What the kubelet does</h3><ol style="margin:0 0 0 18px;padding:0;font-size:13px"><li>Watches Pods bound to its node (<span class="mono">spec.nodeName</span>)</li><li>Pulls images and starts containers through the CRI</li><li>Runs liveness/readiness probes and reports <span class="mono">status</span> back to the API server</li><li>Renews the node heartbeat (Lease) every few seconds</li><li>On deletion: SIGTERM, grace period, then SIGKILL, then removes the Pod object</li></ol></div></div>`;
+}
+
+/* =========================================================
+   PHASE 7: SERVICES, ENDPOINTS, KUBE-PROXY
+   ========================================================= */
+function trafficRun(sim,t0,t1,every){
+  const out=[],rnd=(()=>{let s=7;return()=>{s=(Math.imul(s,1103515245)+12345)&0x7fffffff;return s/0x7fffffff}})(),ipToPod=new Map();
+  sim.snaps.forEach(s=>s.pods.forEach(p=>{if(p.ip)ipToPod.set(p.ip,p.name)}));
+  for(let t=t0;t<=t1;t+=every){
+    const node=sim.o.nodes[Math.floor(rnd()*sim.o.nodes.length)].name;let rules=[];for(const r of sim.ruleLog){if(r.node===node&&r.t<=t)rules=r.addrs;else if(r.t>t)break}
+    if(!rules.length){out.push({t,ok:false,why:'no endpoints'});continue}
+    const ip=rules[Math.floor(rnd()*rules.length)],pn=ipToPod.get(ip),c=sim.cont[pn];const up=c&&c.from<=t&&(c.to==null||t<c.to);
+    out.push({t,ok:!!up,ip,pod:pn,why:up?'':'connection reset (container already gone)'});
+  }
+  return out;
+}
+function draw7(p){
+  if(!S.svc)return'<div class="box">Add a Service to the manifest to see Endpoints and kube-proxy.</div>';
+  const sim=simRollout(),T0=sim.rolloutStart,tEnd=T0+30000,T=T0+p*30000,tr=trafficRun(sim,T0-2000,tEnd,150);
+  const stable=snapAt(sim,T0-200),ep=stable.pods.filter(x=>x.ready&&!x.term);
+  const per={};tr.filter(r=>r.ok).forEach(r=>per[r.pod]=(per[r.pod]||0)+1);const done=tr.filter(r=>r.t<=T),errs=done.filter(r=>!r.ok).length;
+  const sv=(()=>{const W=640,bw=W/tr.length*1;let s=`<svg viewBox="0 0 680 60" style="max-height:70px">`;tr.forEach((r,i)=>{if(r.t>T)return;s+=`<rect x="${10+i*bw}" y="${r.ok?10:30}" width="${Math.max(1.5,bw-0.5)}" height="${r.ok?16:20}" fill="${r.ok?'var(--ok)':'var(--bad)'}"/>`});return s+'</svg>'})();
+  const rulesTxt=ep.map((e,i)=>`-A KUBE-SVC-${S.svc.metadata.name.toUpperCase()} -m statistic --mode random --probability ${(1/(ep.length-i)).toFixed(5)} -j KUBE-SEP-${e.name.slice(-5).toUpperCase()}`).join('\n');
+  const now=snapAt(sim,T);
+  return`<div class="caption">Service <b>${esc(S.svc.metadata.name)}</b> (ClusterIP ${S.svc.spec.clusterIP}:${S.svc.spec.port} → targetPort ${S.svc.spec.targetPort}) is just a stable virtual IP. The Endpoints controller lists <b>ready</b> pods; every node's kube-proxy turns that list into packet-rewrite rules. Traffic below keeps flowing during a rolling update (t = +${((T-T0)/1000).toFixed(1)}s).</div>
+  <div class="g2"><div><h3 style="margin-top:0">kube-proxy rules before the update</h3><pre>${esc(`-A KUBE-SERVICES -d ${S.svc.spec.clusterIP}/32 -p tcp --dport ${S.svc.spec.port} -j KUBE-SVC-${S.svc.metadata.name.toUpperCase()}\n${rulesTxt}\n(-j DNAT --to-destination <podIP>:${S.svc.spec.targetPort})`)}</pre><div class="note">Random statistic rules give each endpoint an equal share; there is no proxy process in the data path, only kernel NAT (iptables/IPVS).</div></div>
+  <div><h3 style="margin-top:0">Endpoints now (${now.ep})</h3><div>${now.pods.filter(x=>x.ready&&!x.term).map(podChip).join('')||'<span class="note">none</span>'}</div><h3>Client requests (green = served, red = failed)</h3>${sv}<div class="chips"><span class="chip">requests ${done.length}</span><span class="chip ${errs?'bad':'ok'}">failed ${errs}</span><span class="chip">programming lag ≈ 0.8 s</span></div></div></div>
+  <div class="note">New pods get traffic only when <b>Ready</b>; old pods leave the endpoint list when they start terminating. Because endpoint and rule updates take a moment to propagate, a pod must keep serving during its termination grace period (now ${OPT.tgrace}s). Set it to 0 in the controls to see connection resets during a rollout.</div>`;
+}
+
+/* =========================================================
+   PHASE 8: ROLLING UPDATE
+   ========================================================= */
+function draw8(p){
+  const sim=simRollout(),T0=sim.rolloutStart,span=55000,T=T0+p*span,now=snapAt(sim,T);
+  const names=[...new Set(sim.snaps.flatMap(s=>s.rs.map(r=>r.name)))],W=640,H=110,xs=t=>10+(t-T0)/span*W;
+  const maxPods=Math.max(1,...sim.snaps.map(s=>s.pods.filter(x=>!x.term||true).length));
+  let sv=`<svg viewBox="0 0 680 ${H+20}" style="max-height:${H+30}px">`;
+  names.forEach((nm,ri)=>{let pts='';sim.snaps.filter(s=>s.t>=T0-500&&s.t<=T).forEach(s=>{const r=s.rs.find(x=>x.name===nm),v=r?s.pods.filter(x=>x.rs===nm&&x.ready&&!x.term).length:0;pts+=`${xs(s.t)},${H-v/maxPods*(H-10)} `});sv+=`<polyline fill="none" stroke="${tc(ri)}" stroke-width="2.5" points="${pts}"/><text x="${12}" y="${14+ri*12}" style="fill:${tc(ri)};font-size:10px">${esc(nm.slice(-8))} ready pods</text>`});
+  sv+=`<line x1="${xs(T)}" x2="${xs(T)}" y1="4" y2="${H}" stroke="var(--ink)" opacity=".4"/></svg>`;
+  const R=S.dep.spec.replicas,ds=sim.get('Deployment',S.dep.metadata.name),ready=now.pods.filter(x=>x.ready&&!x.term).length,min=R-ds.spec.strategy.maxUnavailable;
+  const stuck=OPT.rcase==='bad';
+  return`<div class="caption">Update to a ${stuck?'<b class="bad">bad</b> ':''}new image · maxSurge <b>${ds.spec.strategy.maxSurge}</b>, maxUnavailable <b>${ds.spec.strategy.maxUnavailable}</b> → ready pods never drop below <b>${min}</b> and the total never exceeds <b>${R+ds.spec.strategy.maxSurge}</b>. At +${((T-T0)/1000).toFixed(1)}s: <b>${ready}/${R}</b> ready${stuck&&!OPT.rback?' · <span class="bad">rollout stuck waiting for new pods to become Ready; old pods keep serving</span>':''}${OPT.rback&&T>T0+18000?' · <b class="ok">rolled back</b>':''}</div>${sv}
+  <h3>ReplicaSets and pods (t=+${((T-T0)/1000).toFixed(1)}s)</h3>${now.rs.sort((a,b)=>a.rev-b.rev).map((r,i)=>`<div class="node" style="margin-bottom:6px;border-color:${tc(i)}"><b>${esc(r.name.slice(-14))}</b> <span class="tag m">rev ${r.rev}</span> <span class="note">desired ${r.desired} · ready ${now.pods.filter(x=>x.rs===r.name&&x.ready&&!x.term).length}</span><div>${now.pods.filter(x=>x.rs===r.name).map(podChip).join('')||'<span class="note">no pods</span>'}</div></div>`).join('')}
+  <div class="note">A Deployment is a controller of ReplicaSets: a new pod template creates a new ReplicaSet and the two are scaled in steps limited by maxSurge/maxUnavailable. The old ReplicaSet is kept (at 0 replicas) so <span class="mono">kubectl rollout undo</span> is just scaling it back up. ${stuck?'With a broken image, availability is protected: only up to maxSurge new pods are created and none of the old ones are removed.':''}</div>`;
+}
+
+/* =========================================================
+   PHASE 9: HPA
+   ========================================================= */
+function draw9(p){
+  const sim=simHPA(),log=sim.hpaLog,T=p*110000,W=640,xs=t=>10+t/110000*W,mx=Math.max(1,...log.map(l=>l.cur),...log.map(l=>l.ready),OPT.hmax),maxLoad=Math.max(1,...log.map(l=>l.load));
+  let a='',b='',c='';log.filter(l=>l.t<=T).forEach(l=>{a+=`${xs(l.t)},${100-l.load/maxLoad*90} `;b+=`${xs(l.t)},${100-l.cur/mx*90} `;c+=`${xs(l.t)},${100-l.ready/mx*90} `});
+  const cur=log.filter(l=>l.t<=T).slice(-1)[0]||log[0];
+  const sv=`<svg viewBox="0 0 680 115" style="max-height:125px"><polyline fill="none" stroke="var(--t7)" stroke-width="2" stroke-dasharray="4 3" points="${a}"/><polyline fill="none" stroke="var(--t0)" stroke-width="2.5" points="${b}"/><polyline fill="none" stroke="var(--ok)" stroke-width="2.5" points="${c}"/><line x1="${xs(T)}" x2="${xs(T)}" y1="4" y2="105" stroke="var(--ink)" opacity=".4"/><text x="10" y="112" style="fill:var(--mut);font-size:10px">load (dashed) · desired replicas (blue) · ready replicas (green)</text></svg>`;
+  const req=S.dep.spec.template.spec.containers[0].cpu;
+  return`<div class="caption">Every 3 s the HPA reads average CPU utilisation (usage ÷ <i>request</i> = ${req}m) and computes <b>desired = ceil(current × utilisation ÷ target)</b>. At +${(cur.t/1000).toFixed(0)}s: ${cur.ready} ready pod(s), utilisation <b>${cur.util.toFixed(0)}%</b> vs target ${OPT.htarget}% → ceil(${cur.cur} × ${cur.util.toFixed(0)} ÷ ${OPT.htarget}) = <b>${Math.ceil(cur.cur*cur.util/OPT.htarget)}</b> → clamped to [${OPT.hmin}, ${OPT.hmax}] → <b>${cur.des}</b>.</div>${sv}
+  <div class="g2"><div><table><tr><th>t</th><th class="n">load m</th><th class="n">ready</th><th class="n">util %</th><th class="n">replicas</th></tr>${log.filter(l=>l.t<=T).slice(-8).map(l=>`<tr><td>${(l.t/1000).toFixed(0)}s</td><td class="n">${Math.round(l.load)}</td><td class="n">${l.ready}</td><td class="n">${l.util.toFixed(0)}</td><td class="n">${l.cur}${l.des!==l.cur?' → <b>'+l.des+'</b>':''}</td></tr>`).join('')}</table></div>
+  <div><div class="note" style="margin:0">Scaling up is fast (at most double + 4 per step), but new pods still need to be scheduled, pull images and pass readiness (green lags blue). Scaling down waits for a <b>stabilisation window</b> (${OPT.hstab}s): the highest recommendation in the window wins, which prevents flapping when load briefly dips.</div></div></div>`;
+}
+
+/* =========================================================
+   PHASE 10: NODE FAILURE
+   ========================================================= */
+function draw10(p){
+  const sim=simNodeFail(),T0=sim.failAt,span=55000,T=T0+p*span,now=snapAt(sim,T),before=snapAt(sim,T0-300);
+  const ev=sim.log.filter(l=>l.t>=T0-200&&l.t<=T&&(l.from==='node-controller'&&!/^PUT /.test(l.msg)||l.from==='chaos'||l.from==='scheduler'&&/→/.test(l.msg)||l.from==='replicaset-controller'&&/^POST/.test(l.msg)||l.to==='kubelet/'+sim.victim&&false)).slice(0,14);
+  const R=S.dep.spec.replicas,ready=now.pods.filter(x=>x.ready&&!x.term).length;
+  return`<div class="caption"><b>${sim.victim}</b> loses power at +0s. Heartbeats stop → after the grace period the node controller marks it <b>NotReady</b>, taints it, and after the toleration period <b>evicts</b> its pods; the ReplicaSet creates replacements and the scheduler places them on healthy nodes. At +${((T-T0)/1000).toFixed(1)}s: <b>${ready}/${R}</b> pods Ready.</div>
+  <div class="g2"><div><h3 style="margin-top:0">Timeline</h3>${ev.map(l=>`<span class="row ${l.kind==='lost'?'bad':''}">+${((l.t-T0)/1000).toFixed(1)}s · ${esc(l.msg)}</span>`).join('')||'<span class="note">…</span>'}<div class="note">Heartbeat grace 8 s, eviction after ${OPT.nevict} s (real defaults: 40 s and 300 s).</div></div>
+  <div>${now.nodes.map(n=>`<div class="node ${n.alive?'':'dead'}" style="margin-bottom:6px"><b>${n.name}</b> <span class="tag ${n.ready?'g':'r'}">${n.ready?'Ready':'NotReady'}</span>${n.alive?'':' <span class="tag r">down</span>'}<div>${now.pods.filter(x=>x.node===n.name).map(podChip).join('')||'<span class="note">no pods</span>'}</div></div>`).join('')}${now.pods.some(x=>!x.node)?`<div class="node"><b>Pending</b><div>${now.pods.filter(x=>!x.node).map(podChip).join('')}</div></div>`:''}</div></div>
+  <div class="chips"><span class="chip">endpoints ${now.ep}</span><span class="chip">service stays up while ≥1 pod is Ready</span></div>
+  <div class="note">Kubernetes cannot know a silent node is dead, only that it stopped reporting. Evicted pods stay "Terminating" on the dead node (their kubelet cannot confirm) but no longer count, so capacity is restored elsewhere. If the node returns (control above), its kubelet cleans the old containers up.</div>`;
+}
+
+/* ================= phases table + controls ================= */
+const PHASES=[
+ {t:'kubectl apply',s:'end-to-end sequence',f:'overview',dur:9000,draw:draw1,b:'One manifest sets off a chain of independent reactions. This sequence is generated by a real simulation: every arrow is a request, watch event or status update between components.'},
+ {t:'API server',s:'authn · RBAC · admission',f:'kube-apiserver',dur:6000,draw:draw2,b:'Every request passes the same pipeline: authentication, authorization (RBAC), mutating admission, validation, validating admission (quotas), and finally persistence. Rejections happen before anything is stored.'},
+ {t:'etcd & watch',s:'revisions · conflicts',f:'etcd',dur:6000,draw:draw3,b:'All cluster state lives in etcd as versioned key-value pairs. resourceVersion enables optimistic concurrency and the watch stream that drives every controller.'},
+ {t:'Controllers',s:'reconcile loops',f:'controller-manager',dur:8000,draw:draw4,b:'Controllers are level-triggered loops: compare observed state with desired state and take the smallest step to close the gap. Deployment → ReplicaSet → Pods.'},
+ {t:'Scheduler',s:'filter · score · bind',f:'kube-scheduler',dur:7000,draw:draw5,b:'For each unscheduled pod the scheduler filters infeasible nodes (resources, taints, selectors), scores the rest and binds the pod to the winner by writing spec.nodeName.'},
+ {t:'Kubelet',s:'pod lifecycle · CRI',f:'kubelet',dur:7000,draw:draw6,b:'The kubelet on each node watches pods bound to it, starts containers through the container runtime, runs probes, reports status and heartbeats.'},
+ {t:'Services & kube-proxy',s:'endpoints · NAT rules',f:'kube-proxy',dur:7000,draw:draw7,b:'A Service is a stable virtual IP. The Endpoints controller tracks ready pods and kube-proxy programs node-level rules that spread connections across them.'},
+ {t:'Rolling update',s:'surge · unavailable',f:'deployment',dur:8000,draw:draw8,b:'A new pod template creates a new ReplicaSet; the Deployment controller shifts replicas between the old and new ones within maxSurge/maxUnavailable limits and keeps the old one for rollback.'},
+ {t:'Autoscaling',s:'HPA',f:'HPA',dur:8000,draw:draw9,b:'The Horizontal Pod Autoscaler periodically computes desired replicas from CPU utilisation versus a target, with fast scale-up and stabilised scale-down.'},
+ {t:'Node failure',s:'heartbeat · taint · evict',f:'node lifecycle',dur:9000,draw:draw10,b:'When a node stops heartbeating it is marked NotReady and tainted; after a toleration period its pods are evicted and recreated elsewhere, keeping the Service available.'},
+];
+function ctlHTML(k){
+  if(!S||S.error)return'';
+  const sel=(key,opts,val)=>`<select data-opt="${key}">${opts.map(([v,l])=>`<option value="${v}" ${String(v)===String(val)?'selected':''}>${esc(l)}</option>`).join('')}</select>`;
+  const rng=(key,min,max,step,val,suf='')=>`<input type="range" data-opt="${key}" min="${min}" max="${max}" step="${step}" value="${val}" style="width:120px"> ${val}${suf}`;
+  if(k===0)return`<span class="note">Edit the manifest above (replicas, requests, readiness delay, nodeSelector) and watch the sequence change.</span>`;
+  if(k===1)return`<label>Request ${sel('preq',[['valid','valid create (alice)'],['notoken','no token'],['viewer','viewer tries to create'],['quota','over ResourceQuota'],['selector','selector ≠ labels'],['stale','stale update (409)']],OPT.preq)}</label>`;
+  if(k===2)return`<label>Scenario ${sel('econf',[['keys','keys & revisions'],['conflict','update race (409)'],['watch','watch resume / 410 Gone']],OPT.econf)}</label>${OPT.econf==='watch'?`<label>compaction ${rng('ecompact',0,10,1,OPT.ecompact)}</label>`:''}`;
+  if(k===3)return`<label>Event ${sel('ctrlAct',[['delete','delete a pod'],['scale','scale up by 2'],['edit','scale down by 1']],OPT.ctrlAct)}</label><label><input type="checkbox" data-opt="dropWatch" ${OPT.dropWatch?'checked':''}> lose the watch event</label>`;
+  if(k===4)return`<label>Pods to schedule ${rng('srep',1,36,1,OPT.srep)}</label><label>Policy ${sel('spolicy',[['spread','spread replicas'],['least','least allocated'],['pack','bin-packing']],OPT.spolicy)}</label><span class="note">Nodes and taint are set in the first panel.</span>`;
+  if(k===5)return`<label>Case ${sel('lcase',[['normal','normal'],['bad','bad image tag'],['slow','slow readiness (9 s)']],OPT.lcase)}</label>`;
+  if(k===6||k===7)return`<label>New image ${sel('rcase',[['good','valid new tag'],['bad','broken tag']],OPT.rcase)}</label><label>maxSurge ${sel('rsurge',[[-1,'manifest'],0,1,2,3].map(x=>Array.isArray(x)?x:[x,x]),OPT.rsurge)}</label><label>maxUnavailable ${sel('runav',[[-1,'manifest'],0,1,2,3].map(x=>Array.isArray(x)?x:[x,x]),OPT.runav)}</label><label>grace period ${sel('tgrace',[0,2,5].map(x=>[x,x+' s']),OPT.tgrace)}</label><label><input type="checkbox" data-opt="rback" ${OPT.rback?'checked':''}> rollback at +18 s</label>`;
+  if(k===8)return`<label>Load ${sel('hload',[['spike','spike'],['ramp','ramp'],['steady','steady']],OPT.hload)}</label><label>target cpu ${rng('htarget',30,90,5,OPT.htarget,'%')}</label><label>min ${rng('hmin',1,6,1,OPT.hmin)}</label><label>max ${rng('hmax',3,20,1,OPT.hmax)}</label><label>scale-down window ${rng('hstab',3,40,1,OPT.hstab,' s')}</label>`;
+  if(k===9)return`<label>Failing node ${sel('nfail',nodeList().map((n,i)=>[i,n.name]),OPT.nfail)}</label><label>eviction after ${rng('nevict',2,12,1,OPT.nevict,' s')}</label><label><input type="checkbox" data-opt="nrecover" ${OPT.nrecover?'checked':''}> node recovers at +30 s</label>`;
+  return'';
+}
+const STROPT=['preq','econf','ctrlAct','spolicy','lcase','rcase','hload'],BOOLOPT=['dropWatch','rback','nrecover'];
+$('#phCtl').addEventListener('change',e=>{
+  const t=e.target.closest('[data-opt]');if(!t)return;const key=t.dataset.opt;
+  OPT[key]=BOOLOPT.includes(key)?t.checked:STROPT.includes(key)?t.value:+t.value;stopAll();rebuild(false);
+});
+
+/* ================= render / wiring ================= */
+function renderNav(){$('#nav').innerHTML=PHASES.map((ph,i)=>`<div class="nv ${i===cur?'act':''} ${i<cur?'done':''}" data-ph="${i}"><b>${i+1}. ${ph.t}</b><small>${ph.s} · ${ph.f}</small></div>`).join('')}
+function showPhase(k,p=1){cur=k;renderNav();ovRender();const ph=PHASES[k];$('#blurb').innerHTML=`${ph.b}<div class="ft">Component: ${ph.f}</div>`;$('#phCtl').innerHTML=ctlHTML(k);paintView(p);$('#prev').disabled=k===0;$('#nextB').disabled=k===PHASES.length-1}
+function paintView(p=1){
+  if(!S||S.error){$('#phView').innerHTML=`<div class="box bad">${esc(S?S.error:'')}</div>`;return}
+  try{$('#phView').innerHTML=PHASES[cur].draw(p)}catch(e){$('#phView').innerHTML=`<div class="box bad">Render error: ${esc(e.message)}</div>`;console.error(e)}
+}
+function stopAll(){gen++;playingAll=false;paused=false;$('#pauseBtn').disabled=true;$('#pauseBtn').textContent='⏸ Pause'}
+$('#nav').onclick=e=>{const n=e.target.closest('[data-ph]');if(!n)return;stopAll();showPhase(+n.dataset.ph)};
+$('#prev').onclick=()=>{stopAll();showPhase(Math.max(0,cur-1))};
+$('#nextB').onclick=()=>{stopAll();showPhase(Math.min(PHASES.length-1,cur+1))};
+$('#anim').onclick=()=>{stopAll();animate(p=>paintView(p),PHASES[cur].dur)};
+$('#playAll').onclick=async()=>{if(!S||S.error)return;stopAll();playingAll=true;$('#pauseBtn').disabled=false;for(let k=0;k<PHASES.length;k++){showPhase(k,0);const ok=await animate(p=>paintView(p),PHASES[k].dur);if(!ok)return;await sleep(500);if(!playingAll)return}playingAll=false;$('#pauseBtn').disabled=true};
+$('#pauseBtn').onclick=()=>{paused=!paused;$('#pauseBtn').textContent=paused?'▶ Resume':'⏸ Pause'};
+$('#speed').oninput=e=>{speed=+e.target.value;$('#speedV').textContent=speed+'×'};
+function rebuild(reparse){
+  S=build();
+  if(S&&!S.error){const sv=S.svc;$('#srcInfo').innerHTML=`Parsed ${S.docs.length} document(s): Deployment <b>${esc(S.dep.metadata.name)}</b> (${S.dep.spec.replicas} replicas, requests ${S.dep.spec.template.spec.containers[0].cpu}m cpu / ${S.dep.spec.template.spec.containers[0].mem}Mi, maxSurge ${S.dep.spec.strategy.maxSurge}, maxUnavailable ${S.dep.spec.strategy.maxUnavailable})${sv?` and Service <b>${esc(sv.metadata.name)}</b>`:''}.`;
+    $('#statLine').textContent=`${nodeList().length} worker nodes · 2000m cpu / 4096Mi each`}
+  else{$('#srcInfo').innerHTML=`<span class="bad">${esc(S.error)}</span>`;$('#statLine').textContent=''}
+  showPhase(cur);
+}
+$('#src').addEventListener('input',()=>{stopAll();rebuild(true)});
+$('#nn').addEventListener('change',()=>{stopAll();rebuild(false)});
+$('#taint').addEventListener('change',()=>{stopAll();rebuild(false)});
+$$('[data-sample]').forEach(b=>b.onclick=()=>{$('#src').value=SAMPLES[b.dataset.sample];stopAll();rebuild(true)});
+
+/* =========================================================
+   ARCHITECTURE OVERVIEW (components + relationships)
+   ========================================================= */
+const OVS={"w": 1000, "h": 420, "groups": [{"x": 170, "y": 40, "w": 790, "h": 225, "label": "Control plane"}, {"x": 170, "y": 290, "w": 580, "h": 110, "label": "Worker node (\u00d7N)"}], "nodes": [{"id": "kubectl", "x": 10, "y": 80, "w": 110, "h": 56, "label": "kubectl", "sub": "declares state", "desc": "Sends the desired state (a manifest) to the API server; it does not tell anything to run.", "phase": 0}, {"id": "etcd", "x": 10, "y": 190, "w": 110, "h": 56, "label": "etcd", "sub": "versioned KV", "desc": "The only store of cluster state: every object has a resourceVersion and clients can watch changes.", "phase": 2}, {"id": "apiserver", "x": 190, "y": 80, "w": 150, "h": 64, "label": "API server", "sub": "authn \u00b7 RBAC \u00b7 admission", "desc": "The front door and the only component that reads or writes etcd. Authenticates, authorizes, admits, validates, persists and fans out watch events.", "phase": 1}, {"id": "cm", "x": 400, "y": 80, "w": 170, "h": 64, "label": "Controller manager", "sub": "reconcile loops", "desc": "Runs Deployment, ReplicaSet, Endpoints and other controllers that move observed state toward desired state.", "phase": 3}, {"id": "rollout", "x": 610, "y": 80, "w": 150, "h": 64, "label": "Deployment rollout", "sub": "ReplicaSets \u00b7 surge", "desc": "Shifts replicas between old and new ReplicaSets within maxSurge/maxUnavailable limits and keeps history for rollback.", "phase": 7}, {"id": "hpa", "x": 790, "y": 80, "w": 150, "h": 64, "label": "Autoscaler", "sub": "HPA", "desc": "Computes desired replicas from CPU utilisation versus a target and edits the Deployment.", "phase": 8}, {"id": "sched", "x": 400, "y": 190, "w": 170, "h": 60, "label": "Scheduler", "sub": "filter \u00b7 score \u00b7 bind", "desc": "Picks a node for every unscheduled pod by filtering infeasible nodes and scoring the rest, then writes spec.nodeName.", "phase": 4}, {"id": "nodelife", "x": 610, "y": 190, "w": 170, "h": 60, "label": "Node lifecycle", "sub": "heartbeat \u00b7 taint \u00b7 evict", "desc": "Detects silent nodes, marks them NotReady, taints them and evicts their pods after a toleration period.", "phase": 9}, {"id": "kubelet", "x": 190, "y": 320, "w": 150, "h": 60, "label": "Kubelet", "sub": "pod lifecycle \u00b7 probes", "desc": "Runs on each node: starts the pods bound to it through the runtime, runs probes, reports status and heartbeats.", "phase": 5}, {"id": "runtime", "x": 380, "y": 320, "w": 150, "h": 60, "label": "Container runtime", "sub": "CRI", "desc": "Pulls images and runs containers on behalf of the kubelet via the Container Runtime Interface.", "phase": 5}, {"id": "proxy", "x": 570, "y": 320, "w": 160, "h": 60, "label": "kube-proxy", "sub": "Service NAT rules", "desc": "Programs node-level rules so a Service virtual IP is spread across the ready pod endpoints.", "phase": 6}], "edges": [{"from": "kubectl", "to": "apiserver", "label": "REST", "kind": "data"}, {"from": "apiserver", "to": "etcd", "label": "persist", "kind": "data"}, {"from": "apiserver", "to": "cm", "label": "watch", "kind": "ctl"}, {"from": "apiserver", "to": "sched", "label": "unbound", "kind": "ctl"}, {"from": "apiserver", "to": "kubelet", "label": "my pods", "kind": "ctl"}, {"from": "kubelet", "to": "runtime", "label": "CRI", "kind": "data"}, {"from": "kubelet", "to": "nodelife", "label": "heartbeat", "kind": "async"}, {"from": "apiserver", "to": "proxy", "label": "endpoints", "kind": "ctl"}, {"from": "cm", "to": "rollout", "label": "RS", "kind": "data"}, {"from": "hpa", "to": "rollout", "label": "scale", "kind": "ctl"}, {"from": "nodelife", "to": "cm", "label": "evict", "kind": "ctl"}], "flow": [{"n": "kubectl", "t": "kubectl apply sends the desired state."}, {"n": "apiserver", "t": "The API server authenticates, authorizes, admits and validates it."}, {"n": "etcd", "t": "It is persisted in etcd with a new resourceVersion."}, {"n": "cm", "t": "Controllers watching the API server create a ReplicaSet and Pods."}, {"n": "sched", "t": "The scheduler binds each Pod to a node."}, {"n": "kubelet", "t": "That node's kubelet sees its Pod and starts it."}, {"n": "runtime", "t": "The container runtime pulls the image and runs the container."}, {"n": "proxy", "t": "Once Ready, kube-proxy routes Service traffic to it."}]};
+const OVN=Object.fromEntries(OVS.nodes.map(n=>[n.id,n]));
+const OV={sel:null,k:-1};
+function ovAnchor(n,tx,ty){const cx=n.x+n.w/2,cy=n.y+n.h/2,dx=tx-cx,dy=ty-cy;if(!dx&&!dy)return[cx,cy];const s=Math.min((n.w/2)/Math.abs(dx||1e-9),(n.h/2)/Math.abs(dy||1e-9));return[cx+dx*s,cy+dy*s]}
+function ovGeom(e){
+  const a=OVN[e.from],b=OVN[e.to],ca=[a.x+a.w/2,a.y+a.h/2],cb=[b.x+b.w/2,b.y+b.h/2];let c=null;
+  if(e.bend){const mx=(ca[0]+cb[0])/2,my=(ca[1]+cb[1])/2,dx=cb[0]-ca[0],dy=cb[1]-ca[1],L=Math.hypot(dx,dy)||1;c=[mx-dy/L*e.bend,my+dx/L*e.bend]}
+  const p0=ovAnchor(a,...(c||cb)),p1=ovAnchor(b,...(c||ca));
+  const mid=c?[0.25*p0[0]+0.5*c[0]+0.25*p1[0],0.25*p0[1]+0.5*c[1]+0.25*p1[1]]:[(p0[0]+p1[0])/2,(p0[1]+p1[1])/2];
+  return{p0,p1,c,mid};
+}
+function ovRender(){
+  const el=document.getElementById('ovView');if(!el)return;
+  const flow=OVS.flow,k=OV.k,act=new Set(),actE=new Set();
+  if(k>=0){for(let i=0;i<=Math.min(k,flow.length-1);i++)act.add(flow[i].n);for(let i=1;i<=k&&i<flow.length;i++){actE.add(flow[i-1].n+'>'+flow[i].n);actE.add(flow[i].n+'>'+flow[i-1].n)}}
+  const sel=OV.sel,rel=new Set();if(sel){rel.add(sel);OVS.edges.forEach(e=>{if(e.from===sel)rel.add(e.to);if(e.to===sel)rel.add(e.from)})}
+  const curPh=typeof cur==='number'?cur:-1;
+  let s=`<svg viewBox="0 0 ${OVS.w} ${OVS.h}" style="max-height:${OVS.h*1.1}px"><defs><marker id="ovar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="#8a94a6"/></marker><marker id="ovara" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="var(--acc)"/></marker></defs>`;
+  (OVS.groups||[]).forEach(g=>{s+=`<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${g.x+12}" y="${g.y+g.h-10}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${esc(g.label)}</text>`});
+  OVS.edges.forEach(e=>{
+    const g=ovGeom(e),on=actE.has(e.from+'>'+e.to),dim=sel&&!(e.from===sel||e.to===sel),hl=sel&&(e.from===sel||e.to===sel);
+    const d=g.c?`M${g.p0[0]},${g.p0[1]} Q${g.c[0]},${g.c[1]} ${g.p1[0]},${g.p1[1]}`:`M${g.p0[0]},${g.p0[1]} L${g.p1[0]},${g.p1[1]}`;
+    s+=`<g style="${dim?'opacity:.2':''}"><path d="${d}" class="ove ${e.kind||'data'} ${on||hl?'act':''}" marker-end="url(#${on||hl?'ovara':'ovar'})"/>${on?`<path d="${d}" class="ove flow act" style="stroke-width:5;opacity:.5"/>`:''}
+      <text x="${g.mid[0]}" y="${g.mid[1]-5}" text-anchor="middle" style="font-size:10.5px;fill:${hl||on?'var(--acc)':'var(--mut)'};paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(e.label)}</text></g>`;
+  });
+  OVS.nodes.forEach(n=>{
+    const ph=n.phase,cls=['ovn',sel===n.id?'sel':'',ph!==undefined&&ph===curPh?'cur':'',act.has(n.id)?'act':''].join(' '),dim=sel&&!rel.has(n.id);
+    s+=`<g class="${cls}" data-node="${n.id}" style="${dim?'opacity:.3':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${ph!==undefined?pc(ph):'var(--card)'}"/>
+      <text x="${n.x+10}" y="${n.y+22}" font-weight="700" style="font-size:12.5px">${esc(n.label)}</text><text x="${n.x+10}" y="${n.y+40}" style="font-size:10.5px;fill:var(--mut)">${esc(n.sub||'')}</text>
+      ${ph!==undefined?`<text x="${n.x+n.w-8}" y="${n.y+n.h-8}" text-anchor="end" style="font-size:10px;font-weight:700;fill:var(--mut)">phase ${ph+1}</text>`:''}</g>`;
+  });
+  s+='</svg>';
+  el.innerHTML=s;
+  const cap=document.getElementById('ovCap');
+  if(cap)cap.innerHTML=k>=0?`<b>Step ${Math.min(k,flow.length-1)+1}/${flow.length}:</b> ${esc(flow[Math.min(k,flow.length-1)].t)}`:(sel?'':'Click a component to see how it connects to the others.');
+  ovInfo();
+}
+function ovInfo(){
+  const el=document.getElementById('ovInfo');if(!el)return;const sel=OV.sel&&OVN[OV.sel];
+  // phase-to-phase dependencies derived from the edges
+  const pairs=new Map();OVS.edges.forEach(e=>{const a=OVN[e.from].phase,b=OVN[e.to].phase;if(a!==undefined&&b!==undefined&&a!==b){const key=a+'>'+b;if(!pairs.has(key))pairs.set(key,[]);pairs.get(key).push(e.label)}});
+  const dep=[...pairs.entries()].sort((x,y)=>x[0].split('>')[0]-y[0].split('>')[0]).map(([k,l])=>{const[a,b]=k.split('>').map(Number);return`<span class="chip" style="background:${pc(a)}">${a+1}. ${esc(PHASES[a].t)}</span> <span class="mono">→ ${esc(short(l.join(' / '),34))} →</span> <span class="chip" style="background:${pc(b)}">${b+1}. ${esc(PHASES[b].t)}</span>`}).join('<br>');
+  let card='';
+  if(sel){
+    const ins=OVS.edges.filter(e=>e.to===sel.id),outs=OVS.edges.filter(e=>e.from===sel.id);
+    card=`<div class="box" style="margin-top:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="font-size:15px">${esc(sel.label)}</b><span class="note" style="margin:0">${esc(sel.sub||'')}</span>${sel.phase!==undefined?`<button class="primary" data-go="${sel.phase}">Go to phase ${sel.phase+1}: ${esc(PHASES[sel.phase].t)} ›</button>`:''}</div>
+      <div style="margin:6px 0">${esc(sel.desc||'')}</div>
+      <div class="g2"><div><b style="font-size:12px">Receives</b>${ins.map(e=>`<div class="row"><span style="color:var(--mut)">${esc(OVN[e.from].label)}</span> ─ ${esc(e.label)} ▸</div>`).join('')||'<div class="note">nothing: it is where requests enter.</div>'}</div>
+      <div><b style="font-size:12px">Sends</b>${outs.map(e=>`<div class="row">▸ ${esc(e.label)} ─ <span style="color:var(--mut)">${esc(OVN[e.to].label)}</span></div>`).join('')||'<div class="note">nothing: it is an endpoint.</div>'}</div></div></div>`;
+  }
+  el.innerHTML=card+`<details class="dd" style="margin-top:8px"><summary>How the phases depend on each other</summary><div style="line-height:2.1;margin-top:6px">${dep||'<span class="note">no cross-phase edges</span>'}</div></details>`;
+}
+function jumpPhase(k){stopAll();showPhase(k);const t=document.getElementById('phaseSec');if(t&&t.scrollIntoView)t.scrollIntoView({behavior:'smooth',block:'start'})}
+document.getElementById('ovView').addEventListener('click',e=>{const n=e.target.closest('[data-node]');if(n){OV.k=-1;OV.sel=OV.sel===n.dataset.node?null:n.dataset.node;ovRender()}});
+document.getElementById('ovInfo').addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g)jumpPhase(+g.dataset.go)});
+document.getElementById('ovTrace').onclick=()=>{stopAll();OV.sel=null;OV.k=0;animate(p=>{OV.k=Math.min(OVS.flow.length-1,Math.floor(p*OVS.flow.length));ovRender()},OVS.flow.length*1300)};
+document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.sel=null;ovRender()};
+
+
+/* ================= init ================= */
+$('#src').value=SAMPLES.web;
+rebuild(true);
+</script>
+</body>
+</html>

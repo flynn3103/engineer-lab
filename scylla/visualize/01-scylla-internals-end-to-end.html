@@ -1,0 +1,1004 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scylla Internals End-to-End</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2230;--mut:#667085;--line:#d9dee7;--acc:#2f6fed;--acc2:#e25a1c;--ok:#1a9b5a;--bad:#d64545;
+--p0:#dbe9ff;--p1:#ffe6cf;--p2:#d9f4e3;--p3:#f1defa;--p4:#fff3b8;--p5:#ffd9de;--p6:#d6f2f2;--p7:#e6e6e6;
+--t0:#2f6fed;--t1:#e25a1c;--t2:#1a9b5a;--t3:#9b4fd0;--t4:#c9a400;--t5:#d6456b;--t6:#12a1a1;--t7:#6b7280}
+@media(prefers-color-scheme:dark){:root{--bg:#10141c;--card:#181e29;--ink:#e8ecf3;--mut:#93a0b5;--line:#2b3445;--acc:#6c9bff;--acc2:#ff7a3d;--ok:#43c783;--bad:#ff6b6b;
+--p0:#1f3556;--p1:#53361c;--p2:#1d4630;--p3:#44274f;--p4:#524a17;--p5:#552630;--p6:#17454a;--p7:#3a3f48}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
+header,main{max-width:1180px;margin:auto;padding:0 16px}
+header{padding-top:24px}
+h1{margin:0 0 4px;font-size:25px}h1 span{color:var(--acc)}
+header p{margin:0;color:var(--mut)}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-top:16px}
+section>h2{margin:0 0 6px;font-size:17px}
+section>h2 em{font-style:normal;background:var(--acc);color:#fff;border-radius:6px;padding:1px 8px;font-size:12px;margin-right:8px;vertical-align:2px}
+h3{font-size:14px;margin:14px 0 6px}
+button,select,input[type=text],textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 10px}
+button{cursor:pointer}button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
+button.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
+button:disabled{opacity:.45;cursor:default}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+label{color:var(--mut);font-size:13px}
+.mono,code,pre,textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+textarea{width:100%;resize:vertical}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;margin:0;max-height:340px}
+.note{font-size:13px;color:var(--mut);margin:6px 0 0}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+.box{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--bg);min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{font-family:ui-monospace,monospace;font-size:11.5px;border:1px solid var(--line);border-radius:5px;padding:1px 7px;background:var(--card)}
+.tag{display:inline-block;font-size:10.5px;padding:0 6px;border-radius:5px;background:var(--acc);color:#fff;margin-left:4px;font-weight:400}
+.tag.r{background:var(--bad)}.tag.g{background:var(--ok)}.tag.o{background:var(--acc2)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:820px){.g2{grid-template-columns:1fr}}
+table{border-collapse:collapse;width:100%;font-size:12.5px}td,th{border:1px solid var(--line);padding:3px 7px;text-align:left}
+td.n,th.n{text-align:right}
+svg{display:block;width:100%}
+svg text{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;fill:var(--ink)}
+.jobgrid{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:10px}
+.jobgrid>span,.jobgrid>label{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.nv{flex:1;min-width:128px;border:1.5px solid var(--line);border-radius:10px;padding:6px 8px;cursor:pointer;background:var(--bg);font-size:12px;line-height:1.3}
+.nv b{display:block;font-size:12.5px}.nv small{color:var(--mut)}
+.nv.act{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 12%,var(--card))}
+.nv.done b::after{content:" ✓";color:var(--ok)}
+.nv.new{border-style:dashed}
+.blurb{padding:10px 12px;border-left:5px solid var(--acc);background:var(--bg);border-radius:8px;margin:6px 0 10px;font-size:14px}
+.blurb .ft{color:var(--mut);font-size:12px;margin-top:3px}
+.caption{margin:8px 0;padding:9px 12px;border-radius:8px;background:var(--bg);border-left:5px solid var(--acc);font-size:14.5px;min-height:44px}
+.caption.bad{border-left-color:var(--bad)}.caption.good{border-left-color:var(--ok)}
+.row{display:block;padding:2px 6px;margin:2px 0;border-radius:5px;border:1px solid var(--line);background:var(--bg);font-family:ui-monospace,monospace;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row.ret{opacity:.4;text-decoration:line-through}
+.row.del{border-color:var(--bad);color:var(--bad)}
+.col{border:1.5px solid var(--line);border-radius:8px;padding:8px;min-width:0}
+.col h4{margin:0 0 6px;font-size:12.5px}
+.meter{height:7px;border-radius:4px;background:var(--line);overflow:hidden;margin:4px 0}.meter i{display:block;height:100%;background:var(--acc)}
+.sst{display:inline-block;border:2px solid var(--line);border-radius:7px;padding:3px 7px;margin:3px;font-family:ui-monospace,monospace;font-size:11px;background:var(--card);vertical-align:top}
+.sst.in{border-color:var(--acc2);background:color-mix(in srgb,var(--acc2) 15%,var(--card))}
+.sst.out{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 15%,var(--card))}
+.sst.skip{opacity:.45}
+.lrow{display:flex;align-items:center;gap:6px;margin:4px 0}.lrow>b{min-width:48px;font-size:12px;color:var(--mut)}
+.big{font-size:28px;font-weight:700}
+.bar2{height:14px;border-radius:4px;display:inline-block;vertical-align:middle}
+.le{display:inline-block;min-width:34px;text-align:center;font-family:ui-monospace,monospace;font-size:10.5px;border:1px solid var(--line);border-radius:4px;padding:1px 4px;margin:1px}
+.le.c{border:2px solid var(--ok);font-weight:700}
+details.dd{border:1px solid var(--line);border-radius:10px;padding:8px 14px;margin-top:10px;background:var(--bg)}
+details.dd summary{cursor:pointer;font-weight:600}details.dd summary small{color:var(--mut);font-weight:400;margin-left:6px}
+@keyframes flow{to{stroke-dashoffset:-20}}.flow{stroke-dasharray:6 4;animation:flow .6s linear infinite}
+
+.ovn{cursor:pointer}.ovn rect{stroke:var(--line);stroke-width:1.5;transition:opacity .2s}
+.ovn.sel rect{stroke:var(--acc);stroke-width:3.5}.ovn.cur rect{stroke:var(--ink);stroke-width:3}
+.ovn.act rect{stroke:var(--acc);stroke-width:4}
+.ove{fill:none;stroke:#8a94a6;stroke-width:1.8}.ove.ctl{stroke-dasharray:6 4}.ove.async{stroke-dasharray:2 4;stroke:var(--bad)}.ove.act{stroke:var(--acc);stroke-width:3.5}
+.ove.flow{animation:flow .6s linear infinite}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>Scylla</span> Internals · End-to-End</h1>
+  <p>Your rows → partition key → token ring → replicas → commitlog/memtable/SSTable → read path → compaction → tombstones → tablets → <b>Raft</b>. A real mini-engine runs on your data; every phase is drawn from its state.</p>
+</header>
+<main>
+
+<section>
+  <h2><em>1</em>Your data &amp; table</h2>
+  <div class="bar">
+    <input type="file" id="file" accept=".csv,.json,.jsonl,.ndjson">
+    <button data-sample="orders">Orders CSV</button><button data-sample="sensors">Sensors CSV</button><button data-sample="users">Users JSON</button>
+    <label>Format <select id="fmt"><option value="auto">auto-detect</option><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="json">JSON array</option></select></label>
+  </div>
+  <textarea id="src" rows="5" spellcheck="false"></textarea>
+  <div class="note" id="srcInfo"></div>
+  <div class="jobgrid">
+    <span>Partition key <select id="pk"></select></span>
+    <span>Clustering key <select id="ck"></select></span>
+    <label>Workload <select id="mix"><option value="mixed">inserts + updates + deletes</option><option value="insert">inserts only</option><option value="ttl">inserts with TTL</option></select></label>
+    <span class="note" style="margin:0">RF = 3 · one table · virtual clock (1 op = 1 s)</span>
+  </div>
+  <div class="bar">
+    <button class="primary" id="playAll">▶ Play all 8 phases</button>
+    <button id="pauseBtn" disabled>⏸ Pause</button>
+    <label>Speed <input type="range" id="speed" min="0.25" max="4" step="0.25" value="1"> <b id="speedV">1×</b></label>
+    <span class="note">or click a phase. Cluster knobs (nodes, vnodes, consistency, failures, strategy…) live in the phase they affect.</span>
+  </div>
+</section>
+
+<section>
+  <h2><em>◎</em>Architecture overview <span class="note" style="font-weight:400">components and how they connect · colors match the phases below</span></h2>
+  <div class="bar"><button class="primary" id="ovTrace">▶ Trace a request through the system</button><button id="ovClear">Clear</button><span class="note" id="ovCap"></span></div>
+  <div id="ovView"></div>
+  <div class="chips" style="margin-top:6px"><span class="chip">solid = data flow</span><span class="chip">dashed = control / metadata</span><span class="chip" style="border-color:var(--bad)">dotted = events / async</span></div>
+  <div id="ovInfo"></div>
+</section>
+
+<section id="phaseSec">
+  <h2><em>2</em>The life of your data, phase by phase</h2>
+  <div class="nav" id="nav"></div>
+  <div class="blurb" id="blurb"></div>
+  <div class="bar" id="phCtl"></div>
+  <div class="bar"><button id="prev">‹ Prev</button><button class="primary" id="anim">▶ Animate this phase</button><button id="nextB">Next ›</button></div>
+  <div id="phView"></div>
+</section>
+
+<section>
+  <h2><em>3</em>Deep dives</h2>
+  <details class="dd" id="dd1"><summary>Consistent hashing vs <code>hash % N</code> <small>Feature 01</small></summary><div id="dd1b"></div></details>
+  <details class="dd" id="dd2"><summary>Bloom filter explorer <small>Feature 06</small></summary><div id="dd2b"></div></details>
+  <details class="dd" id="dd3"><summary>Leaderless QUORUM vs Raft <small>Features 05 + Raft</small></summary><div id="dd3b"></div></details>
+</section>
+</main>
+
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const J=x=>{try{return JSON.stringify(x)}catch{return String(x)}};
+const pc=i=>`var(--p${((i%8)+8)%8})`,tc=i=>`var(--t${((i%8)+8)%8})`;
+const cmp=(a,b)=>a<b?-1:a>b?1:0;
+const short=(s,n=40)=>{s=String(s);return s.length>n?s.slice(0,n-1)+'…':s};
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const enc8=new TextEncoder();
+const NAMES='ABCDEFGH';const nn=i=>NAMES[i]??('N'+i);
+function lcg(seed){let s=(seed>>>0)||1;return()=>{s=(Math.imul(s,1103515245)+12345)&0x7fffffff;return s/0x7fffffff}}
+
+/* =========================================================
+   SHA-256 → 64-bit token (Feature 01 contract)
+   ========================================================= */
+const K256=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+function sha256hex(str){
+  const msg=enc8.encode(str),l=msg.length,padLen=((l+9+63)>>6)<<6,buf=new Uint8Array(padLen);
+  buf.set(msg);buf[l]=0x80;const dv=new DataView(buf.buffer);dv.setUint32(padLen-8,Math.floor(l*8/4294967296));dv.setUint32(padLen-4,(l*8)>>>0);
+  const H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19],w=new Uint32Array(64);
+  for(let i=0;i<padLen;i+=64){
+    for(let t=0;t<16;t++)w[t]=dv.getUint32(i+t*4);
+    for(let t=16;t<64;t++){const a=w[t-15],b=w[t-2];const s0=((a>>>7)|(a<<25))^((a>>>18)|(a<<14))^(a>>>3),s1=((b>>>17)|(b<<15))^((b>>>19)|(b<<13))^(b>>>10);w[t]=(w[t-16]+s0+w[t-7]+s1)|0}
+    let[a,b,c,d,e,f,g,h]=H;
+    for(let t=0;t<64;t++){
+      const S1=((e>>>6)|(e<<26))^((e>>>11)|(e<<21))^((e>>>25)|(e<<7)),ch=(e&f)^(~e&g),t1=(h+S1+ch+K256[t]+w[t])|0;
+      const S0=((a>>>2)|(a<<30))^((a>>>13)|(a<<19))^((a>>>22)|(a<<10)),mj=(a&b)^(a&c)^(b&c),t2=(S0+mj)|0;
+      h=g;g=f;f=e;e=(d+t1)|0;d=c;c=b;b=a;a=(t1+t2)|0;
+    }
+    H[0]=(H[0]+a)|0;H[1]=(H[1]+b)|0;H[2]=(H[2]+c)|0;H[3]=(H[3]+d)|0;H[4]=(H[4]+e)|0;H[5]=(H[5]+f)|0;H[6]=(H[6]+g)|0;H[7]=(H[7]+h)|0;
+  }
+  return H.map(x=>(x>>>0).toString(16).padStart(8,'0')).join('');
+}
+const MAX=2n**64n;
+const tokenOf=s=>BigInt('0x'+sha256hex(s).slice(0,16));
+const tokHex=t=>'0x'+t.toString(16).padStart(16,'0').slice(0,8)+'…';
+const angle=t=>Number(t*36000n/MAX)/100;
+const enc=s=>String(s).length+':'+s;       // length-prefixed canonical codec (no ad-hoc separators)
+
+/* =========================================================
+   PARSING + SAMPLES
+   ========================================================= */
+function detect(t){const s=t.trim();if(s.startsWith('['))return'json';const l=s.split(/\r?\n/)[0]||'';if(l.startsWith('{'))return'jsonl';if(l.includes(','))return'csv';return'text'}
+function csvSplit(l){const o=[];let c='',q=false;for(let i=0;i<l.length;i++){const ch=l[i];if(q){if(ch==='"'){if(l[i+1]==='"'){c+='"';i++}else q=false}else c+=ch}else if(ch==='"')q=true;else if(ch===','){o.push(c);c=''}else c+=ch}o.push(c);return o}
+const conv=v=>(typeof v==='string'&&/^-?\d+(\.\d+)?$/.test(v.trim()))?Number(v):v;
+function colsOf(rows){const c=[];rows.forEach(r=>Object.keys(r).forEach(k=>{if(!c.includes(k))c.push(k)}));return c}
+function parseWhole(text,pf){
+  if(pf==='json'){const a=JSON.parse(text);if(!Array.isArray(a))throw new Error('JSON must be an array');return{rows:a,columns:colsOf(a)}}
+  const lines=text.split(/\r?\n/).filter(l=>l.trim()!=='');
+  if(pf==='jsonl'){const rows=lines.map(l=>JSON.parse(l));return{rows,columns:colsOf(rows)}}
+  if(pf==='csv'){if(!lines.length)return{rows:[],columns:[]};const h=csvSplit(lines[0]);const rows=lines.slice(1).map(l=>{const v=csvSplit(l),o={};h.forEach((k,i)=>o[k]=conv(v[i]??''));return o});return{rows,columns:h}}
+  return{rows:lines.map(l=>({line:l})),columns:['line']};
+}
+function sampleOrders(){const st=['new','paid','shipped'],r=lcg(11),L=['customer_id,order_id,created_at,status,amount'];
+  for(let i=0;i<28;i++)L.push([`C${101+((i*5)%8)}`,`O-${900+i}`,1000+i*13,st[Math.floor(r()*3)],Math.round(20+r()*480)].join(','));return L.join('\n')}
+function sampleSensors(){const r=lcg(5),L=['device_id,ts,temp'];for(let i=0;i<30;i++)L.push([`D${1+(i%4)}`,1000+i*10,Math.round(180+r()*80)/10].join(','));return L.join('\n')}
+function sampleUsers(){const c=['VN','TH','ID','SG'],r=lcg(9),a=[];for(let i=1;i<=14;i++)a.push({id:'U'+i,name:'user'+i,country:c[Math.floor(r()*4)],age:18+i*2});return J(a)}
+const SAMPLES={orders:{t:sampleOrders,f:'csv'},sensors:{t:sampleSensors,f:'csv'},users:{t:sampleUsers,f:'json'}};
+
+/* =========================================================
+   CONFIG
+   ========================================================= */
+const OPT={N:4,vn:2,place:'ring',cl:'QUORUM',budget:3,strategy:'STCS',downNode:-1,downFrom:0.3,downTo:0.6,bloomBits:10,cache:true,rounds:3,
+  opIdx:0,rkey:'',rnode:-1,wnode:0,crash:'none',cnode:0,scen:'delete',purge:'safe',tNow:40,readAt:-1,raftN:3,raftScen:'crash',tablets:8,
+  mtab:'',mfrom:0,mto:1,mcrash:0};
+let DS={rows:[],columns:[]};
+function cfg(){return{text:$('#src').value,fmt:$('#fmt').value,pk:$('#pk').value,ck:$('#ck').value,mix:$('#mix').value,...OPT}}
+
+/* =========================================================
+   WORKLOAD → MUTATIONS
+   ========================================================= */
+function genOps(c,rows){
+  const ckc=c.ck&&c.ck!=='(none)'?c.ck:null,rnd=lcg(rows.length*7+3),ev=[];
+  rows.forEach((r,i)=>ev.push({r,at:i*3,kind:'upsert'}));
+  if(c.mix==='mixed')rows.forEach((r,i)=>{
+    if(i%4===1)ev.push({r:{...r,_v:2},at:i*3+9+Math.floor(rnd()*6),kind:'upsert'});
+    if(i%7===3)ev.push({r,at:i*3+18+Math.floor(rnd()*6),kind:'delete'});
+  });
+  ev.sort((a,b)=>a.at-b.at||((a.kind==='delete')-(b.kind==='delete')));
+  return ev.map((e,i)=>{
+    const pk=String(e.r[c.pk]),ckv=ckc?String(e.r[ckc]):null;
+    return{i,kind:e.kind,pk,ck:ckv,key:enc(pk)+(ckv!==null?enc(ckv):''),pkey:enc(pk),row:e.kind==='delete'?null:e.r,src:e.r,ver:i+1,t:i,
+      exp:(c.mix==='ttl'&&e.kind==='upsert')?i+8+Math.floor(rnd()*40):null};
+  });
+}
+const mut=o=>({id:o.i,key:o.key,pkey:o.pkey,row:o.row,ver:o.ver,kind:o.kind,exp:o.exp,pk:o.pk,ck:o.ck});
+function winner(a,b){if(!a)return b;if(!b)return a;if(a.ver!==b.ver)return a.ver>b.ver?a:b;if(a.kind!==b.kind)return a.kind==='delete'?a:b;return a.id>=b.id?a:b}
+function statusOf(m,at){if(!m)return'absent';if(m.kind==='delete')return'deleted';if(m.exp!=null&&at>=m.exp)return'expired';return'live'}
+const mbytes=m=>m.key.length+16+(m.row?J(m.row).length:4);
+
+/* =========================================================
+   PLACEMENT: token ring (F01) or tablets (F07)
+   ========================================================= */
+function buildRing(n,vn){
+  const ep=[];for(let i=0;i<n;i++)for(let j=0;j<vn;j++)ep.push({token:tokenOf(`node-${i}-vn-${j}`),node:i});
+  ep.sort((a,b)=>a.token<b.token?-1:a.token>b.token?1:0);return ep;
+}
+function ringLookup(ep,tok){let i=ep.findIndex(e=>tok<=e.token);if(i<0)i=0;return i}
+function ringReplicas(ep,tok,rf){const out=[];let i=ringLookup(ep,tok);for(let k=0;k<ep.length&&out.length<rf;k++){const nd=ep[(i+k)%ep.length].node;if(!out.includes(nd))out.push(nd)}return out}
+function initTablets(n,T){return Array.from({length:T},(_,i)=>({id:'T'+i,lo:MAX*BigInt(i)/BigInt(T),hi:MAX*BigInt(i+1)/BigInt(T),rep:[i%n,(i+1)%n,(i+2)%n],epoch:1}))}
+function tabletOf(tabs,tok){const t=tabs.find(t=>tok>=t.lo&&tok<t.hi);return t||tabs[tabs.length-1]}
+function makePlacement(c){
+  const ring=buildRing(c.N,c.vn),tabs=initTablets(c.N,c.tablets),cache=new Map();
+  return{ring,tabs,place(pkey){
+    if(cache.has(pkey))return cache.get(pkey);
+    const tok=tokenOf(pkey);let r;
+    if(c.place==='tablets'){const t=tabletOf(tabs,tok);r={tok,replicas:t.rep.slice(),tablet:t.id,primary:t.rep[0]}}
+    else{const idx=ringLookup(ring,tok);r={tok,replicas:ringReplicas(ring,tok,3),primary:ring[idx].node,epIdx:idx}}
+    cache.set(pkey,r);return r}};
+}
+
+/* =========================================================
+   STORAGE ENGINE per node: commitlog → memtable → SSTable (F02), read path (F06)
+   ========================================================= */
+function fnv(s,seed){let h=(2166136261^seed)>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h>>>0}
+function mkSst(id,entries){ // entries: [[key,m]] sorted
+  let bytes=0,minTS=Infinity,maxTS=-Infinity,maxExp=0,allExp=true;
+  entries.forEach(([k,m])=>{bytes+=mbytes(m);minTS=Math.min(minTS,m.ver);maxTS=Math.max(maxTS,m.ver);if(m.exp==null)allExp=false;else maxExp=Math.max(maxExp,m.exp)});
+  return{id,rows:entries,n:entries.length,bytes,minKey:entries[0][0],maxKey:entries[entries.length-1][0],minTS,maxTS,maxExp:allExp?maxExp:null,level:0,bloom:{}};
+}
+function bloomOf(s,bits){
+  if(s.bloom[bits])return s.bloom[bits];
+  const m=Math.max(16,bits*s.n),k=Math.max(1,Math.round(bits*0.69)),arr=new Uint8Array(m);
+  s.rows.forEach(([key])=>{const h1=fnv(key,1),h2=fnv(key,7)|1;for(let i=0;i<k;i++)arr[(h1+Math.imul(i,h2)>>>0)%m]=1});
+  return s.bloom[bits]={m,k,arr};
+}
+const bloomMaybe=(s,key,bits)=>{const b=bloomOf(s,bits),h1=fnv(key,1),h2=fnv(key,7)|1;for(let i=0;i<b.k;i++)if(!b.arr[(h1+Math.imul(i,h2)>>>0)%b.m])return false;return true};
+function sstFind(s,key){let lo=0,hi=s.rows.length-1;while(lo<=hi){const mid=(lo+hi)>>1,c=cmp(s.rows[mid][0],key);if(c===0)return mid;if(c<0)lo=mid+1;else hi=mid-1}return-1}
+const FENCE=4;
+function indexStart(s,key){let i=0;for(let f=0;f<s.rows.length;f+=FENCE){if(s.rows[f][0]<=key)i=f;else break}return i}
+
+class Node{
+  constructor(id,budget){this.id=id;this.budget=budget;this.wal=[];this.seq=0;this.flushedSeq=0;this.mem=new Map();this.sst=[];this.nextS=1;this.manifest=0;this.gen=0;this.hist=[];this.flushLog=[];this.cache=new Map();this.opIdx=[]}
+  apply(m,opi){
+    this.wal.push({seq:++this.seq,m});this.opIdx.push(opi);this.mem.set(m.key,winner(this.mem.get(m.key),m));this.gen++;
+    let cap=`append seq ${this.seq} → fsync → apply to memtable → ACK`;
+    if(this.mem.size>=this.budget)cap=this.flush(`memtable full (${this.mem.size}/${this.budget})`);
+    this.hist.push(this.snap(cap,opi));
+  }
+  flush(why){
+    const entries=[...this.mem.entries()].sort((a,b)=>cmp(a[0],b[0])),s=mkSst('S'+this.nextS++,entries);
+    this.flushLog.push({seq:this.seq,prevFlushed:this.flushedSeq,prevCount:this.sst.length});
+    this.sst.push(s);this.flushedSeq=this.seq;this.manifest++;this.mem=new Map();this.gen++;
+    return`${why}: freeze → write ${s.id}.tmp (${s.n} rows) → validate → publish manifest gen ${this.manifest} → retire log ≤ seq ${this.seq}`;
+  }
+  snap(cap,opi){return{opi,cap,wal:this.wal.slice(-8).map(f=>({seq:f.seq,key:f.m.key,kind:f.m.kind,ret:f.seq<=this.flushedSeq})),walKept:this.wal.filter(f=>f.seq>this.flushedSeq).length,
+    mem:[...this.mem.keys()].sort(),ssts:this.sst.map(s=>({id:s.id,n:s.n,bytes:s.bytes,min:s.minKey,max:s.maxKey})),manifest:this.manifest}}
+  visible(sst=this.sst,mem=this.mem){const o=new Map();sst.forEach(s=>s.rows.forEach(([k,m])=>o.set(k,winner(o.get(k),m))));mem.forEach((m,k)=>o.set(k,winner(o.get(k),m)));return o}
+  recover(mode){ // crash → restart: manifest + commitlog replay
+    let sst=this.sst,fl=this.flushedSeq,note='';
+    if(mode==='midflush'&&this.flushLog.length){const l=this.flushLog[this.flushLog.length-1];sst=this.sst.slice(0,l.prevCount);fl=l.prevFlushed;note=`last flush was crash-interrupted: ${this.sst[this.sst.length-1].id}.tmp never published → ignored`}
+    const mem=new Map();let replayed=0;this.wal.filter(f=>f.seq>fl).forEach(f=>{mem.set(f.m.key,winner(mem.get(f.m.key),f.m));replayed++});
+    const a=this.visible(),b=this.visible(sst,mem),ja=J([...a.entries()].sort()),jb=J([...b.entries()].sort());
+    return{ok:ja===jb,replayed,note,sst:sst.length,fl,memAfter:mem.size};
+  }
+  localWinner(key){let w=this.mem.get(key);this.sst.forEach(s=>{const i=sstFind(s,key);if(i>=0)w=winner(w,s.rows[i][1])});return w}
+  readTrace(key,bits,cacheOn){
+    const t={key,steps:[],base:{files:this.sst.length,rows:this.sst.reduce((a,s)=>a+s.n,0)},bloomFiles:0,idxRows:0,fp:0,cache:'off'};
+    if(cacheOn){const c=this.cache.get(key);if(c&&c.gen===this.gen){t.cache='hit';t.win=c.win;return t}t.cache='miss'}
+    let w=this.mem.get(key);t.memHit=!!w;
+    for(const s of [...this.sst].reverse()){
+      const inRange=key>=s.minKey&&key<=s.maxKey,maybe=bloomMaybe(s,key,bits);
+      const step={id:s.id,inRange,maybe,found:false,scanned:0,fp:false};
+      if(maybe){t.bloomFiles++;const st=indexStart(s,key);let i=st,sc=0;while(i<s.rows.length&&sc<FENCE+1){sc++;if(s.rows[i][0]===key){step.found=true;w=winner(w,s.rows[i][1]);break}if(s.rows[i][0]>key)break;i++}step.scanned=sc;t.idxRows+=sc;if(!step.found){step.fp=true;t.fp++}}
+      t.steps.push(step);
+    }
+    t.win=w;if(cacheOn)this.cache.set(key,{gen:this.gen,win:w});return t;
+  }
+}
+
+/* =========================================================
+   CLUSTER RUN: coordinator → replicas with consistency levels (F05)
+   ========================================================= */
+const needOf=(cl,rf)=>cl==='ONE'?1:cl==='ALL'?rf:Math.floor(rf/2)+1;
+function runCluster(c,ops,pl){
+  const engines=Array.from({length:c.N},(_,i)=>new Node(i,c.budget)),rnd=lcg(ops.length*31+c.N),res=[];
+  const isDown=(nd,i)=>nd===c.downNode&&i>=Math.floor(c.downFrom*ops.length)&&i<Math.floor(c.downTo*ops.length);
+  let rr=0;
+  ops.forEach(o=>{
+    const m=mut(o),p=pl.place(o.pkey),down=nd=>isDown(nd,o.i),live=p.replicas.filter(r=>!down(r)),need=needOf(c.cl,p.replicas.length);
+    const ups=[...Array(c.N).keys()].filter(x=>!down(x)),coord=ups[(rr++)%ups.length];
+    const lat={};p.replicas.forEach(r=>lat[r]=1+Math.floor(rnd()*9)+(r===coord?0:2));
+    let status='ok';
+    if(live.length<need)status='unavailable';else live.forEach(r=>engines[r].apply(m,o.i));
+    const sorted=live.map(r=>lat[r]).sort((a,b)=>a-b);
+    res.push({op:o,coord,replicas:p.replicas,live,lat,need,status,ackLat:status==='ok'?sorted[need-1]:null,missed:status==='ok'?p.replicas.filter(r=>down(r)):[],tok:p.tok,tablet:p.tablet});
+  });
+  // divergence per key
+  const byKey=new Map();ops.forEach(o=>{if(!byKey.has(o.key))byKey.set(o.key,o)});
+  const div=[];
+  byKey.forEach((o,key)=>{
+    const p=pl.place(o.pkey),ws=p.replicas.map(r=>engines[r].localWinner(key)),vs=ws.map(w=>w?w.ver:0),mx=Math.max(...vs);
+    if(vs.some(v=>v!==mx))div.push({key,o,reps:p.replicas.map((r,i)=>({node:r,w:ws[i]})),truth:ws.reduce((a,b)=>winner(a,b))});
+  });
+  return{engines,res,div,keys:[...byKey.keys()],byKey};
+}
+
+/* =========================================================
+   COMPACTION SIMULATOR (F03) + tombstone purge guard (F04)
+   ========================================================= */
+const isDead=(m,now)=>m.kind==='delete'||(m.exp!=null&&now>=m.exp);
+function fileFrom(id,map,extra){
+  const rows=[...map.entries()].sort((a,b)=>cmp(a[0],b[0]));let bytes=0,minTS=Infinity,maxTS=-Infinity,maxExp=0,allExp=true;
+  rows.forEach(([k,m])=>{bytes+=mbytes(m);minTS=Math.min(minTS,m.ver);maxTS=Math.max(maxTS,m.ver);if(m.exp==null)allExp=false;else maxExp=Math.max(maxExp,m.exp)});
+  return{id,map,rows,n:rows.length,bytes,minKey:rows.length?rows[0][0]:'',maxKey:rows.length?rows[rows.length-1][0]:'',minTS,maxTS,maxExp:allExp&&rows.length?maxExp:null,level:0,window:0,...extra};
+}
+const mergeMaps=files=>{const o=new Map();files.forEach(f=>f.map.forEach((m,k)=>o.set(k,winner(o.get(k),m))));return o};
+const overlap=(f,lo,hi)=>!(f.maxKey<lo||f.minKey>hi);
+function pickSTCS(files){
+  const sorted=[...files].sort((a,b)=>a.bytes-b.bytes),bk=[];
+  sorted.forEach(f=>{const b=bk.find(b=>{const avg=b.sum/b.f.length;return f.bytes>=avg*0.5&&f.bytes<=avg*1.5});if(b){b.f.push(f);b.sum+=f.bytes}else bk.push({f:[f],sum:f.bytes})});
+  const c=bk.filter(b=>b.f.length>=4).sort((a,b)=>b.f.length-a.f.length||a.sum/a.f.length-b.sum/b.f.length)[0];
+  return c?{inputs:c.f.slice(0,32),level:0,reason:`bucket of ${c.f.length} similar-size files (min_threshold 4)`}:null;
+}
+function pickLCS(files,o){
+  const L0=files.filter(f=>f.level===0);
+  if(L0.length>=4){const lo=L0.reduce((a,f)=>f.minKey<a?f.minKey:a,L0[0].minKey),hi=L0.reduce((a,f)=>f.maxKey>a?f.maxKey:a,L0[0].maxKey),L1=files.filter(f=>f.level===1&&overlap(f,lo,hi));
+    return{inputs:[...L0,...L1],level:1,split:true,reason:`L0 has ${L0.length} files → merge with ${L1.length} overlapping L1 file(s)`}}
+  for(let lv=1;lv<=5;lv++){const fl=files.filter(f=>f.level===lv),bytes=fl.reduce((a,f)=>a+f.bytes,0),cap=Math.pow(o.fanout,lv)*o.target;
+    if(bytes>cap){const f=fl[0],nx=files.filter(g=>g.level===lv+1&&overlap(g,f.minKey,f.maxKey));return{inputs:[f,...nx],level:lv+1,split:true,reason:`L${lv} over capacity (${bytes}>${cap} bytes): push a file down, merge with ${nx.length} overlapping`}}}
+  return null;
+}
+function pickTWCS(files,o){
+  const ex=files.filter(f=>f.maxExp!=null&&f.maxExp<=o.now);
+  if(ex.length)return{inputs:ex,drop:true,level:0,reason:`${ex.length} fully expired file(s): deleted whole, no rewrite`};
+  const by={};files.forEach(f=>(by[f.window]=by[f.window]||[]).push(f));const cur=Math.max(...files.map(f=>f.window));
+  for(const w of Object.keys(by).map(Number).sort((a,b)=>a-b)){if(w<cur&&by[w].length>1)return{inputs:by[w],level:0,reason:`window ${w} is closed: merge its ${by[w].length} files into one`}}
+  const cf=by[cur]||[];if(cf.length>=4)return{inputs:cf,level:0,reason:`current window ${cur}: ${cf.length} files → STCS-style merge`};
+  return null;
+}
+function compactSim(strategy,flushMaps,o){
+  const files=[];let nid=1,flushed=0,written=0,peak=0,ok=true;const steps=[],oracle=new Map();
+  const rowOf=f=>strategy==='LCS'?'L'+f.level:strategy==='TWCS'?'win '+f.window:'tier '+Math.max(0,Math.round(Math.log2(f.bytes/o.minB)));
+  const snap=(text,inputs,outputs,extra={})=>steps.push({text,files:files.map(f=>({id:f.id,row:rowOf(f),bytes:f.bytes,n:f.n,min:f.minKey,max:f.maxKey})).sort((a,b)=>cmp(a.row,b.row)||cmp(a.min,b.min)),inputs,outputs,...extra});
+  const verify=()=>{const mg=mergeMaps(files);for(const[k,m]of oracle){const g=mg.get(k),a=statusOf(m,o.now)==='live'?m:null,b=g&&statusOf(g,o.now)==='live'?g:null;if((a&&a.id)!==(b&&b.id)&&!(a===null&&b===null)){ok=false;return}}};
+  const pick=()=>strategy==='STCS'?pickSTCS(files):strategy==='LCS'?pickLCS(files,o):pickTWCS(files,o);
+  flushMaps.forEach(map=>{
+    map.forEach((mm,k)=>oracle.set(k,winner(oracle.get(k),mm)));
+    const f=fileFrom('F'+nid++,map);f.window=Math.floor(f.maxTS/o.window);files.push(f);flushed+=f.bytes;snap(`flush → ${f.id} (${f.n} rows, ${f.bytes} B)`,[],[f.id]);
+    for(let g=0;g<40;g++){
+      const pl=pick();if(!pl)break;
+      const ins=pl.inputs,before=files.reduce((a,x)=>a+x.bytes,0);
+      if(pl.drop){pl.inputs.forEach(x=>files.splice(files.indexOf(x),1));snap(pl.reason,ins.map(x=>x.id),[]);verify();continue}
+      const merged=mergeMaps(ins),others=files.filter(x=>!ins.includes(x));let purged=0,kept=0;
+      for(const[k,m]of[...merged.entries()]){
+        if(isDead(m,o.now)){
+          const guardOk=o.now-m.ver>=o.gcGrace&&!others.some(x=>k>=x.minKey&&k<=x.maxKey&&x.minTS<m.ver);
+          if(guardOk){merged.delete(k);purged++}else kept++;
+        }
+      }
+      let outs=[];
+      if(pl.split){const ents=[...merged.entries()].sort((a,b)=>cmp(a[0],b[0]));let cur=new Map(),sz=0;ents.forEach(([k,m])=>{cur.set(k,m);sz+=mbytes(m);if(sz>=o.target){outs.push(cur);cur=new Map();sz=0}});if(cur.size)outs.push(cur)}
+      else if(merged.size)outs=[merged];
+      const nf=outs.map(mp=>{const x=fileFrom('F'+nid++,mp,{level:pl.level});x.window=Math.floor(x.maxTS/o.window);return x});
+      const wb=nf.reduce((a,x)=>a+x.bytes,0);written+=wb;peak=Math.max(peak,before+wb);
+      ins.forEach(x=>files.splice(files.indexOf(x),1));files.push(...nf);
+      snap(`${pl.reason} → ${nf.map(x=>x.id).join(', ')||'(nothing left)'}${purged?` · purged ${purged} tombstone(s)`:''}${kept?` · kept ${kept} tombstone(s) (purge guard)`:''}`,ins.map(x=>x.id),nf.map(x=>x.id));
+      verify();
+    }
+  });
+  const liveKeys=[...oracle.entries()].filter(([k,m])=>statusOf(m,o.now)==='live'),liveBytes=liveKeys.reduce((a,[k,m])=>a+mbytes(m),0),disk=files.reduce((a,f)=>a+f.bytes,0);
+  const ra=liveKeys.length?liveKeys.reduce((a,[k])=>a+files.filter(f=>f.map.has(k)).length,0)/liveKeys.length:0;
+  return{steps,files:files.length,WA:flushed?written/flushed:0,SA:liveBytes?disk/liveBytes:0,RA:ra,peak,disk,ok,flushed,written};
+}
+function buildTrace(c,eng){
+  const muts=eng.wal.map(f=>f.m),maps=[];let all=[];
+  for(let r=0;r<c.rounds;r++)muts.forEach((m,idx)=>{if(r===0||fnv(m.key,r)%2===0)all.push({...m,ver:m.ver+r*1000,exp:m.exp!=null?m.exp+r*1000:null,id:m.id+r*100000})});
+  const bs=Math.max(1,c.budget);for(let i=0;i<all.length;i+=bs){const mp=new Map();all.slice(i,i+bs).forEach(m=>mp.set(m.key,winner(mp.get(m.key),m)));maps.push(mp)}
+  const sizes=maps.map(mp=>[...mp.values()].reduce((a,m)=>a+mbytes(m),0)).sort((a,b)=>a-b),med=sizes[Math.floor(sizes.length/2)]||100;
+  const now=all.length?Math.max(...all.map(m=>m.ver)):0;
+  return{maps,opts:{now,gcGrace:15,window:12,fanout:4,target:Math.ceil(med*2),minB:Math.max(1,sizes[0]||1)}};
+}
+
+/* =========================================================
+   BUILD EVERYTHING
+   ========================================================= */
+let S=null;
+function build(){
+  const c=cfg(),o={cfg:c};
+  if(!c.text.trim()){o.error='No data yet.';return o}
+  let ds;try{const pf=c.fmt==='auto'?detect(c.text):c.fmt;ds=parseWhole(c.text,pf)}catch(e){o.error='Cannot parse input: '+e.message;return o}
+  if(!ds.rows.length||!ds.columns.includes(c.pk)){o.error='Choose a partition key column.';return o}
+  if(ds.rows.length>400){o.error='Please keep the data under 400 rows for the playground.';return o}
+  o.ds=ds;o.ops=genOps(c,ds.rows);o.pl=makePlacement(c);
+  o.cl=runCluster(c,o.ops,o.pl);
+  o.readAt=c.readAt<0?o.ops.length:c.readAt;
+  o.keys=o.cl.keys;
+  const parts=new Map();o.ops.forEach(op=>{const e=parts.get(op.pkey)||{pk:op.pk,pkey:op.pkey,rows:new Set(),ops:0};e.rows.add(op.key);e.ops++;parts.set(op.pkey,e)});
+  o.parts=[...parts.values()].map(p=>({...p,rows:p.rows.size,...o.pl.place(p.pkey)}));
+  o.cnode=clamp(c.cnode,0,c.N-1);
+  o.trace=buildTrace(c,o.cl.engines[o.cnode]);
+  o.comp={};['STCS','LCS','TWCS'].forEach(s=>o.comp[s]=compactSim(s,o.trace.maps,o.trace.opts));
+  return o;
+}
+
+/* =========================================================
+   PLAYER
+   ========================================================= */
+let gen=0,paused=false,speed=1,cur=0,playingAll=false;
+function animate(draw,dur){
+  const g=++gen;let el=0,last=null;
+  return new Promise(res=>{
+    function frame(now){
+      if(g!==gen){res(false);return}
+      if(last===null)last=now;const dt=now-last;last=now;if(!paused)el+=dt*speed;
+      const p=Math.min(1,el/dur);draw(p);if(p<1)requestAnimationFrame(frame);else res(true);
+    }
+    requestAnimationFrame(frame);
+  });
+}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms/speed));
+
+/* =========================================================
+   PHASE 1: PARTITION KEY → TOKEN → RING
+   ========================================================= */
+function ringSVG(ring,N,dots,opts={}){
+  const cx=150,cy=150,r=105;let s=`<svg viewBox="0 0 300 300" style="max-width:340px;margin:auto"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--line)" stroke-width="12"/>`;
+  const pt=(a,rr)=>[cx+rr*Math.sin(a*Math.PI/180),cy-rr*Math.cos(a*Math.PI/180)];
+  ring.forEach((e,i)=>{ // arc owned by this endpoint: (prev, this]
+    const a0=angle(ring[(i+ring.length-1)%ring.length].token),a1=angle(e.token),[x0,y0]=pt(a0,r),[x1,y1]=pt(a1,r);
+    const span=(a1-a0+360)%360||360;
+    s+=`<path d="M${x0},${y0} A${r},${r} 0 ${span>180?1:0} 1 ${x1},${y1}" fill="none" stroke="${tc(e.node)}" stroke-width="12" opacity=".85"/>`;
+    const [tx,ty]=pt(a1,r+16);s+=`<line x1="${pt(a1,r-8)[0]}" y1="${pt(a1,r-8)[1]}" x2="${pt(a1,r+8)[0]}" y2="${pt(a1,r+8)[1]}" stroke="var(--ink)" stroke-width="2"/>`;
+  });
+  dots.forEach(d=>{const[x,y]=pt(angle(d.tok),r+(d.hl?0:22));s+=`<circle cx="${x}" cy="${y}" r="${d.hl?7:4}" fill="${tc(d.node)}" stroke="var(--card)" stroke-width="1.5"><title>${esc(d.label)}</title></circle>`});
+  for(let i=0;i<N;i++)s+=`<rect x="${12+i*44}" y="278" width="40" height="16" rx="4" fill="${tc(i)}"/><text x="${32+i*44}" y="290" text-anchor="middle" style="fill:#fff;font-size:10.5px">node ${nn(i)}</text>`;
+  return s+opts.center+'</svg>';
+}
+let _rm=null;
+function remapStats(o){
+  const N=o.cfg.N,vn=o.cfg.vn,id=N+'/'+vn+'/'+o.parts.map(p=>p.pkey).join('|');
+  if(_rm&&_rm.id===id)return _rm;
+  const ring0=buildRing(N,vn),ring1=buildRing(N+1,vn);
+  const run=keys=>{let mm=0,rm=0;keys.forEach(k=>{const t=tokenOf(k),tb=Number(t%1000003n);if(tb%N!==tb%(N+1))mm++;if(ring0[ringLookup(ring0,t)].node!==ring1[ringLookup(ring1,t)].node)rm++});return{mod:mm/keys.length,ring:rm/keys.length,n:keys.length}};
+  const real=run(o.parts.map(p=>p.pkey)),syn=run(Array.from({length:1000},(_,i)=>enc('key'+i)));
+  return _rm={id,real,syn,mod:syn.mod,ring:syn.ring,n:syn.n};
+}
+function draw1(p){
+  const parts=S.parts,k=p>=1?parts.length:Math.ceil(p*parts.length),N=S.cfg.N;
+  const dots=parts.slice(0,k).map((q,i)=>({tok:q.tok,node:q.primary,label:`${q.pk} → ${tokHex(q.tok)} → ${nn(q.primary)}`,hl:i===k-1&&p<1}));
+  const cnt=Array(N).fill(0),rowsN=Array(N).fill(0);parts.slice(0,k).forEach(q=>{cnt[q.primary]++;rowsN[q.primary]+=q.rows});
+  const mx=Math.max(1,...cnt),last=parts[Math.max(0,k-1)];
+  const rs=remapStats(S);
+  const tbl=parts.slice(0,k).slice(-7).map(q=>`<tr><td>${esc(q.pk)}</td><td class="mono">${esc(enc(q.pk))}</td><td class="mono">${tokHex(q.tok)}</td><td>${nn(q.primary)}</td><td>${q.replicas.map(nn).join(', ')}${q.tablet?` <span class="tag">${q.tablet}</span>`:''}</td><td class="n">${q.rows}</td></tr>`).join('');
+  return`<div class="g2"><div>${ringSVG(S.pl.ring,N,dots,{center:`<text x="150" y="146" text-anchor="middle" style="font-size:12px;font-weight:700">${S.cfg.place==='ring'?'token ring':'tablet map'}</text><text x="150" y="162" text-anchor="middle" style="fill:var(--mut);font-size:10.5px">0 … 2⁶⁴</text>`})}
+    <div class="note" style="text-align:center">${S.cfg.place==='ring'?`${S.pl.ring.length} endpoints (${N} nodes × ${S.cfg.vn} vnodes). A partition belongs to the first endpoint at or after its token; wrap-around at the end.`:`Placement is a tablet map (${S.cfg.tablets} equal token ranges); ring colors show the ring that tablets replace.`}</div></div>
+    <div><div class="caption">${last?`Row key <b>${esc(last.pk)}</b> → canonical <span class="mono">${esc(enc(last.pk))}</span> → SHA-256 prefix <span class="mono">${tokHex(last.tok)}</span> → primary <b>${nn(last.primary)}</b>, replicas <b>${last.replicas.map(nn).join(', ')}</b>`:''}</div>
+    <table><tr><th>partition key</th><th>canonical</th><th>token</th><th>owner</th><th>replicas (RF 3)</th><th class="n">rows</th></tr>${tbl}</table>
+    <h3>Partitions per owner (${k}/${parts.length} hashed)</h3>${cnt.map((c,i)=>`<div class="lrow"><b style="color:${tc(i)}">node ${nn(i)}</b><span class="bar2" style="width:${c/mx*55}%;background:${tc(i)}"></span><span class="mono">${c} partitions · ${rowsN[i]} rows</span></div>`).join('')}</div></div>
+    <div class="note" style="margin-top:8px">All rows of a partition share one token, so they live together; <b>clustering key</b> (${esc(S.cfg.ck)}) only orders rows inside it. Adding node ${nn(N)} would move about <b>${Math.round(rs.ring*100)}%</b> of keys with the ring but <b>${Math.round(rs.mod*100)}%</b> with <code>hash % N</code> (1000 synthetic keys; your own ${rs.real.n} partitions: ${Math.round(rs.real.ring*100)}% vs ${Math.round(rs.real.mod*100)}%).</div>`;
+}
+
+/* =========================================================
+   PHASE 2: ROUTE & REPLICATE
+   ========================================================= */
+function nodePos(i,n){const a=(i/n)*2*Math.PI-Math.PI/2;return[200+130*Math.cos(a),130+90*Math.sin(a)]}
+function readExperiment(o,key,cl){
+  const o0=o.cl.byKey.get(key);if(!o0)return null;
+  const p=o.pl.place(o0.pkey),eng=o.cl.engines,ws=p.replicas.map(r=>({node:r,w:eng[r].localWinner(key)}));
+  const truth=ws.reduce((a,b)=>({w:winner(a.w,b.w)}),{w:null}).w,need=needOf(cl,3);
+  const subsets=[];(function go(st,acc){if(acc.length===need){subsets.push(acc.slice());return}for(let i=st;i<ws.length;i++){acc.push(ws[i]);go(i+1,acc);acc.pop()}})(0,[]);
+  const outs=subsets.map(sub=>({nodes:sub.map(x=>x.node),w:sub.reduce((a,b)=>winner(a,b.w),null)}));
+  return{ws,truth,outs,stale:outs.some(x=>(x.w?x.w.ver:0)<(truth?truth.ver:0)),need};
+}
+function draw2(p){
+  const R=S.cl.res,opI=clamp(S.cfg.opIdx,0,R.length-1),r=R[opI],o=r.op,N=S.cfg.N;
+  const maxLat=Math.max(...Object.values(r.lat));let s=`<svg viewBox="0 0 400 270" style="max-height:290px">`;
+  const P=Array.from({length:N},(_,i)=>nodePos(i,N)),[cxp,cyp]=P[r.coord];
+  const outP=clamp(p/0.35,0,1);let acks=0;const events=[];
+  r.replicas.forEach(rep=>{
+    const [x,y]=P[rep],isLive=r.live.includes(rep)&&r.status==='ok',ackT=0.35+0.55*r.lat[rep]/maxLat;
+    s+=`<line x1="${cxp}" y1="${cyp}" x2="${x}" y2="${y}" stroke="var(--line)" stroke-dasharray="3 3"/>`;
+    if(r.status!=='ok'){return}
+    if(isLive){
+      if(outP>0&&p<ackT){const f=p<0.35?outP:Math.max(0,1-(p-0.35)/(ackT-0.35));s+=`<circle cx="${cxp+(x-cxp)*(p<0.35?outP:1)}" cy="${cyp+(y-cyp)*(p<0.35?outP:1)}" r="5" fill="var(--acc2)"/>`}
+      if(p>=ackT){acks++;s+=`<text x="${x*0.62+cxp*0.38}" y="${y*0.62+cyp*0.38-6}" text-anchor="middle" style="fill:var(--ok);font-size:10.5px">ACK ${r.lat[rep]}ms</text>`}
+      else if(p>=0.35){const f=(p-0.35)/(ackT-0.35);s+=`<circle cx="${x+(cxp-x)*f}" cy="${y+(cyp-y)*f}" r="5" fill="var(--ok)"/>`}
+    }else if(p>0.1)s+=`<text x="${x*0.62+cxp*0.38}" y="${y*0.62+cyp*0.38-6}" text-anchor="middle" style="fill:var(--bad);font-size:10.5px">no reply (down)</text>`;
+  });
+  for(let i=0;i<N;i++){const[x,y]=P[i],isRep=r.replicas.includes(i),isDown=!r.live.includes(i)&&isRep||(S.cfg.downNode===i&&Math.floor(S.cfg.downFrom*R.length)<=o.i&&o.i<Math.floor(S.cfg.downTo*R.length));
+    s+=`<g><circle cx="${x}" cy="${y}" r="24" fill="${isRep?pc(i):'var(--card)'}" stroke="${i===r.coord?'var(--acc2)':tc(i)}" stroke-width="${i===r.coord?4:2}" ${isDown?'stroke-dasharray="4 3" opacity=".55"':''}/><text x="${x}" y="${y+4}" text-anchor="middle" font-weight="700">${nn(i)}</text>
+      <text x="${x}" y="${y+38}" text-anchor="middle" style="font-size:10px;fill:var(--mut)">${i===r.coord?'coordinator':isRep?'replica':''}${isDown?' ✕ down':''}</text></g>`;
+  }
+  s+='</svg>';
+  const okAt=0.35+0.55*(r.ackLat||0)/maxLat,done=p>=okAt;
+  const cap=r.status==='unavailable'?`<div class="caption bad"><b>UnavailableException</b>: ${S.cfg.cl} needs ${r.need} replicas but only ${r.live.length} are alive. Nothing was written.</div>`:
+    `<div class="caption ${done?'good':''}">Op #${o.i}: <b>${o.kind}</b> ${esc(short(o.pk+(o.ck!==null?' / '+o.ck:''),32))} · token ${tokHex(r.tok)} → replicas <b>${r.replicas.map(nn).join(',')}</b> · ${S.cfg.cl} needs <b>${r.need}</b> ACK · got <b>${acks}</b>${done?` → <b class="ok">success at ${r.ackLat}ms</b> (slower replicas still apply it)`:''}${r.missed.length?` · <span class="bad">${r.missed.map(nn).join(',')} missed this write (no hints/repair)</span>`:''}</div>`;
+  const ok=R.filter(x=>x.status==='ok').length,miss=R.reduce((a,x)=>a+x.missed.length,0);
+  const keys=S.cl.div.length?S.cl.div.map(d=>d.key):S.keys,rk=keys.includes(S.cfg.rkey)?S.cfg.rkey:keys[0],ex=['ONE','QUORUM','ALL'].map(cl=>({cl,e:readExperiment(S,rk,cl)}));
+  const e0=ex[0].e;
+  let rd='';
+  if(e0){
+    rd=`<h3>Read experiment: key <span class="mono">${esc(short(rk.replace(/\d+:/g,'').replace(/(.)$/,'$1'),30))}</span> (replicas read after the failed node is back)</h3>
+    <table><tr><th>replica</th><th>local winner</th></tr>${e0.ws.map(x=>`<tr><td>${nn(x.node)}</td><td class="mono">${x.w?`v${x.w.ver} ${x.w.kind}${x.w.exp!=null?' exp '+x.w.exp:''}`:'<span class="bad">nothing (missed)</span>'}${x.w&&e0.truth&&x.w.ver<e0.truth.ver?' <span class="tag r">stale</span>':''}</td></tr>`).join('')}</table>
+    <table style="margin-top:6px"><tr><th>read at</th><th>replicas asked</th><th>result</th><th>can return stale?</th></tr>${ex.map(({cl,e})=>`<tr><td><b>${cl}</b> (${e.need})</td><td class="mono">${e.outs.map(x=>'{'+x.nodes.map(nn).join(',')+'}').join(' ')}</td><td class="mono">${e.outs.map(x=>x.w?'v'+x.w.ver:'∅').join(' / ')}</td><td>${e.stale?'<b class="bad">yes</b>':'<b class="ok">no</b>'}</td></tr>`).join('')}</table>
+    <div class="note">With a successful QUORUM write (≥2 replicas) every QUORUM read set intersects it, so it always sees the newest version; ONE can hit the replica that missed it. Reconciliation picks the max version; there is no read repair here.</div>`;
+  }
+  return`${cap}${s}<div class="chips" style="margin:6px 0"><span class="chip">writes ok ${ok}/${R.length}</span><span class="chip ${R.length-ok?'bad':''}">unavailable ${R.length-ok}</span><span class="chip ${miss?'bad':''}">replica misses ${miss}</span><span class="chip ${S.cl.div.length?'bad':''}">keys with diverged replicas ${S.cl.div.length}</span></div>${rd}`;
+}
+
+/* =========================================================
+   PHASE 3: REPLICA WRITE PATH
+   ========================================================= */
+function draw3(p){
+  const eng=S.cl.engines[clamp(S.cfg.wnode,0,S.cfg.N-1)],H=eng.hist;
+  if(!H.length)return`<div class="box">Node ${nn(eng.id)} received no writes.</div>`;
+  const k=p>=1?H.length:Math.max(1,Math.ceil(p*H.length)),h=H[k-1],flushed=/publish manifest/.test(h.cap);
+  const cr=S.cfg.crash;let rec='';
+  if(cr!=='none'&&p>=1){const r=eng.recover(cr==='midflush'?'midflush':'ack');
+    rec=`<h3>Crash &amp; restart experiment</h3><div class="caption ${r.ok?'good':'bad'}"><b>${cr==='midflush'?'Crash in the middle of the last flush':'Crash right after the last ACK (memtable lost)'}</b>. ${r.note?esc(r.note)+'. ':''}Restart: load manifest (${r.sst} SSTables) → replay commitlog frames with seq &gt; ${r.fl} (${r.replayed} frame${r.replayed===1?'':'s'}) → memtable has ${r.memAfter} row(s). Visible state ${r.ok?'<b class="ok">identical</b> to before the crash ✔':'<b class="bad">DIFFERS ✘</b>'}.</div>`}
+  return`<div class="caption ${flushed?'good':''}">Write ${k}/${H.length} on node <b>${nn(eng.id)}</b>: ${esc(h.cap)}</div>
+  <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
+    <div class="col" style="background:var(--p4)"><h4>Commitlog (sequential, sync before ACK)</h4>${h.wal.map(f=>`<span class="row ${f.ret?'ret':''} ${f.kind==='delete'?'del':''}" title="${esc(f.key)}">seq ${f.seq} · ${f.kind} · ${esc(short(f.key.replace(/\d+:/g,'|'),22))}</span>`).join('')}<div class="note">${h.walKept} frame(s) must be kept for replay; struck-through ones are retired after a safe flush.</div></div>
+    <div class="col" style="background:var(--p1)"><h4>Memtable (RAM, ordered) ${h.mem.length}/${S.cfg.budget}</h4><div class="meter"><i style="width:${h.mem.length/S.cfg.budget*100}%"></i></div>${h.mem.map(x=>`<span class="row">${esc(short(x.replace(/\d+:/g,'|'),28))}</span>`).join('')||'<span class="note">empty (just flushed)</span>'}</div>
+    <div class="col" style="background:var(--p2)"><h4>SSTables (immutable) · manifest gen ${h.manifest}</h4>${h.ssts.map(x=>`<span class="sst ${flushed&&x===h.ssts[h.ssts.length-1]?'out':''}">${x.id} · ${x.n} rows · ${x.bytes} B<br><small>${esc(short(x.min.replace(/\d+:/g,'|'),14))} … ${esc(short(x.max.replace(/\d+:/g,'|'),14))}</small></span>`).join('')||'<span class="note">none yet</span>'}</div>
+  </div>${rec}
+  <div class="note">ACK is only sent after the log record is synced and the memtable applied. A SSTable becomes readable only once the manifest publishes it; the commitlog prefix is retired only after that.</div>`;
+}
+
+/* =========================================================
+   PHASE 4: READ PATH (Bloom → index → merge → cache)
+   ========================================================= */
+function draw4(p){
+  const keys=S.keys,key=keys.includes(S.cfg.rkey)?S.cfg.rkey:keys[Math.min(2,keys.length-1)],o0=S.cl.byKey.get(key),pl=S.pl.place(o0.pkey);
+  const nid=S.cfg.rnode>=0&&pl.replicas.includes(S.cfg.rnode)?S.cfg.rnode:pl.replicas[0],eng=S.cl.engines[nid];
+  eng.cache=eng.cache||new Map();
+  const tr=eng.readTrace(key,S.cfg.bloomBits,false),w=tr.win,at=S.readAt,st=statusOf(w,at);
+  const steps=tr.steps,k=p>=1?steps.length:Math.ceil(p*steps.length),hit=S.cfg.cache;
+  // cache demo: first read warms, second is a hit
+  eng.cache.clear();const t1=eng.readTrace(key,S.cfg.bloomBits,hit),t2=eng.readTrace(key,S.cfg.bloomBits,hit);
+  const row=(s,i)=>{const shown=i<k;return`<tr style="${shown?'':'opacity:.25'}"><td class="mono">${s.id}</td><td>${s.inRange?'in range':'<span style="color:var(--mut)">out of range</span>'}</td><td>${!shown?'':s.maybe?(s.fp?'<span class="bad">maybe (false positive)</span>':'<span class="ok">maybe</span>'):'<b class="ok">definitely not → skip file</b>'}</td><td class="n">${shown&&s.maybe?s.scanned:'-'}</td><td>${shown&&s.found?'<b>found</b>':''}</td></tr>`};
+  const d=tr.base;
+  const cand=[];if(tr.memHit)cand.push(['memtable',eng.mem.get(key)]);steps.filter(s=>s.found).forEach(s=>{const sst=eng.sst.find(x=>x.id===s.id);cand.push([s.id,sst.rows[sstFind(sst,key)][1]])});
+  return`<div class="caption">Read <b>${esc(short(key.replace(/\d+:/g,'|'),30))}</b> on replica <b>${nn(nid)}</b> (a replica of ${pl.replicas.map(nn).join(',')}), ReadAt = ${at}. Newest SSTable first.</div>
+  <div class="g2"><div><table><tr><th>SSTable</th><th>key range</th><th>Bloom ${S.cfg.bloomBits} bits/key</th><th class="n">rows scanned</th><th></th></tr>${steps.map(row).join('')||'<tr><td colspan="5">no SSTables yet</td></tr>'}</table>
+    <div class="note">Bloom says “definitely not” or “maybe”. For “maybe”, a sparse index (fence every ${FENCE} rows) gives the start offset, so only a few rows are scanned.</div></div>
+  <div><h3 style="margin-top:0">Merge candidates → winner</h3><table><tr><th>source</th><th>version</th><th>kind</th></tr>${p>=1?cand.map(([s,m])=>`<tr><td>${s}</td><td>v${m.ver}</td><td>${m.kind}${m.exp!=null?' exp '+m.exp:''}</td></tr>`).join(''):''}</table>
+    ${p>=1?`<div class="caption ${st==='live'?'good':''}" style="margin-top:8px">Winner v${w?w.ver:'-'} ${w?w.kind:''} → <b>${st}</b>${st==='live'?` ${esc(short(J(w.row),60))}`:st==='expired'?' (winner expired; an older value is NOT resurrected)':st==='deleted'?' (tombstone hides older versions)':''}</div>`:''}</div></div>
+  <h3>Work saved (this read)</h3><div class="chips"><span class="chip">no optimization: open ${d.files} files, scan ${d.rows} rows</span><span class="chip ok">+ Bloom: open ${tr.bloomFiles} file(s) (${tr.fp} false positive)</span><span class="chip ok">+ sparse index: scan ${tr.idxRows} rows</span><span class="chip ${S.cfg.cache?'ok':''}">row cache: 1st read ${t1.cache}, repeat read ${t2.cache}${t2.cache==='hit'?' → 0 files, 0 rows':''}</span></div>
+  <div class="note">Result is identical with all three optimizations off. A write or flush bumps the generation, so a stale cache entry is never used.</div>`;
+}
+
+/* =========================================================
+   PHASE 5: COMPACTION
+   ========================================================= */
+function draw5(p){
+  const st=S.cfg.strategy,sim=S.comp[st],steps=sim.steps;
+  if(!steps.length)return'<div class="box">This node flushed nothing; lower the memtable budget.</div>';
+  const k=p>=1?steps.length:Math.max(1,Math.ceil(p*steps.length)),s=steps[k-1];
+  const rows={};s.files.forEach(f=>(rows[f.row]=rows[f.row]||[]).push(f));
+  const grid=Object.keys(rows).sort().map(r=>`<div class="lrow"><b>${r}</b><div>${rows[r].map(f=>`<span class="sst ${s.inputs.includes(f.id)?'in':s.outputs.includes(f.id)?'out':''}" style="min-width:${Math.min(160,28+f.bytes/6)}px">${f.id} · ${f.n}r<br><small>${f.bytes} B</small></span>`).join('')}</div></div>`).join('');
+  const m=name=>{const x=S.comp[name];return`<tr style="${name===st?'background:var(--p0)':''}"><td><b>${name}</b></td><td class="n">${x.files}</td><td class="n">${x.WA.toFixed(2)}</td><td class="n">${x.SA.toFixed(2)}</td><td class="n">${x.RA.toFixed(2)}</td><td class="n">${x.peak}</td><td>${x.ok?'<span class="ok">✔</span>':'<span class="bad">✘</span>'}</td></tr>`};
+  return`<div class="caption">Step ${k}/${steps.length}: ${esc(s.text)}</div><div class="note" style="margin:0 0 4px">Node ${nn(S.cnode)}'s write trace repeated ${S.cfg.rounds}× (later rounds update half the keys). Orange = compaction inputs, green = outputs.</div>${grid||'<div class="note">no files</div>'}
+  <h3>Same trace, three strategies (final state)</h3><table><tr><th>strategy</th><th class="n">files</th><th class="n">WA</th><th class="n">SA</th><th class="n">RA</th><th class="n">peak disk B</th><th>reads = oracle</th></tr>${['STCS','LCS','TWCS'].map(m).join('')}</table>
+  <div class="note"><b>WA</b> = bytes compaction wrote ÷ bytes flushed · <b>SA</b> = bytes on disk ÷ live bytes · <b>RA</b> = avg files holding a live key. STCS merges same-size files (low WA, high SA), LCS keeps non-overlapping levels (low RA/SA, high WA), TWCS groups by time window and drops expired files whole (needs TTL workload to shine). After every compaction, reads must equal the oracle.</div>`;
+}
+
+/* =========================================================
+   PHASE 6: DELETES, TTL, TOMBSTONES
+   ========================================================= */
+function tombScenario(){
+  const keys=S.keys,key=keys.includes(S.cfg.rkey)?S.cfg.rkey:keys[0],row=(S.cl.byKey.get(key).src),lbl=short(key.replace(/\d+:/g,'|'),20);
+  const v1={id:1,key,pkey:'',row,ver:10,kind:'upsert',exp:null},isTtl=S.cfg.scen==='ttl';
+  const v2=isTtl?{id:2,key,pkey:'',row:{...row,_v:2},ver:20,kind:'upsert',exp:25}:{id:2,key,pkey:'',row:null,ver:20,kind:'delete',exp:null};
+  const filler={id:3,key:'zz-filler',pkey:'',row:{x:1},ver:21,kind:'upsert',exp:null},filler2={id:4,key:'zz-filler2',pkey:'',row:{x:2},ver:22,kind:'upsert',exp:null};
+  const base=[{id:'S1',map:new Map([[key,v1],['aa-big',{id:5,key:'aa-big',row:{big:true},ver:5,kind:'upsert',exp:null}]])},{id:'S2',map:new Map([[key,v2]])},{id:'S3',map:new Map([[filler.key,filler],[filler2.key,filler2]])}];
+  const files=base.map(b=>fileFrom(b.id,b.map)),now=S.cfg.tNow,gc=15,mode=S.cfg.purge;
+  const ins=mode==='full'?files:[files[1],files[2]],others=files.filter(f=>!ins.includes(f));
+  const merged=mergeMaps(ins);let decision='';
+  const m=merged.get(key);
+  if(isDead(m,now)||m.kind==='delete'){
+    const aged=now-m.ver>=gc,older=others.some(x=>key>=x.minKey&&key<=x.maxKey&&x.minTS<m.ver);
+    if(mode==='unsafe'){merged.delete(key);decision=`UNSAFE policy: drop the ${m.kind==='delete'?'tombstone':'expired cell'} as soon as it is compacted (ignores older files).`}
+    else if(aged&&!older){merged.delete(key);decision=`Purge allowed: age ${now-m.ver} ≥ gc_grace ${gc} and no file outside the inputs can hold older data.`}
+    else decision=`Keep the ${m.kind==='delete'?'tombstone':'expired cell'}: ${!aged?`age ${now-m.ver} < gc_grace ${gc}`:`file ${others.filter(x=>key>=x.minKey&&key<=x.maxKey&&x.minTS<m.ver).map(x=>x.id).join(',')} outside the inputs may still hold older data`}.`;
+  }else decision='Winner is a live value: nothing to purge.';
+  const out=merged.size?fileFrom('S4',merged):null,after=[...others,...(out?[out]:[])];
+  const readAfter=mergeMaps(after).get(key),readBefore=mergeMaps(files).get(key);
+  return{files,ins,out,after,decision,rb:statusOf(readBefore,now),ra:statusOf(readAfter,now),wa:readAfter,wb:readBefore,mode,isTtl,now,key,lbl,gc};
+}
+function draw6(p){
+  const t=tombScenario(),a=p<0.25?0:p<0.5?1:p<0.75?2:3,fl=(f,cls='')=>`<span class="sst ${cls}">${f.id}<br>${[...f.map.entries()].map(([k,m])=>`<small>${esc(short(k.replace(/\d+:/g,'|'),14))}: v${m.ver} ${m.kind==='delete'?'<b class="bad">DELETE</b>':m.exp!=null?'ttl→'+m.exp:'val'}</small>`).join('<br>')}</span>`;
+  const res=(st,w)=>st==='live'?`<b class="bad">${t.mode==='unsafe'?'RESURRECTED: ':''}live ${esc(short(J(w.row),40))} (v${w.ver})</b>`:`<b class="ok">${st}</b>`;
+  return`<div class="caption">${['① v1 of <b>'+esc(t.lbl)+'</b> is written and flushed into S1 (big, old file).','② '+(t.isTtl?'v2 is written with a TTL (expires at t=25) → S2':'a DELETE (tombstone v2) is written → S2')+'; S3 is an unrelated small file.','③ Compaction of the small files S2+S3 → S4. '+esc(t.decision),'④ Read after compaction at t='+t.now+'.'][a]}</div>
+  <div class="g2"><div><h3 style="margin-top:0">Before compaction</h3>${t.files.map(f=>fl(f,t.ins.includes(f)&&a>=2?'in':'')).join('')}
+    <div class="note">Read of the key: ${res(t.rb,t.wb)}</div></div>
+  <div style="${a>=2?'':'opacity:.25'}"><h3 style="margin-top:0">After compaction (${t.mode==='full'?'all files merged':'S2+S3 → S4, S1 untouched'})</h3>${t.after.map(f=>fl(f,f===t.out?'out':'')).join('')||'<span class="note">no files</span>'}
+    <div class="note" style="${a>=3?'':'visibility:hidden'}">Read of the key: ${res(t.ra,t.wa)}</div></div></div>
+  <div class="caption ${t.ra==='live'&&t.mode!=='full'||(t.ra==='live'&&t.rb!=='live')?'bad':'good'}" style="${a>=3?'':'visibility:hidden'}">${t.rb!==t.ra?`<b>Read result changed by compaction: ${t.rb} → ${t.ra}.</b> That is data resurrection, which the purge guard exists to prevent.`:`Read result unchanged (${t.ra}): compaction preserved delete/TTL semantics.`}</div>
+  <div class="note">Rule: a tombstone (or expired cell) may only be dropped when older than gc_grace <i>and</i> no file outside the compaction can contain older data. ${t.isTtl?'For TTL, the expired winner still hides older versions: it must not fall back to v1.':''} Try modes <b>unsafe</b> and <b>full merge</b> and move <b>now</b> to see the difference.</div>`;
+}
+
+/* =========================================================
+   PHASE 7: TABLETS & MIGRATION
+   ========================================================= */
+let TMS=null,migAnim=null;
+function initTMS(){
+  const c=S.cfg;TMS={epoch:1,next:c.tablets,tablets:initTablets(c.N,c.tablets).map(t=>({...t})),log:['initial map: '+c.tablets+' tablets, epoch 1']};
+}
+function tabletRows(tabs){
+  const rows=new Map(tabs.map(t=>[t.id,0]));S.parts.forEach(q=>{const t=tabletOf(tabs,q.tok);rows.set(t.id,(rows.get(t.id)||0)+q.rows)});return rows;
+}
+function nodeLoad(tabs,rows){const l=Array(S.cfg.N).fill(0);tabs.forEach(t=>t.rep.forEach(r=>l[r]+=rows.get(t.id)||0));return l}
+const MSTEPS=['Snapshot the source replica at its current commitlog sequence and keep a delta log','Copy the snapshot to the destination (provisional: not counted for quorum)','Catch up: ship the delta written during the copy','Close write admission and drain operations already admitted on the old replica set','Fence at the source sequence; validate mutation/version/tombstone/expiry inventory matches','Commit the new placement epoch durably (fsync)','Reopen write admission under the new epoch; requests with the old epoch are rejected','Cleanup the old replica after old readers’ leases/pins drain'];
+function draw7(p){
+  if(!TMS)initTMS();
+  const tabs=TMS.tablets,rows=tabletRows(tabs),load=nodeLoad(tabs,rows),mx=Math.max(1,...load),N=S.cfg.N;
+  const mig=migAnim,step=mig?Math.min(MSTEPS.length,Math.floor(p*MSTEPS.length)+1):0;
+  const total=Number(MAX);
+  let strip='<svg viewBox="0 0 900 78" style="max-height:90px">';
+  tabs.forEach((t,i)=>{const x=10+Number(t.lo*880n/MAX),w=Math.max(4,Number((t.hi-t.lo)*880n/MAX)),isM=mig&&mig.tablet===t.id;
+    strip+=`<rect x="${x}" y="8" width="${w-2}" height="34" rx="5" fill="${pc(t.rep[0])}" stroke="${isM?'var(--acc2)':'var(--line)'}" stroke-width="${isM?3:1.5}"/><text x="${x+4}" y="22" style="font-size:10px;font-weight:700">${t.id}</text><text x="${x+4}" y="36" style="font-size:9.5px;fill:var(--mut)">${t.rep.map(nn).join('')}</text>`});
+  S.parts.forEach(q=>{strip+=`<circle cx="${10+Number(q.tok*880n/MAX)}" cy="58" r="3.5" fill="${tc(tabletOf(tabs,q.tok).rep[0])}"/>`});
+  strip+=`<text x="10" y="76" style="fill:var(--mut);font-size:10px">token 0</text><text x="890" y="76" text-anchor="end" style="fill:var(--mut);font-size:10px">2⁶⁴ · dots = your partitions</text></svg>`;
+  let mv='';
+  if(mig){
+    const cr=S.cfg.mcrash,crashed=cr>0&&step>=cr,committed=cr===0||cr>6;
+    mv=`<h3>Migration ${mig.tablet}: ${nn(mig.from)} → ${nn(mig.to)} (epoch ${mig.epoch} → ${mig.epoch+1})</h3><div style="display:grid;gap:3px">${MSTEPS.map((s,i)=>`<div class="row" style="${i+1<=step?'':'opacity:.3'};${i+1===step&&p<1?'border-color:var(--acc2)':''}">${i+1}. ${esc(s)}${i+1===cr?' <span class="tag r">crash here</span>':''}${i+1===6&&i+1<=step?` <span class="tag g">replicas ${mig.before.map(nn).join(',')} → ${mig.after.map(nn).join(',')}</span>`:''}</div>`).join('')}</div>`;
+    if(crashed&&p>=1)mv+=`<div class="caption ${cr<6?'bad':'good'}">${cr<6?`Crash at step ${cr} (before the durable commit): <b>abort</b>. The map still says ${mig.before.map(nn).join(',')} (epoch ${mig.epoch}); the provisional copy on ${nn(mig.to)} is discarded and acknowledged writes remain on the old replicas.`:`Crash at step ${cr} (after the durable commit): <b>resume forward</b>. Epoch ${mig.epoch+1} is durable, ${nn(mig.to)} is authoritative; never roll back to the old replica just because the caller got no reply.`}</div>`;
+  }
+  const log=TMS.log.slice(-5).map(l=>`<div class="row">${esc(l)}</div>`).join('');
+  return`<div class="caption">Placement map epoch <b>${TMS.epoch}</b> · ${tabs.length} tablets · every token belongs to exactly one tablet; each tablet has 3 replicas on distinct nodes.</div>${strip}
+  <div class="g2"><div><table><tr><th>tablet</th><th>token range</th><th>replicas</th><th class="n">rows</th></tr>${tabs.map(t=>`<tr><td>${t.id}</td><td class="mono">${tokHex(t.lo)} – ${tokHex(t.hi)}</td><td>${t.rep.map(nn).join(', ')}</td><td class="n">${rows.get(t.id)||0}</td></tr>`).join('')}</table></div>
+  <div><h3 style="margin-top:0">Stored rows per node (replicas counted)</h3>${load.map((l,i)=>`<div class="lrow"><b style="color:${tc(i)}">node ${nn(i)}</b><span class="bar2" style="width:${l/mx*60}%;background:${tc(i)}"></span><span class="mono">${l}</span></div>`).join('')}<div class="note">skew = max/min = ${(mx/Math.max(1,Math.min(...load))).toFixed(2)}</div><h3>Recent changes</h3>${log}</div></div>${mv}
+  <div class="note">Split only cuts the token range (all rows of a partition go to the same child; children keep the parent's replicas). Moving a replica is a separate, journaled protocol. Single topology coordinator in this feature: that is exactly the gap Raft closes (next phase).</div>`;
+}
+function doSplit(){
+  if(!TMS)initTMS();const t=TMS.tablets.find(x=>x.id===S.cfg.mtab)||TMS.tablets[0];
+  const mid=(t.lo+t.hi)/2n,a={...t,id:'T'+TMS.next++,hi:mid,epoch:TMS.epoch+1},b={...t,id:'T'+TMS.next++,lo:mid,epoch:TMS.epoch+1};
+  TMS.tablets.splice(TMS.tablets.indexOf(t),1,a,b);TMS.epoch++;TMS.log.push(`split ${t.id} at ${tokHex(mid)} → ${a.id}, ${b.id} (epoch ${TMS.epoch})`);OPT.mtab=a.id;showPhase(6);
+}
+function doMove(){
+  if(!TMS)initTMS();const t=TMS.tablets.find(x=>x.id===S.cfg.mtab)||TMS.tablets[0],from=S.cfg.mfrom,to=S.cfg.mto;
+  if(!t.rep.includes(from)||t.rep.includes(to)){TMS.log.push(`invalid: ${t.id} replicas ${t.rep.map(nn).join(',')}; need a current replica as source and a non-replica as destination`);showPhase(6);return}
+  const before=t.rep.slice(),after=before.map(r=>r===from?to:r);
+  migAnim={tablet:t.id,from,to,epoch:TMS.epoch,before,after};stopAll();
+  animate(p=>paintView(p),7000).then(ok=>{
+    if(ok&&migAnim){const cr=S.cfg.mcrash;if(cr===0||cr>6){t.rep=after;t.epoch=++TMS.epoch;TMS.log.push(`moved ${t.id}: ${before.map(nn)} → ${after.map(nn)} (epoch ${TMS.epoch}); stale-epoch requests now rejected`)}else TMS.log.push(`move of ${t.id} aborted at step ${cr}; map unchanged`)}
+    migAnim=null;paintView(1);showPhase(6);
+  });
+}
+
+/* =========================================================
+   PHASE 8: RAFT (new) — real simulator, deterministic
+   ========================================================= */
+class Raft{
+  constructor(n,seed){this.n=n;this.seed=seed;this.reset()}
+  reset(){this.rnd=lcg(this.seed);this.t=0;this.msgs=[];this.ev=[];this.script=[];this.vio=[];this.maxCommit=0;this.cl={};this.cmd=0;this.iso=null;this.elections=0;
+    this.nodes=Array.from({length:this.n},(_,i)=>({id:i,up:true,grp:0,role:'follower',term:0,voted:null,log:[],commit:0,deadline:this.et(),hb:0,next:[],match:[],votes:0}))}
+  et(){return this.t+150+Math.floor(this.rnd()*150)}
+  maj(){return Math.floor(this.n/2)+1}
+  log(s){this.ev.push(`${(this.t/1000).toFixed(2)}s  ${s}`);if(this.ev.length>60)this.ev.shift()}
+  leader(){let b=null;this.nodes.forEach(x=>{if(x.up&&x.role==='leader'&&(!b||x.term>b.term))b=x});return b}
+  send(f,to,type,pl){const a=this.nodes[f],b=this.nodes[to];if(!a.up)return;this.msgs.push({f,to,type,pl,sent:this.t,arrive:this.t+25+Math.floor(this.rnd()*30)})}
+  become(x,term){if(term>x.term){x.term=term;x.voted=null}if(x.role!=='follower'){this.log(`${nn(x.id)} steps down (term ${x.term})`)}x.role='follower';x.deadline=this.et()}
+  elect(x){x.term++;x.role='candidate';x.voted=x.id;x.votes=1;x.deadline=this.et();this.elections++;this.log(`${nn(x.id)} timed out → candidate, term ${x.term}`);
+    this.nodes.forEach(o=>{if(o.id!==x.id)this.send(x.id,o.id,'RV',{term:x.term,li:x.log.length,lt:x.log.length?x.log[x.log.length-1].term:0})});
+    if(x.votes>=this.maj())this.win(x)}
+  win(x){x.role='leader';x.next=this.nodes.map(()=>x.log.length+1);x.match=this.nodes.map(()=>0);x.match[x.id]=x.log.length;
+    this.log(`${nn(x.id)} elected LEADER for term ${x.term} (${x.votes}/${this.n} votes)`);
+    const prev=this.cl;for(let i=1;i<=this.maxCommit;i++){if(this.cl[i]&&(!x.log[i-1]||J(x.log[i-1])!==this.cl[i]))this.vio.push(`leader ${nn(x.id)} lacks committed entry ${i}`)}
+    x.log.push({term:x.term,cmd:'NOOP'});x.match[x.id]=x.log.length;x.hb=this.t;this.bcast(x)}
+  bcast(x){this.nodes.forEach(o=>{if(o.id!==x.id)this.ae(x,o.id)})}
+  ae(x,to){const ni=x.next[to],pi=ni-1,pt=pi>0?x.log[pi-1].term:0;this.send(x.id,to,'AE',{term:x.term,pi,pt,ents:x.log.slice(ni-1,ni+2),lc:x.commit})}
+  advance(x){for(let N=x.log.length;N>x.commit;N--){if(x.log[N-1].term!==x.term)break;const c=x.match.filter(m=>m>=N).length;if(c>=this.maj()){x.commit=N;this.log(`leader ${nn(x.id)} commits index ${N} (${c}/${this.n} stored it)`);break}}}
+  recordCommit(x){for(let i=1;i<=x.commit;i++){const e=J(x.log[i-1]);if(!this.cl[i])this.cl[i]=e;else if(this.cl[i]!==e)this.vio.push(`committed entry ${i} differs on ${nn(x.id)}`)}this.maxCommit=Math.max(this.maxCommit,x.commit)}
+  deliver(m){
+    const x=this.nodes[m.to],f=this.nodes[m.f];if(!x.up||x.grp!==f.grp)return;
+    const p=m.pl;
+    if(m.type==='RV'){
+      if(p.term>x.term)this.become(x,p.term);
+      const myLT=x.log.length?x.log[x.log.length-1].term:0,upToDate=p.lt>myLT||(p.lt===myLT&&p.li>=x.log.length);
+      const grant=p.term===x.term&&(x.voted===null||x.voted===m.f)&&upToDate;
+      if(grant){x.voted=m.f;x.deadline=this.et()}
+      this.send(x.id,m.f,'RVR',{term:x.term,grant});
+    }else if(m.type==='RVR'){
+      if(p.term>x.term){this.become(x,p.term);return}
+      if(x.role==='candidate'&&p.term===x.term&&p.grant){x.votes++;if(x.votes>=this.maj())this.win(x)}
+    }else if(m.type==='AE'){
+      if(p.term<x.term){this.send(x.id,m.f,'AER',{term:x.term,ok:false,mi:0});return}
+      if(p.term>x.term||x.role!=='follower')this.become(x,p.term);x.deadline=this.et();
+      if(p.pi>0&&(x.log.length<p.pi||x.log[p.pi-1].term!==p.pt)){this.send(x.id,m.f,'AER',{term:x.term,ok:false,mi:Math.min(x.log.length,p.pi-1)});return}
+      p.ents.forEach((e,i)=>{const idx=p.pi+1+i;if(x.log.length>=idx&&x.log[idx-1].term!==e.term){this.log(`${nn(x.id)} truncates conflicting log from index ${idx}`);x.log.length=idx-1}if(x.log.length<idx)x.log.push(e)});
+      const mi=p.pi+p.ents.length;if(p.lc>x.commit){x.commit=Math.min(p.lc,mi);this.recordCommit(x)}
+      this.send(x.id,m.f,'AER',{term:x.term,ok:true,mi});
+    }else if(m.type==='AER'){
+      if(p.term>x.term){this.become(x,p.term);return}
+      if(x.role!=='leader'||p.term!==x.term)return;
+      if(p.ok){x.match[m.f]=Math.max(x.match[m.f],p.mi);x.next[m.f]=x.match[m.f]+1;this.advance(x);this.recordCommit(x);if(x.next[m.f]<=x.log.length)this.ae(x,m.f)}
+      else{x.next[m.f]=Math.max(1,Math.min(x.next[m.f]-1,p.mi+1));this.ae(x,m.f)}
+    }
+  }
+  act(a){
+    if(a.a==='propose'){let L=a.node==='iso'&&this.iso!==null?this.nodes[this.iso]:this.leader();if(!L||!L.up||L.role!=='leader'){this.log('client: no leader reachable, command not accepted');return}
+      const cmd=a.cmd||this.nextCmd();L.log.push({term:L.term,cmd});L.match[L.id]=L.log.length;this.log(`client → ${nn(L.id)}: "${cmd}" appended at index ${L.log.length} (uncommitted)`);this.bcast(L)}
+    if(a.a==='kill'){const x=a.node==='leader'?this.leader():this.nodes[a.node];if(x){x.up=false;this.log(`${nn(x.id)} CRASHED${x.role==='leader'?' (was leader)':''}`);this.killed=x.id}}
+    if(a.a==='revive'){const x=a.node==='killed'?this.nodes[this.killed]:this.nodes[a.node];if(x&&!x.up){x.up=true;x.role='follower';x.deadline=this.et();this.log(`${nn(x.id)} restarted with its persisted log`)}}
+    if(a.a==='isolate'){const L=this.leader();this.iso=L?L.id:0;const grp=[this.iso];for(const x of this.nodes){if(grp.length>=Math.floor(this.n/2))break;if(x.id!==this.iso)grp.push(x.id)}grp.forEach(i=>this.nodes[i].grp=1);this.log(`network partition: {${grp.map(nn)}} cut off from the rest`)}
+    if(a.a==='heal'){this.nodes.forEach(x=>x.grp=0);this.log('partition healed')}
+  }
+  nextCmd(){const c=['set T1=[A,B,C] epoch=1','split T1 → T1a,T1b','move T3: A→D','set T3=[D,B,C] epoch=2','drop table old_orders'];return c[this.cmd++%c.length]}
+  step(){
+    this.t+=10;
+    this.script.filter(s=>!s.done&&s.t<=this.t).forEach(s=>{s.done=true;this.act(s)});
+    const due=this.msgs.filter(m=>m.arrive<=this.t).sort((a,b)=>a.arrive-b.arrive);this.msgs=this.msgs.filter(m=>m.arrive>this.t);due.forEach(m=>this.deliver(m));
+    this.nodes.forEach(x=>{if(!x.up)return;
+      if(x.role==='leader'){if(this.t>=x.hb+50){x.hb=this.t;this.bcast(x)}}
+      else if(this.t>=x.deadline)this.elect(x)});
+    const seen={};this.nodes.forEach(x=>{if(x.role==='leader'&&x.up){if(seen[x.term]!==undefined)this.vio.push(`two leaders in term ${x.term}`);seen[x.term]=x.id}});
+  }
+  advanceTo(T){while(this.t<T)this.step()}
+}
+const RAFT_SCEN={
+  elect:{d:3500,s:[]},
+  replicate:{d:6000,s:[{t:1600,a:'propose'},{t:2200,a:'propose'},{t:2800,a:'propose'}]},
+  crash:{d:9000,s:[{t:1500,a:'propose'},{t:2300,a:'propose'},{t:3200,a:'kill',node:'leader'},{t:5200,a:'propose'},{t:6500,a:'revive',node:'killed'},{t:7000,a:'propose'}]},
+  partition:{d:11000,s:[{t:1500,a:'propose'},{t:2300,a:'isolate'},{t:2800,a:'propose',node:'iso',cmd:'set T9=[X,Y,Z] (sent to isolated leader)'},{t:4500,a:'propose'},{t:5200,a:'propose'},{t:7800,a:'heal'}]},
+};
+let RS=null,rsLive=false,rsTimer=0;
+function rsInit(scen){
+  RS=new Raft(S.cfg.raftN,S.ops.length*13+7);RS.scen=scen;RS.dur=RAFT_SCEN[scen].d;RS.script=RAFT_SCEN[scen].s.map(x=>({...x}));
+}
+function draw8(p){
+  if(!RS||RS.n!==S.cfg.raftN||RS.scen!==S.cfg.raftScen)rsInit(S.cfg.raftScen);
+  if(rsAnim){const T=p*RS.dur;if(T<RS.t)rsInit(RS.scen);RS.advanceTo(T)}
+  const n=RS.n,pos=i=>{const a=(i/n)*2*Math.PI-Math.PI/2;return[190+105*Math.cos(a),120+78*Math.sin(a)]};
+  const roleCol={follower:'var(--card)',candidate:'var(--p4)',leader:'var(--p2)'};
+  let s='<svg viewBox="0 0 380 250" style="max-height:270px">';
+  RS.nodes.forEach(x=>{const[px,py]=pos(x.id);
+    s+=`<circle cx="${px}" cy="${py}" r="25" fill="${x.up?roleCol[x.role]:'var(--p7)'}" stroke="${x.role==='leader'&&x.up?'var(--ok)':x.grp?'var(--bad)':'var(--line)'}" stroke-width="${x.role==='leader'?4:2}" ${x.grp?'stroke-dasharray="5 3"':''}/>
+    <text x="${px}" y="${py-2}" text-anchor="middle" font-weight="700">${nn(x.id)}</text><text x="${px}" y="${py+11}" text-anchor="middle" style="font-size:10px">${x.up?'t'+x.term:'✕ down'}</text>
+    <text x="${px}" y="${py+40}" text-anchor="middle" style="font-size:10px;fill:var(--mut)">${x.up?x.role+(x.grp?' · cut off':''):''}</text>`});
+  const col={RV:'var(--t3)',RVR:'var(--t4)',AE:'var(--acc)',AER:'var(--t6)'};
+  RS.msgs.forEach(m=>{const f=clamp((RS.t-m.sent)/(m.arrive-m.sent),0,1),[ax,ay]=pos(m.f),[bx,by]=pos(m.to);s+=`<circle cx="${ax+(bx-ax)*f}" cy="${ay+(by-ay)*f}" r="4.5" fill="${col[m.type]}"><title>${m.type}</title></circle>`});
+  s+=`</svg><div class="chips" style="justify-content:center"><span class="chip" style="border-color:var(--t3)">RequestVote</span><span class="chip" style="border-color:var(--t4)">vote reply</span><span class="chip" style="border-color:var(--acc)">AppendEntries</span><span class="chip" style="border-color:var(--t6)">append reply</span></div>`;
+  const logs=RS.nodes.map(x=>`<tr style="${x.up?'':'opacity:.5'}"><td><b style="color:${tc(x.id)}">${nn(x.id)}</b> <span class="note">${x.role[0].toUpperCase()}${x.up?'':' ✕'}</span></td><td class="n">${x.commit}</td><td>${x.log.slice(-9).map((e,i)=>{const idx=x.log.length-Math.min(9,x.log.length)+i+1;return`<span class="le ${idx<=x.commit?'c':''}" style="background:${pc(e.term)}" title="index ${idx} term ${e.term}: ${esc(e.cmd)}">${idx}·${e.cmd==='NOOP'?'noop':esc(short(e.cmd,5))}</span>`}).join('')||'<span class="note">empty</span>'}</td></tr>`).join('');
+  const L=RS.leader(),vio=RS.vio.length;
+  return`<div class="g2"><div>${s}<div class="caption ${vio?'bad':'good'}" style="margin-top:6px">t = ${(RS.t/1000).toFixed(2)}s · ${L?`leader <b>${nn(L.id)}</b> term ${L.term}`:'<b>no leader</b>'} · majority = ${RS.maj()}/${n} · elections ${RS.elections} · max committed index ${RS.maxCommit}</div></div>
+  <div><table><tr><th>node</th><th class="n">commit</th><th>log (last 9; green border = committed; color = term)</th></tr>${logs}</table>
+  <h3>Event log</h3><div class="box mono" style="max-height:170px;overflow:auto">${RS.ev.slice(-14).map(esc).join('<br>')||'…'}</div></div></div>
+  <div class="chips" style="margin-top:8px"><span class="chip ${vio?'bad':'ok'}">${vio?'✘ '+esc(RS.vio[0]):'✔ one leader per term'}</span><span class="chip ${vio?'bad':'ok'}">✔ committed entries identical everywhere</span><span class="chip ${vio?'bad':'ok'}">✔ every leader holds all committed entries</span></div>
+  <div class="note">Entries are tablet-map commands from phase 7. A command is applied only after it is <b>committed</b>: stored by a majority, in the leader's current term. A leader cut off from the majority keeps accepting entries but can never commit them; they are truncated after healing. This replaces the single topology coordinator of phase 7.</div>`;
+}
+let rsAnim=false;
+function raftCtlAct(a){
+  if(!RS)rsInit(S.cfg.raftScen);rsAnim=false;
+  if(a==='reset'){rsInit(S.cfg.raftScen);}
+  else if(a==='live'){rsLive=!rsLive;if(rsLive)rsLoop()}
+  else if(a==='propose')RS.act({a:'propose'});
+  else if(a==='killl')RS.act({a:'kill',node:'leader'});
+  else if(a==='revive')RS.act({a:'revive',node:'killed'});
+  else if(a==='isolate')RS.act({a:'isolate'});
+  else if(a==='heal')RS.act({a:'heal'});
+  paintView(1);
+}
+function rsLoop(){let last=null;const f=now=>{if(!rsLive||cur!==7)return;if(last===null)last=now;const dt=now-last;last=now;if(!paused)RS.advanceTo(RS.t+dt*speed);paintView(1);requestAnimationFrame(f)};requestAnimationFrame(f)}
+
+/* =========================================================
+   PHASES TABLE
+   ========================================================= */
+const PHASES=[
+ {t:'Partition & token ring',s:'key → token → owner',f:'F01',dur:5000,draw:draw1,b:'A partition key is encoded canonically, hashed to a 64-bit token, and placed on a ring of vnode endpoints. All rows of a partition share one token and one set of replicas; clustering keys only order rows inside it.'},
+ {t:'Route & replicate',s:'coordinator + CL',f:'F05',dur:4500,draw:draw2,b:'Any node can coordinate. It fans a mutation out to the 3 replicas and answers the client once ONE / QUORUM / ALL replicas acknowledge. A replica that is down simply misses the write: reads at weak levels can then be stale.'},
+ {t:'Replica write path',s:'commitlog → memtable → SSTable',f:'F02',dur:7000,draw:draw3,b:'Each replica appends to a sequential commitlog and syncs before ACK, applies to an ordered memtable, and flushes full memtables into immutable SSTables published through a manifest. After a crash, the log is replayed.'},
+ {t:'Read path',s:'Bloom → index → merge → cache',f:'F06 · F03',dur:4500,draw:draw4,b:'A point read must merge every version of a row across memtable and SSTables. Bloom filters skip files that surely lack the key, a sparse index jumps to the right offset, and a generation-checked cache can skip all of it.'},
+ {t:'Compaction',s:'STCS · LCS · TWCS',f:'F03',dur:8000,draw:draw5,b:'Flushes pile up SSTables, so background compaction merges them without changing read results. Each strategy trades write, space and read amplification differently.'},
+ {t:'Deletes & TTL',s:'tombstones & purge guard',f:'F04',dur:7000,draw:draw6,b:'A delete or expired TTL is a versioned marker that must hide older data in every file and replica. Compaction may purge it only when no older data can still exist outside the inputs.'},
+ {t:'Tablets & migration',s:'split · move · epoch',f:'F07',dur:6000,draw:draw7,b:'Tablets replace the static ring with per-table token ranges that have their own replica sets and an epoch. Moving a replica copies a snapshot, catches up, fences, then commits a new epoch durably.'},
+ {t:'Raft consensus',s:'quorum replicated log',f:'NEW',dur:9000,draw:draw8,nw:true,b:'Raft gives the cluster one agreed order for metadata such as tablet placement: a leader per term, log replication with majority commit, and safe re-election. Complements leaderless QUORUM, which has no total order.'},
+];
+function ctlHTML(k){
+  const sel=(key,opts,val)=>`<select data-opt="${key}">${opts.map(([v,l])=>`<option value="${v}" ${String(v)===String(val)?'selected':''}>${esc(l)}</option>`).join('')}</select>`;
+  const N=S&&!S.error?S.cfg.N:4,nodesOpt=[...Array(N).keys()].map(i=>[i,'node '+nn(i)]);
+  const keyOpt=S&&!S.error?(k===1&&S.cl.div.length?S.cl.div.map(d=>d.key):S.keys).slice(0,60).map(x=>[x,x.replace(/\d+:/g,'|')]):[];
+  if(!S||S.error)return'';
+  if(k===0)return`<label>Nodes ${sel('N',[3,4,5,6].map(x=>[x,x]),OPT.N)}</label><label>vnodes/node ${sel('vn',[1,2,3,4].map(x=>[x,x]),OPT.vn)}</label><label>Placement ${sel('place',[['ring','token ring'],['tablets','tablets']],OPT.place)}</label>`;
+  if(k===1)return`<label>Consistency ${sel('cl',['ONE','QUORUM','ALL'].map(x=>[x,x]),OPT.cl)}</label><label>Node down ${sel('downNode',[[-1,'none'],...nodesOpt],OPT.downNode)}</label><label>from ${sel('downFrom',[0,.2,.3,.4,.5].map(x=>[x,Math.round(x*100)+'%']),OPT.downFrom)}</label><label>to ${sel('downTo',[.5,.6,.7,.8,1].map(x=>[x,Math.round(x*100)+'%']),OPT.downTo)}</label><label>Animate op <input type="range" data-opt="opIdx" min="0" max="${S.cl.res.length-1}" value="${clamp(OPT.opIdx,0,S.cl.res.length-1)}" style="width:140px"></label><label>Read key ${sel('rkey',keyOpt,keyOpt.some(x=>x[0]===OPT.rkey)?OPT.rkey:(keyOpt[0]||[''])[0])}</label>`;
+  if(k===2)return`<label>Replica node ${sel('wnode',nodesOpt,OPT.wnode)}</label><label>Memtable budget ${sel('budget',[2,3,4,6,8].map(x=>[x,x+' rows']),OPT.budget)}</label><label>Crash experiment ${sel('crash',[['none','none'],['ack','crash after last ACK'],['midflush','crash mid-flush']],OPT.crash)}</label>`;
+  if(k===3)return`<label>Key ${sel('rkey',S.keys.slice(0,80).map(x=>[x,x.replace(/\d+:/g,'|')]),OPT.rkey||S.keys[Math.min(2,S.keys.length-1)])}</label><label>Replica ${sel('rnode',[[-1,'primary'],...nodesOpt],OPT.rnode)}</label><label>Bloom bits/key <input type="range" data-opt="bloomBits" min="2" max="16" value="${OPT.bloomBits}" style="width:100px"> ${OPT.bloomBits}</label><label><input type="checkbox" data-opt="cache" ${OPT.cache?'checked':''}> row cache</label><label>ReadAt <input type="range" data-opt="readAt" min="0" max="${S.ops.length+40}" value="${OPT.readAt<0?S.ops.length:OPT.readAt}" style="width:120px"> ${S.readAt}</label>`;
+  if(k===4)return`<label>Strategy ${sel('strategy',['STCS','LCS','TWCS'].map(x=>[x,x]),OPT.strategy)}</label><label>Node ${sel('cnode',nodesOpt,OPT.cnode)}</label><label>Trace rounds ${sel('rounds',[1,2,3,4,5].map(x=>[x,x]),OPT.rounds)}</label><label>Memtable ${sel('budget',[2,3,4,6].map(x=>[x,x+' rows']),OPT.budget)}</label><span class="note">Tip: set Workload to “inserts with TTL” and pick TWCS.</span>`;
+  if(k===5)return`<label>Scenario ${sel('scen',[['delete','DELETE tombstone'],['ttl','TTL expiry']],OPT.scen)}</label><label>Purge policy ${sel('purge',[['safe','safe (guard)'],['unsafe','unsafe (age only)'],['full','merge all files']],OPT.purge)}</label><label>now = <input type="range" data-opt="tNow" min="10" max="70" value="${OPT.tNow}" style="width:140px"> ${OPT.tNow}</label>`;
+  if(k===6){const tabs=TMS?TMS.tablets:initTablets(N,OPT.tablets);return`<label>Tablet ${sel('mtab',tabs.map(t=>[t.id,t.id+' ['+t.rep.map(nn).join('')+']']),OPT.mtab||tabs[0].id)}</label><button data-act="split">Split tablet</button><label>Move replica ${sel('mfrom',nodesOpt,OPT.mfrom)} → ${sel('mto',nodesOpt,OPT.mto)}</label><label>Crash at step ${sel('mcrash',[[0,'none'],...MSTEPS.map((_,i)=>[i+1,i+1])],OPT.mcrash)}</label><button class="primary" data-act="move">▶ Run migration</button><button data-act="resetT">Reset map</button>`}
+  if(k===7)return`<label>Members ${sel('raftN',[3,5].map(x=>[x,x]),OPT.raftN)}</label><label>Scenario ${sel('raftScen',[['elect','1 · leader election'],['replicate','2 · replicate & commit'],['crash','3 · leader crash'],['partition','4 · minority partition']],OPT.raftScen)}</label><button data-act="r-propose">Write command</button><button data-act="r-killl">Kill leader</button><button data-act="r-revive">Restart killed</button><button data-act="r-isolate">Isolate leader</button><button data-act="r-heal">Heal</button><button data-act="r-live">▶/⏸ Run live</button><button data-act="r-reset">Reset</button>`;
+  return'';
+}
+$('#phCtl').addEventListener('change',e=>{
+  const t=e.target.closest('[data-opt]');if(!t)return;const key=t.dataset.opt;
+  const v=t.type==='checkbox'?t.checked:t.value;
+  OPT[key]=(['cl','place','strategy','crash','scen','purge','raftScen','mtab','rkey'].includes(key))?v:(t.type==='checkbox'?v:+v);
+  if(key==='raftN'||key==='raftScen'){RS=null;rsLive=false}
+  if(['N','place','vn'].includes(key))TMS=null;
+  refresh(false);
+});
+$('#phCtl').addEventListener('input',e=>{const t=e.target.closest('input[type=range][data-opt]');if(t&&t.dataset.opt==='opIdx'){OPT.opIdx=+t.value;paintView(1)}});
+$('#phCtl').addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
+  if(a==='split')doSplit();else if(a==='move')doMove();else if(a==='resetT'){TMS=null;migAnim=null;showPhase(6)}
+  else if(a.startsWith('r-'))raftCtlAct(a.slice(2));
+});
+
+/* =========================================================
+   RENDER / WIRING
+   ========================================================= */
+function renderNav(){$('#nav').innerHTML=PHASES.map((ph,i)=>`<div class="nv ${i===cur?'act':''} ${i<cur?'done':''} ${ph.nw?'new':''}" data-ph="${i}"><b>${i+1}. ${ph.t}${ph.nw?' <span class="tag o">new</span>':''}</b><small>${ph.s} · ${ph.f}</small></div>`).join('')}
+function showPhase(k,p=1){
+  cur=k;renderNav();ovRender();const ph=PHASES[k];$('#blurb').innerHTML=`${ph.b}<div class="ft">Reimplementation feature: ${ph.f}</div>`;
+  $('#phCtl').innerHTML=ctlHTML(k);paintView(p);$('#prev').disabled=k===0;$('#nextB').disabled=k===PHASES.length-1;
+}
+function paintView(p=1){
+  if(!S||S.error){$('#phView').innerHTML=`<div class="box bad">${esc(S?S.error:'')}</div>`;return}
+  try{$('#phView').innerHTML=PHASES[cur].draw(p)}catch(e){$('#phView').innerHTML=`<div class="box bad">Render error: ${esc(e.message)}</div>`;console.error(e)}
+}
+function stopAll(){gen++;rsLive=false;playingAll=false;paused=false;rsAnim=false;migAnim=null;$('#pauseBtn').disabled=true;$('#pauseBtn').textContent='⏸ Pause'}
+$('#nav').onclick=e=>{const n=e.target.closest('[data-ph]');if(!n)return;stopAll();showPhase(+n.dataset.ph)};
+$('#prev').onclick=()=>{stopAll();showPhase(Math.max(0,cur-1))};
+$('#nextB').onclick=()=>{stopAll();showPhase(Math.min(PHASES.length-1,cur+1))};
+function runPhase(k){
+  if(k===7){rsInit(S.cfg.raftScen);rsAnim=true}
+  return animate(p=>paintView(p),PHASES[k].dur).then(ok=>{if(k===7)rsAnim=false;return ok});
+}
+$('#anim').onclick=()=>{stopAll();if(cur===7){rsInit(S.cfg.raftScen);rsAnim=true}animate(p=>paintView(p),PHASES[cur].dur).then(ok=>{rsAnim=false})};
+$('#playAll').onclick=async()=>{
+  if(!S||S.error)return;stopAll();playingAll=true;$('#pauseBtn').disabled=false;const my=gen+1;
+  for(let k=0;k<PHASES.length;k++){
+    showPhase(k,0);const ok=await runPhase(k);if(!ok)return;await sleep(500);if(!playingAll)return;
+  }
+  playingAll=false;$('#pauseBtn').disabled=true;
+};
+$('#pauseBtn').onclick=()=>{paused=!paused;$('#pauseBtn').textContent=paused?'▶ Resume':'⏸ Pause'};
+$('#speed').oninput=e=>{speed=+e.target.value;$('#speedV').textContent=speed+'×'};
+
+function fillSel(sel,opts,keep,pref){const old=keep?$(sel).value:null;$(sel).innerHTML=opts.map(o=>`<option>${esc(o)}</option>`).join('');$(sel).value=opts.includes(old)?old:(opts.includes(pref)?pref:opts[0])}
+function onData(auto){
+  const text=$('#src').value;let ds;
+  try{const pf=$('#fmt').value==='auto'?detect(text):$('#fmt').value;ds={...parseWhole(text,pf),pf}}catch(e){ds={rows:[],columns:[],err:e.message}}
+  DS=ds;const cols=ds.columns;
+  $('#srcInfo').innerHTML=ds.err?`<span class="bad">${esc(ds.err)}</span>`:`${ds.rows.length} rows · ${cols.length} columns (${esc(cols.join(', '))}) · parsed as ${ds.pf}`;
+  const distinct=k=>new Set(ds.rows.map(r=>r[k])).size;
+  let pk=cols.find(k=>/customer|device|user|^id$/i.test(k))||cols[0],ck=cols.find(k=>/created|^ts$|order|time/i.test(k)&&k!==pk);
+  if(pk&&distinct(pk)===ds.rows.length&&cols.length>1){const alt=cols.find(k=>k!==pk&&distinct(k)>1&&distinct(k)<ds.rows.length);if(alt)pk=alt}
+  fillSel('#pk',cols,!auto,pk);fillSel('#ck',['(none)',...cols],!auto,ck||'(none)');
+}
+function refresh(dataChanged,auto){
+  if(dataChanged){onData(auto);TMS=null;RS=null;OPT.rkey='';OPT.opIdx=0}
+  S=build();
+  if(S.error){showPhase(cur);return}
+  if(!OPT.rkey)OPT.rkey=S.cl.div.length?S.cl.div[0].key:S.keys[0];
+  showPhase(cur);refreshDeep();
+}
+['#src'].forEach(s=>$(s).addEventListener('input',()=>{stopAll();refresh(true,false)}));
+['#fmt'].forEach(s=>$(s).addEventListener('change',()=>{stopAll();refresh(true,false)}));
+['#pk','#ck','#mix'].forEach(s=>$(s).addEventListener('change',()=>{stopAll();TMS=null;RS=null;refresh(false)}));
+$$('[data-sample]').forEach(b=>b.onclick=()=>{const sm=SAMPLES[b.dataset.sample];$('#src').value=sm.t();$('#fmt').value=sm.f;stopAll();refresh(true,true)});
+$('#file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$('#src').value=r.result;const n=f.name.toLowerCase();$('#fmt').value=n.endsWith('.csv')?'csv':(n.endsWith('.jsonl')||n.endsWith('.ndjson'))?'jsonl':n.endsWith('.json')?'json':'auto';stopAll();refresh(true,true)};r.readAsText(f)};
+
+/* =========================================================
+   DEEP DIVES
+   ========================================================= */
+function refreshDeep(){dd1();dd2();dd3()}
+function dd1(){
+  const el=$('#dd1b');if(!S||S.error){el.innerHTML='';return}
+  const N=S.cfg.N,rs=remapStats(S);
+  const a=['ab','c'],b=['a','bc'];const naive=x=>x.join(''),canon=x=>x.map(enc).join('');
+  el.innerHTML=`<div class="g2"><div><div class="bar"><b class="big">${Math.round(rs.ring*100)}%</b><span>of 1000 synthetic keys change owner when node ${nn(N)} joins a <b>ring</b> (yours: ${Math.round(rs.real.ring*100)}% of ${rs.real.n} partitions)</span></div>
+    <div class="bar"><b class="big bad">${Math.round(rs.mod*100)}%</b><span>change owner with <code>hash(key) % N</code> (${N} → ${N+1} nodes)</span></div>
+    <div class="note">Consistent hashing moves only the token ranges the new node takes over. The ring remap uses ${S.cfg.vn} vnode(s) per node. (Remap is a placement experiment; moving the data safely is Feature 07.)</div></div>
+    <div><h3 style="margin-top:0">Why a canonical key codec?</h3><table><tr><th>(a, b)</th><th>naive a+b</th><th>length-prefixed</th></tr>
+    <tr><td>("ab","c")</td><td class="mono">${naive(a)}</td><td class="mono">${canon(a)}</td></tr><tr><td>("a","bc")</td><td class="mono">${naive(b)}</td><td class="mono">${canon(b)}</td></tr></table>
+    <div class="note">Naive concatenation gives two different keys the same bytes (same token, same row). The lab uses length-prefixed fields before hashing.</div></div></div>`;
+}
+function dd2(){
+  const el=$('#dd2b');if(!S||S.error){el.innerHTML='';return}
+  const eng=S.cl.engines.reduce((a,b)=>b.sst.reduce((x,s)=>x+s.n,0)>a.sst.reduce((x,s)=>x+s.n,0)?b:a);
+  const sst=eng.sst.slice().sort((a,b)=>b.n-a.n)[0];
+  if(!sst){el.innerHTML='<div class="note">No SSTables yet.</div>';return}
+  const bits=OPT.bloomBits,b=bloomOf(sst,bits),set=b.arr.reduce((a,x)=>a+x,0);
+  let fp=0,tries=400;for(let i=0;i<tries;i++)if(bloomMaybe(sst,'absent-key-'+i,bits))fp++;
+  const kk=b.k,theo=Math.pow(1-Math.exp(-kk*sst.n/b.m),kk);
+  el.innerHTML=`<div class="note" style="margin:0 0 6px">SSTable ${sst.id} on node ${nn(eng.id)}: ${sst.n} keys, ${b.m} bits (${bits} bits/key), ${kk} hash functions. Change bits/key in phase 4.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:1px;max-width:100%">${Array.from(b.arr).map(x=>`<span style="width:9px;height:9px;background:${x?'var(--acc)':'var(--line)'};display:inline-block"></span>`).join('')}</div>
+    <div class="chips" style="margin-top:8px"><span class="chip">bits set ${set}/${b.m} (${Math.round(set/b.m*100)}%)</span><span class="chip">false-positive rate measured ${(fp/tries*100).toFixed(1)}% (${tries} absent keys)</span><span class="chip">theory ${(theo*100).toFixed(1)}%</span><span class="chip ok">false negatives: 0 (every stored key says “maybe”)</span></div>
+    <div class="note">More bits per key means fewer wasted file opens but more RAM. A false positive only costs one extra index probe; it can never hide data.</div>`;
+}
+function dd3(){
+  $('#dd3b').innerHTML=`<table><tr><th></th><th>Leaderless QUORUM (Feature 05)</th><th>Raft group (new)</th></tr>
+  <tr><td>Who takes writes</td><td>any coordinator</td><td>the single leader</td></tr>
+  <tr><td>Order of writes</td><td>per-mutation version (last-write-wins)</td><td>log index: one total order</td></tr>
+  <tr><td>Commit rule</td><td>R+W &gt; RF (e.g. 2+2 &gt; 3) overlaps</td><td>majority stored + current-term entry</td></tr>
+  <tr><td>Minority side during a partition</td><td>may still accept writes at ONE; replicas diverge</td><td>cannot commit; uncommitted entries truncated on heal</td></tr>
+  <tr><td>Node failure</td><td>other replicas keep serving; missed writes stay missed</td><td>new leader elected; log catches followers up</td></tr>
+  <tr><td>Conditional update / CAS</td><td>not provided</td><td>natural (apply in log order)</td></tr>
+  <tr><td>Cost</td><td>low latency, high throughput</td><td>extra hop + log fsync, leader bottleneck</td></tr>
+  <tr><td>Best for</td><td>bulk table data</td><td>metadata: topology, schema, tablet placement</td></tr></table>
+  <div class="note">They complement each other: row data keeps the leaderless fast path; changes that need one agreed order (tablet map epochs from phase 7) go through Raft. Raft safety: one leader per term, log matching, and committed entries survive every election.</div>`;
+}
+
+/* =========================================================
+   ARCHITECTURE OVERVIEW (components + relationships)
+   ========================================================= */
+const OVS={"w": 1000, "h": 430, "groups": [{"x": 420, "y": 40, "w": 380, "h": 370, "label": "Replica node (3 per partition)"}], "nodes": [{"id": "client", "x": 10, "y": 195, "w": 110, "h": 64, "label": "Client", "sub": "CQL request", "desc": "An application reads or writes a row identified by its partition key."}, {"id": "ring", "x": 170, "y": 70, "w": 175, "h": 64, "label": "Token ring", "sub": "key \u2192 token \u2192 replicas", "desc": "The partition key is hashed to a token; the ring (or a tablet map) names the owner and the other replicas. All rows of a partition live together.", "phase": 0}, {"id": "coord", "x": 170, "y": 195, "w": 150, "h": 64, "label": "Coordinator", "sub": "CL ONE \u00b7 QUORUM \u00b7 ALL", "desc": "Any node can coordinate a request. It fans out to the replicas and answers after enough acknowledgements.", "phase": 1}, {"id": "commitlog", "x": 440, "y": 75, "w": 140, "h": 60, "label": "Commitlog", "sub": "fsync before ACK", "desc": "A sequential log written and synced before the write is acknowledged, so a crash can be replayed.", "phase": 2}, {"id": "memtable", "x": 630, "y": 75, "w": 150, "h": 60, "label": "Memtable", "sub": "RAM, ordered", "desc": "The in-memory ordered table that absorbs writes until it is full and flushed.", "phase": 2}, {"id": "read", "x": 440, "y": 200, "w": 150, "h": 64, "label": "Read path", "sub": "Bloom \u00b7 index \u00b7 cache", "desc": "Skips SSTables that cannot contain the key (Bloom), seeks with a sparse index, merges versions, and may serve from a cache.", "phase": 3}, {"id": "sst", "x": 630, "y": 200, "w": 150, "h": 64, "label": "SSTables", "sub": "immutable files", "desc": "Flushed, sorted, immutable files. The same row can have versions in several files, so reads must merge.", "phase": 2}, {"id": "tomb", "x": 440, "y": 335, "w": 140, "h": 60, "label": "Tombstones", "sub": "deletes \u00b7 TTL", "desc": "Versioned delete markers that must hide older data in every file until it is safe to purge.", "phase": 5}, {"id": "compact", "x": 630, "y": 335, "w": 150, "h": 60, "label": "Compaction", "sub": "STCS \u00b7 LCS \u00b7 TWCS", "desc": "Background merging of SSTables to bound read cost and space, without changing what reads return.", "phase": 4}, {"id": "tablets", "x": 850, "y": 75, "w": 130, "h": 64, "label": "Tablets", "sub": "ranges + epoch", "desc": "Per-table token ranges with their own replica sets, split and moved by a journaled migration protocol.", "phase": 6}, {"id": "raft", "x": 850, "y": 260, "w": 130, "h": 64, "label": "Raft group", "sub": "agreed metadata", "desc": "A replicated log that gives the cluster one agreed order for metadata such as tablet placement epochs.", "phase": 7}], "edges": [{"from": "client", "to": "coord", "label": "request", "kind": "data"}, {"from": "ring", "to": "coord", "label": "owner + replicas", "kind": "ctl"}, {"from": "coord", "to": "commitlog", "label": "mutation (CL ACKs)", "kind": "data"}, {"from": "commitlog", "to": "memtable", "label": "apply", "kind": "data"}, {"from": "memtable", "to": "sst", "label": "flush", "kind": "data"}, {"from": "coord", "to": "read", "label": "read at CL", "kind": "data"}, {"from": "read", "to": "sst", "label": "seek", "kind": "data"}, {"from": "sst", "to": "compact", "label": "inputs", "kind": "data", "bend": 22}, {"from": "compact", "to": "sst", "label": "output", "kind": "data", "bend": 22}, {"from": "tomb", "to": "compact", "label": "purge", "kind": "ctl"}, {"from": "tomb", "to": "read", "label": "masks", "kind": "ctl"}, {"from": "tablets", "to": "ring", "label": "replaces static ring", "kind": "ctl", "bend": 95}, {"from": "raft", "to": "tablets", "label": "agrees placement epochs", "kind": "ctl"}], "flow": [{"n": "client", "t": "A client writes a row."}, {"n": "ring", "t": "The partition key is hashed to a token that names 3 replicas."}, {"n": "coord", "t": "The coordinator fans the mutation out and waits for CL acknowledgements."}, {"n": "commitlog", "t": "Each replica appends and syncs the commitlog."}, {"n": "memtable", "t": "Then applies it to the memtable and ACKs."}, {"n": "sst", "t": "A full memtable is flushed to an immutable SSTable."}, {"n": "compact", "t": "Compaction merges SSTables in the background."}, {"n": "read", "t": "Later reads use Bloom filters and indexes to avoid most files, then merge the winner."}]};
+const OVN=Object.fromEntries(OVS.nodes.map(n=>[n.id,n]));
+const OV={sel:null,k:-1};
+function ovAnchor(n,tx,ty){const cx=n.x+n.w/2,cy=n.y+n.h/2,dx=tx-cx,dy=ty-cy;if(!dx&&!dy)return[cx,cy];const s=Math.min((n.w/2)/Math.abs(dx||1e-9),(n.h/2)/Math.abs(dy||1e-9));return[cx+dx*s,cy+dy*s]}
+function ovGeom(e){
+  const a=OVN[e.from],b=OVN[e.to],ca=[a.x+a.w/2,a.y+a.h/2],cb=[b.x+b.w/2,b.y+b.h/2];let c=null;
+  if(e.bend){const mx=(ca[0]+cb[0])/2,my=(ca[1]+cb[1])/2,dx=cb[0]-ca[0],dy=cb[1]-ca[1],L=Math.hypot(dx,dy)||1;c=[mx-dy/L*e.bend,my+dx/L*e.bend]}
+  const p0=ovAnchor(a,...(c||cb)),p1=ovAnchor(b,...(c||ca));
+  const mid=c?[0.25*p0[0]+0.5*c[0]+0.25*p1[0],0.25*p0[1]+0.5*c[1]+0.25*p1[1]]:[(p0[0]+p1[0])/2,(p0[1]+p1[1])/2];
+  return{p0,p1,c,mid};
+}
+function ovRender(){
+  const el=document.getElementById('ovView');if(!el)return;
+  const flow=OVS.flow,k=OV.k,act=new Set(),actE=new Set();
+  if(k>=0){for(let i=0;i<=Math.min(k,flow.length-1);i++)act.add(flow[i].n);for(let i=1;i<=k&&i<flow.length;i++){actE.add(flow[i-1].n+'>'+flow[i].n);actE.add(flow[i].n+'>'+flow[i-1].n)}}
+  const sel=OV.sel,rel=new Set();if(sel){rel.add(sel);OVS.edges.forEach(e=>{if(e.from===sel)rel.add(e.to);if(e.to===sel)rel.add(e.from)})}
+  const curPh=typeof cur==='number'?cur:-1;
+  let s=`<svg viewBox="0 0 ${OVS.w} ${OVS.h}" style="max-height:${OVS.h*1.1}px"><defs><marker id="ovar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="#8a94a6"/></marker><marker id="ovara" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="var(--acc)"/></marker></defs>`;
+  (OVS.groups||[]).forEach(g=>{s+=`<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${g.x+12}" y="${g.y+17}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${esc(g.label)}</text>`});
+  OVS.edges.forEach(e=>{
+    const g=ovGeom(e),on=actE.has(e.from+'>'+e.to),dim=sel&&!(e.from===sel||e.to===sel),hl=sel&&(e.from===sel||e.to===sel);
+    const d=g.c?`M${g.p0[0]},${g.p0[1]} Q${g.c[0]},${g.c[1]} ${g.p1[0]},${g.p1[1]}`:`M${g.p0[0]},${g.p0[1]} L${g.p1[0]},${g.p1[1]}`;
+    s+=`<g style="${dim?'opacity:.2':''}"><path d="${d}" class="ove ${e.kind||'data'} ${on||hl?'act':''}" marker-end="url(#${on||hl?'ovara':'ovar'})"/>${on?`<path d="${d}" class="ove flow act" style="stroke-width:5;opacity:.5"/>`:''}
+      <text x="${g.mid[0]}" y="${g.mid[1]-5}" text-anchor="middle" style="font-size:10.5px;fill:${hl||on?'var(--acc)':'var(--mut)'};paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(e.label)}</text></g>`;
+  });
+  OVS.nodes.forEach(n=>{
+    const ph=n.phase,cls=['ovn',sel===n.id?'sel':'',ph!==undefined&&ph===curPh?'cur':'',act.has(n.id)?'act':''].join(' '),dim=sel&&!rel.has(n.id);
+    s+=`<g class="${cls}" data-node="${n.id}" style="${dim?'opacity:.3':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${ph!==undefined?pc(ph):'var(--card)'}"/>
+      <text x="${n.x+10}" y="${n.y+22}" font-weight="700" style="font-size:12.5px">${esc(n.label)}</text><text x="${n.x+10}" y="${n.y+40}" style="font-size:10.5px;fill:var(--mut)">${esc(n.sub||'')}</text>
+      ${ph!==undefined?`<text x="${n.x+n.w-8}" y="${n.y+n.h-8}" text-anchor="end" style="font-size:10px;font-weight:700;fill:var(--mut)">phase ${ph+1}</text>`:''}</g>`;
+  });
+  s+='</svg>';
+  el.innerHTML=s;
+  const cap=document.getElementById('ovCap');
+  if(cap)cap.innerHTML=k>=0?`<b>Step ${Math.min(k,flow.length-1)+1}/${flow.length}:</b> ${esc(flow[Math.min(k,flow.length-1)].t)}`:(sel?'':'Click a component to see how it connects to the others.');
+  ovInfo();
+}
+function ovInfo(){
+  const el=document.getElementById('ovInfo');if(!el)return;const sel=OV.sel&&OVN[OV.sel];
+  // phase-to-phase dependencies derived from the edges
+  const pairs=new Map();OVS.edges.forEach(e=>{const a=OVN[e.from].phase,b=OVN[e.to].phase;if(a!==undefined&&b!==undefined&&a!==b){const key=a+'>'+b;if(!pairs.has(key))pairs.set(key,[]);pairs.get(key).push(e.label)}});
+  const dep=[...pairs.entries()].sort((x,y)=>x[0].split('>')[0]-y[0].split('>')[0]).map(([k,l])=>{const[a,b]=k.split('>').map(Number);return`<span class="chip" style="background:${pc(a)}">${a+1}. ${esc(PHASES[a].t)}</span> <span class="mono">→ ${esc(short(l.join(' / '),34))} →</span> <span class="chip" style="background:${pc(b)}">${b+1}. ${esc(PHASES[b].t)}</span>`}).join('<br>');
+  let card='';
+  if(sel){
+    const ins=OVS.edges.filter(e=>e.to===sel.id),outs=OVS.edges.filter(e=>e.from===sel.id);
+    card=`<div class="box" style="margin-top:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="font-size:15px">${esc(sel.label)}</b><span class="note" style="margin:0">${esc(sel.sub||'')}</span>${sel.phase!==undefined?`<button class="primary" data-go="${sel.phase}">Go to phase ${sel.phase+1}: ${esc(PHASES[sel.phase].t)} ›</button>`:''}</div>
+      <div style="margin:6px 0">${esc(sel.desc||'')}</div>
+      <div class="g2"><div><b style="font-size:12px">Receives</b>${ins.map(e=>`<div class="row"><span style="color:var(--mut)">${esc(OVN[e.from].label)}</span> ─ ${esc(e.label)} ▸</div>`).join('')||'<div class="note">nothing: it is where requests enter.</div>'}</div>
+      <div><b style="font-size:12px">Sends</b>${outs.map(e=>`<div class="row">▸ ${esc(e.label)} ─ <span style="color:var(--mut)">${esc(OVN[e.to].label)}</span></div>`).join('')||'<div class="note">nothing: it is an endpoint.</div>'}</div></div></div>`;
+  }
+  el.innerHTML=card+`<details class="dd" style="margin-top:8px"><summary>How the phases depend on each other</summary><div style="line-height:2.1;margin-top:6px">${dep||'<span class="note">no cross-phase edges</span>'}</div></details>`;
+}
+function jumpPhase(k){stopAll();showPhase(k);const t=document.getElementById('phaseSec');if(t&&t.scrollIntoView)t.scrollIntoView({behavior:'smooth',block:'start'})}
+document.getElementById('ovView').addEventListener('click',e=>{const n=e.target.closest('[data-node]');if(n){OV.k=-1;OV.sel=OV.sel===n.dataset.node?null:n.dataset.node;ovRender()}});
+document.getElementById('ovInfo').addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g)jumpPhase(+g.dataset.go)});
+document.getElementById('ovTrace').onclick=()=>{stopAll();OV.sel=null;OV.k=0;animate(p=>{OV.k=Math.min(OVS.flow.length-1,Math.floor(p*OVS.flow.length));ovRender()},OVS.flow.length*1300)};
+document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.sel=null;ovRender()};
+
+/* =========================================================
+   INIT
+   ========================================================= */
+$('#src').value=SAMPLES.orders.t();$('#fmt').value='csv';
+refresh(true,true);
+</script>
+</body>
+</html>

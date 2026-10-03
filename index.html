@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Engineer Lab · Internals Playgrounds</title>
+<meta name="description" content="Interactive, in-browser playgrounds that show how Spark, ScyllaDB, Redis, Kafka, PostgreSQL and Kubernetes work internally.">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2230;--mut:#667085;--line:#d9dee7;--acc:#2f6fed}
+@media(prefers-color-scheme:dark){:root{--bg:#10141c;--card:#181e29;--ink:#e8ecf3;--mut:#93a0b5;--line:#2b3445;--acc:#6c9bff}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
+header,main,footer{max-width:1100px;margin:auto;padding:0 18px}
+header{padding-top:44px}
+h1{margin:0 0 8px;font-size:34px;letter-spacing:-.5px}
+h1 span{color:var(--acc)}
+.lead{margin:0;color:var(--mut);font-size:17px;max-width:760px}
+.steps{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0 6px}
+.step{flex:1;min-width:210px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px}
+.step b{display:block;margin-bottom:2px}
+.step i{font-style:normal;display:inline-block;width:22px;height:22px;border-radius:50%;background:var(--acc);color:#fff;text-align:center;font-size:12px;line-height:22px;margin-right:6px;font-weight:700}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px;margin:22px 0 40px}
+.card{background:var(--card);border:1px solid var(--line);border-top:5px solid var(--c);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px;transition:transform .15s,box-shadow .15s}
+.card:hover{transform:translateY(-3px);box-shadow:0 8px 24px #0002}
+.card h2{margin:0;font-size:21px;display:flex;align-items:center;gap:10px}
+.dot{width:14px;height:14px;border-radius:50%;background:var(--c);display:inline-block}
+.tag{font-size:12px;color:var(--mut);margin:0}
+.card p{margin:0;font-size:14.5px}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{font-size:11.5px;border:1px solid var(--line);border-radius:999px;padding:1px 9px;color:var(--mut);background:var(--bg)}
+.go{margin-top:auto;display:flex;flex-wrap:wrap;gap:8px}
+a.btn{display:inline-block;text-decoration:none;color:#fff;background:var(--c);padding:7px 14px;border-radius:9px;font-weight:600;font-size:14px}
+a.btn:hover{filter:brightness(1.1)}
+a.sec{display:inline-block;text-decoration:none;color:var(--ink);border:1px solid var(--line);padding:6px 11px;border-radius:9px;font-size:13px;background:var(--bg)}
+a.sec:hover{border-color:var(--c)}
+h3{margin:34px 0 0;font-size:18px}
+.what{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:12px}
+.what div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px}
+.what b{display:block}
+footer{padding-bottom:50px;color:var(--mut);font-size:13px}
+code{background:var(--card);border:1px solid var(--line);border-radius:5px;padding:0 5px}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>Engineer Lab</span> · Internals Playgrounds</h1>
+  <p class="lead">Six interactive playgrounds that show <b>how popular systems work inside</b>. Bring your own data or manifest: each page runs a small real engine in your browser and animates every step. No backend, nothing to install.</p>
+  <div class="steps">
+    <div class="step"><b><i>1</i>Load your data</b>Paste or upload a CSV / JSON / JSONL (or a Kubernetes manifest) or use a sample.</div>
+    <div class="step"><b><i>2</i>See the big picture</b>An architecture overview shows every component and how they connect. Click one, or trace a request.</div>
+    <div class="step"><b><i>3</i>Go phase by phase</b>Each phase animates one mechanism with its own controls (failures, tuning, policies).</div>
+  </div>
+</header>
+
+<main>
+  <div class="grid">
+
+    <article class="card" style="--c:#e25a1c">
+      <h2><span class="dot"></span>Apache Spark</h2>
+      <p class="tag">Distributed data processing</p>
+      <p>From a file to a result: partitions, lazy lineage, DAG stages, tasks and retries, shuffle, actions and events. Includes earlier RDD and planner deep dives.</p>
+      <div class="chips"><span class="chip">8 phases</span><span class="chip">RDD</span><span class="chip">DAGScheduler</span><span class="chip">shuffle</span><span class="chip">Parquet pushdown</span><span class="chip">AQE</span></div>
+      <div class="go">
+        <a class="btn" href="spark/visualize/04-spark-internals-end-to-end.html">Open end-to-end</a>
+        <a class="sec" href="spark/visualize/01-rdd-api-and-sources.html">RDD overview</a>
+        <a class="sec" href="spark/visualize/02-rdd-playground.html">RDD playground</a>
+        <a class="sec" href="spark/visualize/03-dag-planner-playground.html">DAG planner</a>
+      </div>
+    </article>
+
+    <article class="card" style="--c:#2f6fed">
+      <h2><span class="dot"></span>ScyllaDB</h2>
+      <p class="tag">Wide-column store, leaderless</p>
+      <p>Token ring and replicas, consistency levels, commitlog → memtable → SSTable, Bloom filters, compaction strategies, tombstones, tablets, plus a Raft simulator.</p>
+      <div class="chips"><span class="chip">8 phases</span><span class="chip">token ring</span><span class="chip">QUORUM</span><span class="chip">STCS/LCS/TWCS</span><span class="chip">tablets</span><span class="chip">Raft</span></div>
+      <div class="go"><a class="btn" href="scylla/visualize/01-scylla-internals-end-to-end.html">Open playground</a></div>
+    </article>
+
+    <article class="card" style="--c:#d82c20">
+      <h2><span class="dot"></span>Redis</h2>
+      <p class="tag">In-memory data server</p>
+      <p>RESP and the single event loop, typed keyspace, TTL, eviction, AOF/RDB recovery, replication, transactions, Sentinel failover, cluster slots and streams.</p>
+      <div class="chips"><span class="chip">10 phases</span><span class="chip">event loop</span><span class="chip">AOF/RDB</span><span class="chip">failover</span><span class="chip">cluster</span><span class="chip">streams</span></div>
+      <div class="go"><a class="btn" href="redis/visualize/01-redis-internals-end-to-end.html">Open playground</a></div>
+    </article>
+
+    <article class="card" style="--c:#231f20">
+      <h2><span class="dot"></span>Apache Kafka</h2>
+      <p class="tag">Distributed event log</p>
+      <p>Partition logs and recovery, key routing, batching, consumer groups and rebalancing, retention and tiers, ISR and high watermark, idempotence, compaction, transactions, metadata quorum.</p>
+      <div class="chips"><span class="chip">11 phases</span><span class="chip">ISR / acks</span><span class="chip">exactly-once</span><span class="chip">compaction</span><span class="chip">KRaft-style quorum</span></div>
+      <div class="go"><a class="btn" href="kafka/visualize/01-kafka-internals-end-to-end.html">Open playground</a></div>
+    </article>
+
+    <article class="card" style="--c:#336791">
+      <h2><span class="dot"></span>PostgreSQL</h2>
+      <p class="tag">Relational database</p>
+      <p>SQL to logical plan, slotted pages and buffer pool, iterator executor, B-tree, MVCC, WAL and crash recovery, VACUUM, cost-based planner, spill, checkpoints, isolation and deadlocks.</p>
+      <div class="chips"><span class="chip">11 phases</span><span class="chip">MVCC</span><span class="chip">WAL</span><span class="chip">planner</span><span class="chip">isolation</span></div>
+      <div class="go"><a class="btn" href="postgres/visualize/01-postgres-internals-end-to-end.html">Open playground</a></div>
+    </article>
+
+    <article class="card" style="--c:#326ce5">
+      <h2><span class="dot"></span>Kubernetes</h2>
+      <p class="tag">Container orchestration control plane</p>
+      <p>Paste a Deployment + Service: API server pipeline, etcd and watches, reconcile loops, scheduler, kubelet, kube-proxy, rolling updates, HPA and node failure.</p>
+      <div class="chips"><span class="chip">10 phases</span><span class="chip">controllers</span><span class="chip">scheduler</span><span class="chip">rolling update</span><span class="chip">self-healing</span></div>
+      <div class="go"><a class="btn" href="k8s/visualize/01-k8s-internals-end-to-end.html">Open playground</a></div>
+    </article>
+
+  </div>
+
+  <h3>What these are (and are not)</h3>
+  <div class="what">
+    <div><b>Real mini-engines</b>Results come from small implementations running in your browser (parsers, planners, logs, simulators), not canned animations.</div>
+    <div><b>Learning models</b>Simplified on purpose: scaled timings, reduced protocols, no wire compatibility. Each page notes its limits.</div>
+    <div><b>Interactive</b>Change data, tuning and failure injection, then watch the invariant hold or break.</div>
+  </div>
+</main>
+
+<footer>
+  <p>Part of <code>engineer-lab</code>. Everything runs client-side; your data never leaves the page.</p>
+</footer>
+</body>
+</html>

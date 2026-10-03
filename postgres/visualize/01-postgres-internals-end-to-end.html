@@ -1,0 +1,943 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Postgres Internals End-to-End</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2230;--mut:#667085;--line:#d9dee7;--acc:#336791;--acc2:#e25a1c;--ok:#1a9b5a;--bad:#d64545;
+--p0:#dbe9ff;--p1:#ffe6cf;--p2:#d9f4e3;--p3:#f1defa;--p4:#fff3b8;--p5:#ffd9de;--p6:#d6f2f2;--p7:#e6e6e6;
+--t0:#2f6fed;--t1:#e25a1c;--t2:#1a9b5a;--t3:#9b4fd0;--t4:#c9a400;--t5:#d6456b;--t6:#12a1a1;--t7:#6b7280}
+@media(prefers-color-scheme:dark){:root{--bg:#10141c;--card:#181e29;--ink:#e8ecf3;--mut:#93a0b5;--line:#2b3445;--acc:#6ea8dc;--acc2:#ff7a3d;--ok:#43c783;--bad:#ff6b6b;
+--p0:#1f3556;--p1:#53361c;--p2:#1d4630;--p3:#44274f;--p4:#524a17;--p5:#552630;--p6:#17454a;--p7:#3a3f48}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
+header,main{max-width:1180px;margin:auto;padding:0 16px}
+header{padding-top:24px}
+h1{margin:0 0 4px;font-size:25px}h1 span{color:var(--acc)}
+header p{margin:0;color:var(--mut)}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-top:16px}
+section>h2{margin:0 0 6px;font-size:17px}
+section>h2 em{font-style:normal;background:var(--acc);color:#fff;border-radius:6px;padding:1px 8px;font-size:12px;margin-right:8px;vertical-align:2px}
+h3{font-size:14px;margin:14px 0 6px}
+button,select,input[type=text],textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 10px}
+button{cursor:pointer}button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
+button.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
+button:disabled{opacity:.45;cursor:default}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+label{color:var(--mut);font-size:13px}
+.mono,code,pre,textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+textarea{width:100%;resize:vertical}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;margin:0;max-height:320px;white-space:pre}
+.note{font-size:13px;color:var(--mut);margin:6px 0 0}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+.box{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--bg);min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{font-family:ui-monospace,monospace;font-size:11.5px;border:1px solid var(--line);border-radius:5px;padding:1px 7px;background:var(--card)}
+.tag{display:inline-block;font-size:10.5px;padding:0 6px;border-radius:5px;background:var(--acc);color:#fff;margin-left:4px;font-weight:400}
+.tag.r{background:var(--bad)}.tag.g{background:var(--ok)}.tag.o{background:var(--acc2)}.tag.m{background:var(--t7)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.g2>div{min-width:0;overflow-x:auto}
+@media(max-width:820px){.g2{grid-template-columns:1fr}}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}td,th{border:1px solid var(--line);padding:3px 7px;text-align:left;vertical-align:top}
+td.n,th.n{text-align:right}
+svg{display:block;width:100%}
+svg text{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;fill:var(--ink)}
+.jobgrid{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:10px}
+.jobgrid>span,.jobgrid>label{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.nv{flex:1;min-width:112px;border:1.5px solid var(--line);border-radius:10px;padding:6px 8px;cursor:pointer;background:var(--bg);font-size:12px;line-height:1.3}
+.nv b{display:block;font-size:12.5px}.nv small{color:var(--mut)}
+.nv.act{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 12%,var(--card))}
+.nv.done b::after{content:" ✓";color:var(--ok)}
+.blurb{padding:10px 12px;border-left:5px solid var(--acc);background:var(--bg);border-radius:8px;margin:6px 0 10px;font-size:14px}
+.blurb .ft{color:var(--mut);font-size:12px;margin-top:3px}
+.caption{margin:8px 0;padding:9px 12px;border-radius:8px;background:var(--bg);border-left:5px solid var(--acc);font-size:14.5px;min-height:44px}
+.caption.bad{border-left-color:var(--bad)}.caption.good{border-left-color:var(--ok)}
+.row{display:block;padding:2px 6px;margin:2px 0;border-radius:5px;border:1px solid var(--line);background:var(--bg);font-family:ui-monospace,monospace;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.big{font-size:28px;font-weight:700}
+.bar2{height:14px;border-radius:4px;display:inline-block;vertical-align:middle}
+.lrow{display:flex;align-items:center;gap:6px;margin:4px 0}.lrow>b{min-width:80px;font-size:12px;color:var(--mut)}
+.pg{border:2px solid var(--line);border-radius:8px;padding:6px;background:var(--card);min-width:0}
+.pg.hit{border-color:var(--ok)}.pg.miss{border-color:var(--bad)}.pg.dirty{background:color-mix(in srgb,var(--acc2) 12%,var(--card))}
+.pg h5{margin:0 0 4px;font-size:11px;color:var(--mut)}
+.pgbar{display:flex;height:16px;border-radius:4px;overflow:hidden;border:1px solid var(--line);margin:3px 0}
+.tup{display:inline-block;font-family:ui-monospace,monospace;font-size:10px;border:1px solid var(--line);border-radius:4px;padding:0 4px;margin:1px;background:var(--bg)}
+.tup.dead{opacity:.45;text-decoration:line-through;border-color:var(--bad)}.tup.live{border-color:var(--ok)}
+.op{border:2px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--card);margin:2px 0}
+.op.act{border-color:var(--acc2);background:color-mix(in srgb,var(--acc2) 10%,var(--card))}
+.op b{font-size:12.5px}.op small{color:var(--mut);margin-left:6px}
+.ln{border-left:2px solid var(--line);margin-left:14px;padding-left:10px}
+.ovn{cursor:pointer}.ovn rect{stroke:var(--line);stroke-width:1.5;transition:opacity .2s}
+.ovn.sel rect{stroke:var(--acc);stroke-width:3.5}.ovn.cur rect{stroke:var(--ink);stroke-width:3}
+.ovn.act rect{stroke:var(--acc);stroke-width:4}
+.ove{fill:none;stroke:#8a94a6;stroke-width:1.8}.ove.ctl{stroke-dasharray:6 4}.ove.async{stroke-dasharray:2 4;stroke:var(--bad)}.ove.act{stroke:var(--acc);stroke-width:3.5}
+@keyframes flow{to{stroke-dashoffset:-20}}.flow{stroke-dasharray:6 4;animation:flow .6s linear infinite}
+.ove.flow{animation:flow .6s linear infinite}
+details.dd{border:1px solid var(--line);border-radius:10px;padding:8px 14px;margin-top:10px;background:var(--bg)}
+details.dd summary{cursor:pointer;font-weight:600}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>Postgres</span> Internals · End-to-End</h1>
+  <p>Your data becomes a table. A real mini-engine parses and binds your SQL, stores rows on slotted pages through a buffer pool, runs iterator plans with B-tree indexes, versions rows with MVCC, logs changes in a WAL, vacuums, plans by cost, spills to disk, checkpoints, and compares isolation levels.</p>
+</header>
+<main>
+
+<section>
+  <h2><em>1</em>Your table &amp; query</h2>
+  <div class="bar">
+    <input type="file" id="file" accept=".csv,.json,.jsonl,.ndjson">
+    <button data-sample="orders">Orders CSV</button><button data-sample="people">People CSV</button><button data-sample="events">Events JSONL</button>
+    <label>Format <select id="fmt"><option value="auto">auto-detect</option><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="json">JSON array</option></select></label>
+  </div>
+  <textarea id="src" rows="4" spellcheck="false"></textarea>
+  <div class="note" id="srcInfo"></div>
+  <div class="jobgrid">
+    <label>Example query <select id="qsel"></select></label>
+    <label>Index on t.<select id="idxc"></select></label>
+    <span class="note" style="margin:0" id="catInfo"></span>
+  </div>
+  <textarea id="sql" rows="2" spellcheck="false"></textarea>
+  <div class="bar">
+    <button class="primary" id="playAll">▶ Play all 11 phases</button>
+    <button id="pauseBtn" disabled>⏸ Pause</button>
+    <label>Speed <input type="range" id="speed" min="0.25" max="4" step="0.25" value="1"> <b id="speedV">1×</b></label>
+    <span class="note" id="statLine"></span>
+  </div>
+</section>
+
+<section>
+  <h2><em>◎</em>Architecture overview <span class="note" style="font-weight:400">components and how they connect · colors match the phases below</span></h2>
+  <div class="bar"><button class="primary" id="ovTrace">▶ Trace a query through the system</button><button id="ovClear">Clear</button><span class="note" id="ovCap"></span></div>
+  <div id="ovView"></div>
+  <div class="chips" style="margin-top:6px"><span class="chip">solid = data flow</span><span class="chip">dashed = control / metadata</span><span class="chip" style="border-color:var(--bad)">dotted = events / async</span></div>
+  <div id="ovInfo"></div>
+</section>
+
+<section id="phaseSec">
+  <h2><em>2</em>Inside the database, phase by phase</h2>
+  <div class="nav" id="nav"></div>
+  <div class="blurb" id="blurb"></div>
+  <div class="bar" id="phCtl"></div>
+  <div class="bar"><button id="prev">‹ Prev</button><button class="primary" id="anim">▶ Animate this phase</button><button id="nextB">Next ›</button></div>
+  <div id="phView"></div>
+</section>
+</main>
+
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const J=x=>{try{return JSON.stringify(x)}catch{return String(x)}};
+const pc=i=>`var(--p${((i%8)+8)%8})`,tc=i=>`var(--t${((i%8)+8)%8})`;
+const cmp=(a,b)=>a<b?-1:a>b?1:0;
+const short=(s,n=40)=>{s=String(s);return s.length>n?s.slice(0,n-1)+'…':s};
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+function lcg(seed){let s=(seed>>>0)||1;return()=>{s=(Math.imul(s,1103515245)+12345)&0x7fffffff;return s/0x7fffffff}}
+function fnvStr(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h>>>0}
+
+/* ================= parsing + samples ================= */
+function detect(t){const s=t.trim();if(s.startsWith('['))return'json';const l=s.split(/\r?\n/)[0]||'';if(l.startsWith('{'))return'jsonl';if(l.includes(','))return'csv';return'text'}
+function csvSplit(l){const o=[];let c='',q=false;for(let i=0;i<l.length;i++){const ch=l[i];if(q){if(ch==='"'){if(l[i+1]==='"'){c+='"';i++}else q=false}else c+=ch}else if(ch==='"')q=true;else if(ch===','){o.push(c);c=''}else c+=ch}o.push(c);return o}
+const conv=v=>(typeof v==='string'&&/^-?\d+(\.\d+)?$/.test(v.trim()))?Number(v):v;
+function colsOf(rows){const c=[];rows.forEach(r=>Object.keys(r).forEach(k=>{if(!c.includes(k))c.push(k)}));return c}
+function parseWhole(text,pf){
+  if(pf==='json'){const a=JSON.parse(text);if(!Array.isArray(a))throw new Error('JSON must be an array');return{rows:a,columns:colsOf(a)}}
+  const lines=text.split(/\r?\n/).filter(l=>l.trim()!=='');
+  if(pf==='jsonl'){const rows=lines.map(l=>JSON.parse(l));return{rows,columns:colsOf(rows)}}
+  if(pf==='csv'){if(!lines.length)return{rows:[],columns:[]};const h=csvSplit(lines[0]);const rows=lines.slice(1).map(l=>{const v=csvSplit(l),o={};h.forEach((k,i)=>o[k]=conv(v[i]??''));return o});return{rows,columns:h}}
+  return{rows:lines.map(l=>({line:l})),columns:['line']};
+}
+function sampleOrders(){const st=['new','paid','shipped'],cty=['HCM','HN','DN','CT'],r=lcg(11),L=['id,city,status,amount,qty'];for(let i=1;i<=36;i++)L.push([i,cty[Math.floor(r()*4)],st[Math.floor(r()*3)],Math.round(10+r()*490),1+Math.floor(r()*5)].join(','));return L.join('\n')}
+function samplePeople(){const d=['eng','ops','sales'],r=lcg(21),L=['id,name,dept,age,salary'];for(let i=1;i<=30;i++)L.push([i,'emp'+i,d[Math.floor(r()*3)],22+Math.floor(r()*30),Math.round(800+r()*3200)].join(','));return L.join('\n')}
+function sampleEvents(){const a=['view','click','buy'],r=lcg(5),L=[];for(let i=1;i<=32;i++)L.push(J({id:i,user:'u'+(1+Math.floor(r()*6)),action:a[Math.floor(r()*3)],ms:Math.round(10+r()*300)}));return L.join('\n')}
+const SAMPLES={orders:{t:sampleOrders,f:'csv'},people:{t:samplePeople,f:'csv'},events:{t:sampleEvents,f:'jsonl'}};
+
+/* =========================================================
+   CATALOG, SQL PARSER, BINDER, LOGICAL PLAN (F01)
+   ========================================================= */
+const typeOfCol=(rows,k)=>rows.every(r=>r[k]==null||typeof r[k]==='number')?'integer':'text';
+const KW=new Set(['SELECT','FROM','WHERE','AND','JOIN','ON','GROUP','BY','ORDER','LIMIT','DESC','ASC','COUNT','SUM','AVG','MIN','MAX']);
+function tokenize(sql){
+  const toks=[];const re=/\s*(?:('(?:[^']|'')*')|(\d+(?:\.\d+)?)|([A-Za-z_][A-Za-z0-9_.]*)|(>=|<=|<>|!=|=|<|>|\(|\)|\*|,))/y;let m,last=0;
+  while(last<sql.length&&/\S/.test(sql.slice(last))){re.lastIndex=last;m=re.exec(sql);if(!m)throw{msg:`syntax error near "${short(sql.slice(last).trim(),12)}"`};last=re.lastIndex;
+    if(m[1]!==undefined)toks.push({t:'str',v:m[1].slice(1,-1).replace(/''/g,"'")});else if(m[2]!==undefined)toks.push({t:'num',v:Number(m[2])});
+    else if(m[3]!==undefined)toks.push(KW.has(m[3].toUpperCase())?{t:'kw',v:m[3].toUpperCase()}:{t:'id',v:m[3]});else toks.push({t:'sym',v:m[4]==='<>'?'!=':m[4]})}
+  return toks;
+}
+function parseSQL(sql){
+  const T=tokenize(sql);let i=0;const peek=()=>T[i],eat=()=>T[i++];
+  const isKw=v=>T[i]&&T[i].t==='kw'&&T[i].v===v,isSym=v=>T[i]&&T[i].t==='sym'&&T[i].v===v;
+  const need=(v)=>{if(!isKw(v))throw{msg:`expected ${v} but found ${T[i]?'"'+T[i].v+'"':'end of query'}`};i++};
+  const colref=()=>{const t=eat();if(!t||t.t!=='id')throw{msg:'expected a column name'};return t.v};
+  const lit=()=>{const t=eat();if(!t||(t.t!=='str'&&t.t!=='num'&&t.t!=='id'))throw{msg:'expected a value'};return t};
+  const ast={sel:[],tables:[],preds:[],join:null,group:null,order:null,limit:null};
+  need('SELECT');
+  if(isSym('*')){i++;ast.sel.push({star:true})}
+  else do{
+    if(i<T.length&&T[i].t==='kw'&&['COUNT','SUM','AVG','MIN','MAX'].includes(T[i].v)){const f=eat().v;if(!isSym('('))throw{msg:'expected ('};i++;let arg;if(isSym('*')){i++;arg='*'}else arg=colref();if(!isSym(')'))throw{msg:'expected )'};i++;ast.sel.push({agg:f,arg})}
+    else ast.sel.push({col:colref()});
+  }while(isSym(',')&&++i);
+  need('FROM');
+  const tref=()=>{const n=eat();if(!n||n.t!=='id')throw{msg:'expected a table name'};let al=n.v;if(T[i]&&T[i].t==='id')al=eat().v;return{name:n.v,alias:al}};
+  ast.tables.push(tref());
+  if(isKw('JOIN')){i++;ast.tables.push(tref());need('ON');const l=colref();if(!isSym('='))throw{msg:'join condition must use ='};i++;const r=colref();ast.join={l,r}}
+  if(isKw('WHERE')){i++;do{const l=colref(),o=eat();if(!o||o.t!=='sym'||o.v==='('||o.v===')'||o.v==='*'||o.v===',')throw{msg:'expected a comparison operator'};const rt=lit();ast.preds.push({l,op:o.v,r:rt})}while(isKw('AND')&&++i)}
+  if(isKw('GROUP')){i++;need('BY');ast.group=colref()}
+  if(isKw('ORDER')){i++;need('BY');const c=colref();let d=false;if(isKw('DESC')){i++;d=true}else if(isKw('ASC'))i++;ast.order={col:c,desc:d}}
+  if(isKw('LIMIT')){i++;const n=eat();if(!n||n.t!=='num')throw{msg:'LIMIT needs a number'};ast.limit=n.v}
+  if(i<T.length)throw{msg:`unexpected "${T[i].v}"`};
+  return{ast,tokens:T};
+}
+function bindQuery(ast,cat){
+  const ts=ast.tables.map(t=>{const tb=cat[t.name];if(!tb)throw{msg:`relation "${t.name}" does not exist`};return{...t,tb}});
+  const resolve=ref=>{
+    const[a,b]=ref.includes('.')?ref.split('.'):[null,ref];
+    if(a){const t=ts.find(x=>x.alias===a||x.name===a);if(!t)throw{msg:`missing FROM-clause entry for table "${a}"`};const c=t.tb.cols.find(c=>c.name===b);if(!c)throw{msg:`column ${ref} does not exist`};return{alias:t.alias,table:t.name,name:b,type:c.type}}
+    const hits=ts.filter(t=>t.tb.cols.some(c=>c.name===b));if(!hits.length)throw{msg:`column "${b}" does not exist`};if(hits.length>1)throw{msg:`column reference "${b}" is ambiguous`};
+    const t=hits[0];return{alias:t.alias,table:t.name,name:b,type:t.tb.cols.find(c=>c.name===b).type};
+  };
+  const out={tables:ts.map(t=>({name:t.name,alias:t.alias,cols:t.tb.cols})),sel:[],preds:[],join:null,group:null,order:null,limit:ast.limit,hasAgg:ast.sel.some(s=>s.agg)};
+  ast.sel.forEach(s=>{if(s.star)ts.forEach(t=>t.tb.cols.forEach(c=>out.sel.push({col:{alias:t.alias,table:t.name,name:c.name,type:c.type},label:ts.length>1?t.alias+'.'+c.name:c.name})));
+    else if(s.agg){const arg=s.arg==='*'?null:resolve(s.arg);if(arg&&arg.type==='text'&&['SUM','AVG'].includes(s.agg))throw{msg:`function ${s.agg.toLowerCase()}(text) does not exist`};out.sel.push({agg:s.agg,arg,label:s.agg.toLowerCase()+'('+(s.arg||'')+')'})}
+    else{const c=resolve(s.col);out.sel.push({col:c,label:s.col})}});
+  ast.preds.forEach(p=>{const l=resolve(p.l);let r;if(p.r.t==='id')r={col:resolve(p.r.v)};else r={lit:p.r.v,ltype:p.r.t==='num'?'integer':'text'};
+    if(r.lit!==undefined&&l.type!==r.ltype)throw{msg:`operator does not exist: ${l.type} ${p.op} ${r.ltype}`};out.preds.push({l,op:p.op,r})});
+  if(ast.join){const l=resolve(ast.join.l),r=resolve(ast.join.r);if(l.type!==r.type)throw{msg:`join columns have different types (${l.type} vs ${r.type})`};out.join={l,r}}
+  if(ast.group)out.group=resolve(ast.group);if(ast.order)out.order={col:resolve(ast.order.col),desc:ast.order.desc};
+  if(out.hasAgg){const plain=out.sel.filter(s=>!s.agg);if(plain.length&&(!out.group||plain.some(s=>s.col.alias!==out.group.alias||s.col.name!==out.group.name)))throw{msg:`column "${plain[0].label}" must appear in the GROUP BY clause or be used in an aggregate function`}}
+  return out;
+}
+function logicalTree(b){
+  const L=[];let n={op:'Scan',d:b.tables[0].name+' '+b.tables[0].alias};
+  if(b.tables.length>1){n={op:'Join',d:`${b.join.l.alias}.${b.join.l.name} = ${b.join.r.alias}.${b.join.r.name}`,kids:[n,{op:'Scan',d:b.tables[1].name+' '+b.tables[1].alias}]}}
+  if(b.preds.length)n={op:'Filter',d:b.preds.map(p=>`${p.l.alias}.${p.l.name} ${p.op} ${p.r.lit!==undefined?J(p.r.lit):p.r.col.alias+'.'+p.r.col.name}`).join(' AND '),kids:[n]};
+  if(b.hasAgg)n={op:'Aggregate',d:(b.group?'group by '+b.group.alias+'.'+b.group.name+' · ':'')+b.sel.filter(s=>s.agg).map(s=>s.label).join(', '),kids:[n]};
+  if(b.order)n={op:'Sort',d:b.order.col.alias+'.'+b.order.col.name+(b.order.desc?' DESC':''),kids:[n]};
+  n={op:'Project',d:b.sel.map(s=>s.label).join(', '),kids:[n]};
+  if(b.limit!=null)n={op:'Limit',d:String(b.limit),kids:[n]};
+  return n;
+}
+const showTree=(n,d=0)=>' '.repeat(d*3)+(d?'└ ':'')+n.op+' ['+n.d+']\n'+(n.kids||[]).map(k=>showTree(k,d+1)).join('');
+
+/* =========================================================
+   STORAGE: slotted heap pages (MVCC tuples) + buffer pool (F02)
+   ========================================================= */
+const PAGE=256,PHDR=24,SLOT=4,THDR=24;
+const tupBytes=row=>THDR+Object.values(row).reduce((a,v)=>a+String(v).length+2,0);
+class MV{
+  constructor(rows){this.pages=[];this.xid=1;this.status={1:'committed'};this.nextRid=0;(rows||[]).forEach(r=>this.put(1,r))}
+  put(xid,row){const b=tupBytes(row);let pg=this.pages.find(p=>p.used+b+SLOT<=PAGE);if(!pg){pg={no:this.pages.length,tuples:[],used:PHDR,lsn:0};this.pages.push(pg)}
+    const t={rid:[pg.no,pg.tuples.length],row,xmin:xid,xmax:0,bytes:b,dead:false};pg.tuples.push(t);pg.used+=b+SLOT;return t}
+  begin(){const x=++this.xid;this.status[x]='active';return x}
+  commit(x){this.status[x]='committed'}abort(x){this.status[x]='aborted'}
+  snapshot(me){return{xmax:this.xid+1,xip:Object.keys(this.status).map(Number).filter(x=>this.status[x]==='active'&&x!==me),me}}
+  xv(x,s){if(x===s.me)return true;if(this.status[x]!=='committed')return false;if(x>=s.xmax)return false;if(s.xip.includes(x))return false;return true}
+  visible(t,s){if(t.dead)return false;if(!this.xv(t.xmin,s))return false;if(t.xmax&&this.xv(t.xmax,s))return false;return true}
+  all(){return this.pages.flatMap(p=>p.tuples)}
+  update(x,t,row){t.xmax=x;return this.put(x,row)}
+  horizon(){const act=Object.keys(this.status).map(Number).filter(x=>this.status[x]==='active');return act.length?Math.min(...act):this.xid+1}
+  vacuum(h){let removed=0,bytes=0;this.pages.forEach(p=>{p.tuples.forEach(t=>{if(t.dead)return;const deadNow=(this.status[t.xmin]==='aborted')||(t.xmax&&this.status[t.xmax]==='committed'&&t.xmax<h);if(deadNow){t.dead=true;removed++;bytes+=t.bytes+SLOT;p.used-=t.bytes+SLOT}})});return{removed,bytes}}
+  stats(){let live=0,dead=0,deadB=0,liveB=0;this.all().forEach(t=>{if(t.dead)return;const isDead=this.status[t.xmin]==='aborted'||(t.xmax&&this.status[t.xmax]==='committed');if(isDead){dead++;deadB+=t.bytes}else{live++;liveB+=t.bytes}});return{live,dead,deadB,liveB,pages:this.pages.length}}
+}
+class BP{
+  constructor(frames){this.n=frames;this.fr=[];this.s={hit:0,miss:0,evict:0,flush:0};this.log=[]}
+  get(key,write){
+    let f=this.fr.find(x=>x.k===key),ev=null,fl=false,kind='hit';
+    if(f){this.s.hit++;this.fr.splice(this.fr.indexOf(f),1);this.fr.push(f)}
+    else{this.s.miss++;kind='miss';if(this.fr.length>=this.n){const v=this.fr.find(x=>!x.pin)||this.fr[0];this.fr.splice(this.fr.indexOf(v),1);ev=v.k;this.s.evict++;if(v.dirty){this.s.flush++;fl=true}}f={k:key,dirty:false,pin:0};this.fr.push(f)}
+    if(write)f.dirty=true;
+    this.log.push({k:key,kind,ev,fl,write:!!write,frames:this.fr.map(x=>({k:x.k,d:x.dirty}))});return kind;
+  }
+}
+
+/* =========================================================
+   B-TREE (F04)
+   ========================================================= */
+class BT{
+  constructor(m){this.m=m;this.nid=0;this.root=this.mk(true);this.events=[]}
+  mk(leaf){return{id:this.nid++,leaf,keys:[],vals:[],kids:[],next:null}}
+  insert(k,rid){
+    const path=[];let n=this.root;
+    while(!n.leaf){let i=0;while(i<n.keys.length&&cmp(k,n.keys[i])>=0)i++;path.push([n,i]);n=n.kids[i]}
+    let i=0;while(i<n.keys.length&&cmp(n.keys[i],k)<0)i++;
+    if(n.keys[i]!==undefined&&cmp(n.keys[i],k)===0)n.vals[i].push(rid);else{n.keys.splice(i,0,k);n.vals.splice(i,0,[rid])}
+    this.events.push({t:'insert',k});
+    while(n.keys.length>this.m-1){
+      const mid=Math.floor(n.keys.length/2),r=this.mk(n.leaf);let up;
+      if(n.leaf){r.keys=n.keys.splice(mid);r.vals=n.vals.splice(mid);r.next=n.next;n.next=r;up=r.keys[0]}
+      else{up=n.keys[mid];r.keys=n.keys.splice(mid+1);n.keys.pop();r.kids=n.kids.splice(mid+1)}
+      this.events.push({t:'split',node:n.id,right:r.id,up});
+      if(!path.length){const root=this.mk(false);root.keys=[up];root.kids=[n,r];this.root=root;this.events.push({t:'root',id:root.id});break}
+      const[parent,pi]=path.pop();parent.keys.splice(pi,0,up);parent.kids.splice(pi+1,0,r);n=parent;
+    }
+  }
+  height(){let h=1,n=this.root;while(!n.leaf){h++;n=n.kids[0]}return h}
+  find(k){const path=[];let n=this.root;while(!n.leaf){path.push(n.id);let i=0;while(i<n.keys.length&&cmp(k,n.keys[i])>=0)i++;n=n.kids[i]}path.push(n.id);const i=n.keys.findIndex(x=>cmp(x,k)===0);return{rids:i>=0?n.vals[i]:[],path}}
+  range(lo,hi,loInc=true,hiInc=true){ // returns rids and visited nodes
+    const path=[];let n=this.root;while(!n.leaf){path.push(n.id);let i=0;while(i<n.keys.length&&cmp(lo===null?-Infinity:lo,n.keys[i])>=0)i++;n=n.kids[i]}
+    const rids=[],visited=[...path];let done=false;
+    for(;n&&!done;n=n.next){visited.push(n.id);for(let i=0;i<n.keys.length;i++){const k=n.keys[i];if(lo!==null&&(loInc?cmp(k,lo)<0:cmp(k,lo)<=0))continue;if(hi!==null&&(hiInc?cmp(k,hi)>0:cmp(k,hi)>=0)){done=true;break}rids.push(...n.vals[i])}}
+    return{rids,visited};
+  }
+  levels(){const L=[];let cur=[this.root];while(cur.length){L.push(cur);cur=cur[0].leaf?[]:cur.flatMap(n=>n.kids)}return L}
+}
+
+/* =========================================================
+   STATISTICS + COST-BASED PLANNER (F08)
+   ========================================================= */
+function analyze(tb,heap,sampleFrac){
+  const rows=tb.rows.slice(0,Math.max(1,Math.floor(tb.rows.length*sampleFrac))),scale=1/sampleFrac;
+  const st={rows:Math.round(rows.length*scale),pages:Math.max(1,Math.round(heap.pages.length*(sampleFrac<1?sampleFrac:1)*scale)),cols:{}};
+  tb.cols.forEach(c=>{const v=rows.map(r=>r[c.name]).filter(x=>x!=null),d=new Set(v);const o={ndv:d.size,n:v.length};
+    if(c.type==='integer'){o.min=Math.min(...v);o.max=Math.max(...v);const B=5,w=(o.max-o.min)/B||1;o.hist=Array(B).fill(0);v.forEach(x=>o.hist[Math.min(B-1,Math.floor((x-o.min)/w))]++);o.w=w}
+    else{const f={};v.forEach(x=>f[x]=(f[x]||0)+1);o.mcv=Object.entries(f).sort((a,b)=>b[1]-a[1]).slice(0,3)}
+    st.cols[c.name]=o});
+  return st;
+}
+function selOf(p,st){
+  const c=st.cols[p.l.name];if(!c)return 0.33;const v=p.r.lit;
+  if(p.l.type==='text'){const m=c.mcv.find(x=>x[0]===String(v));const f=m?m[1]/c.n:1/Math.max(1,c.ndv);return p.op==='='?f:p.op==='!='?1-f:0.33}
+  const frac=x=>{if(x<=c.min)return 0;if(x>=c.max)return 1;let acc=0;const b=Math.min(c.hist.length-1,Math.floor((x-c.min)/c.w));for(let i=0;i<b;i++)acc+=c.hist[i];acc+=c.hist[b]*((x-c.min-b*c.w)/c.w);return acc/c.n};
+  const lt=frac(v);
+  switch(p.op){case'=':return Math.max(1/Math.max(1,c.ndv),0.001);case'!=':return 1-1/Math.max(1,c.ndv);case'<':case'<=':return Math.max(lt,0.001);case'>':case'>=':return Math.max(1-lt,0.001)}return 0.33;
+}
+function planQuery(b,env){
+  const scanFor=tb=>{
+    const preds=b.preds.filter(p=>p.l.alias===tb.alias&&p.r.lit!==undefined),st=env.stats[tb.name];
+    const sel=preds.reduce((a,p)=>a*selOf(p,st),1),estRows=Math.max(1,st.rows*sel);
+    const seq=st.pages+0.01*st.rows+0.0025*st.rows*preds.length;
+    let best={type:'SeqScan',tb,preds,est:{rows:estRows,cost:seq},alts:[{name:'Seq Scan',cost:seq}]};
+    const ip=env.index&&env.index.table===tb.name?preds.find(p=>p.l.name===env.index.col&&p.op!=='!='):null;
+    if(ip){const m=st.rows*selOf(ip,st),pf=Math.min(st.pages,Math.max(1,Math.round(m))),cost=0.5*env.index.tree.height()+4*pf+0.01*m;best.alts.push({name:`Index Scan (${env.index.col})`,cost});if(cost<seq)best={type:'IndexScan',tb,preds,ip,est:{rows:estRows,cost},alts:best.alts}}
+    best.alts.sort((a,b)=>a.cost-b.cost);return best;
+  };
+  let node,joinAlts=null;
+  const scans=b.tables.map(scanFor);
+  if(scans.length===1)node=scans[0];
+  else{
+    let [A,B]=scans;const lc=b.join.l,rc=b.join.r;
+    if(lc.alias!==A.tb.alias){/* ON written as d.x = t.y: normalise */}
+    const stA=env.stats[A.tb.name],stB=env.stats[B.tb.name],ndvA=(stA.cols[(lc.alias===A.tb.alias?lc:rc).name]||{ndv:1}).ndv,ndvB=(stB.cols[(lc.alias===B.tb.alias?lc:rc).name]||{ndv:1}).ndv;
+    const rowsOut=Math.max(1,A.est.rows*B.est.rows/Math.max(ndvA,ndvB,1));
+    const nl=A.est.cost+A.est.rows*B.est.cost;
+    const buildIsB=B.est.rows<=A.est.rows,build=buildIsB?B:A,probe=buildIsB?A:B;
+    const hj=A.est.cost+B.est.cost+0.02*(A.est.rows+B.est.rows)+(build.est.rows>env.workMem?build.est.rows*0.05:0);
+    joinAlts=[{name:'Nested Loop',cost:nl},{name:'Hash Join',cost:hj}].sort((a,b)=>a.cost-b.cost);
+    node=joinAlts[0].name==='Hash Join'?{type:'HashJoin',build,probe,A,B,est:{rows:rowsOut,cost:hj},alts:joinAlts}:{type:'NLJ',A,B,est:{rows:rowsOut,cost:nl},alts:joinAlts};
+    node.cond=b.join;
+  }
+  return{root:node,scans,joinAlts};
+}
+
+/* =========================================================
+   ITERATOR EXECUTOR (F03) + external sort / hash join (F09)
+   ========================================================= */
+const OPN={SeqScan:'Seq Scan',IndexScan:'Index Scan',NLJ:'Nested Loop',HashJoin:'Hash Join',Sort:'Sort',Agg:'Aggregate',Project:'Project',Limit:'Limit',Filter:'Filter'};
+const cmpOp=(a,op,b)=>{if(a==null||b==null)return false;switch(op){case'=':return a===b;case'!=':return a!==b;case'<':return a<b;case'<=':return a<=b;case'>':return a>b;case'>=':return a>=b}return false};
+const qname=c=>c.alias+'.'+c.name;
+function mkOp(type,detail,kids,fn){return{type,detail,kids,st:{in:0,out:0,loops:0,pages:0,extra:''},id:0,next:fn,open(){}}}
+function buildExec(plan,b,ctx){
+  const mv=n=>ctx.heaps[n];
+  const tag=ctx.snapshotFor;
+  const seqScan=(tb,preds)=>{
+    const h=mv(tb.name),op=mkOp('SeqScan',`${tb.name} ${tb.alias}${preds.length?' · filter '+preds.map(p=>`${p.l.name}${p.op}${J(p.r.lit)}`).join(' AND '):''}`,[]);
+    let pi=0,ti=0;const snap=h.snapshot(0);op.st.loops=0;
+    op.reset=()=>{pi=0;ti=0;op.st.loops++};op.reset();
+    op.next=()=>{
+      for(;;){
+        if(pi>=h.pages.length)return null;const pg=h.pages[pi];
+        if(ti===0){ctx.pool.get(tb.name+':'+pi,false);op.st.pages++;ctx.access.push(tb.name+':'+pi)}
+        if(ti>=pg.tuples.length){pi++;ti=0;continue}
+        const t=pg.tuples[ti++];if(!h.visible(t,snap))continue;op.st.in++;
+        const row={};Object.keys(t.row).forEach(k=>row[tb.alias+'.'+k]=t.row[k]);
+        if(preds.every(p=>cmpOp(row[qname(p.l)],p.op,p.r.lit))){op.st.out++;return row}
+      }
+    };return op;
+  };
+  const indexScan=(tb,preds,ip)=>{
+    const h=mv(tb.name),idx=ctx.index.tree,op=mkOp('IndexScan',`${ctx.index.col} ${ip.op} ${J(ip.r.lit)} using btree(${ctx.index.col})`,[]);
+    const v=ip.r.lit;let lo=null,hi=null,loI=true,hiI=true;
+    if(ip.op==='=')lo=hi=v;else if(ip.op==='>'){lo=v;loI=false}else if(ip.op==='>=')lo=v;else if(ip.op==='<'){hi=v;hiI=false}else if(ip.op==='<=')hi=v;
+    const r=idx.range(lo,hi,loI,hiI);op.st.pages=r.visited.length;op.st.extra=`${r.visited.length} index node(s)`;const rids=r.rids;let i=0;const snap=h.snapshot(0);
+    op.reset=()=>{i=0;op.st.loops++};op.reset();
+    op.next=()=>{
+      while(i<rids.length){const[p,s]=rids[i++];ctx.pool.get(tb.name+':'+p,false);ctx.access.push(tb.name+':'+p);op.st.pages++;const t=h.pages[p].tuples[s];if(!h.visible(t,snap))continue;op.st.in++;
+        const row={};Object.keys(t.row).forEach(k=>row[tb.alias+'.'+k]=t.row[k]);if(preds.every(pp=>cmpOp(row[qname(pp.l)],pp.op,pp.r.lit))){op.st.out++;return row}}
+      return null;
+    };return op;
+  };
+  const scanOf=s=>s.type==='IndexScan'?indexScan(s.tb,s.preds,s.ip):seqScan(s.tb,s.preds);
+  let top;const root=plan.root;
+  if(root.type==='SeqScan'||root.type==='IndexScan')top=scanOf(root);
+  else if(root.type==='NLJ'){
+    const outer=scanOf(root.A),jl=b.join.l.alias===root.A.tb.alias?b.join.l:b.join.r,jr=b.join.l.alias===root.A.tb.alias?b.join.r:b.join.l;
+    let cur=null,inner=null;const op=mkOp('NLJ',`${qname(jl)} = ${qname(jr)}`,[outer]);
+    op.next=()=>{for(;;){if(!cur){cur=outer.next();if(!cur)return null;inner=seqScan(root.B.tb,root.B.preds);op.kids[1]=inner}
+      const r=inner.next();if(!r){cur=null;continue}op.st.in++;if(r[qname(jr)]===cur[qname(jl)]){op.st.out++;return{...cur,...r}}}};
+    top=op;ctx.nlInnerOps=()=>op.kids[1];op.st.extra='inner side rescanned for every outer row';
+  }else{
+    const bi=root.build,pr=root.probe,bs=scanOf(bi),ps=scanOf(pr),bc=b.join.l.alias===bi.tb.alias?b.join.l:b.join.r,pcol=b.join.l.alias===bi.tb.alias?b.join.r:b.join.l;
+    let ht=null,matches=[],cur=null,mi=0;const op=mkOp('HashJoin',`${qname(bc)} = ${qname(pcol)}`,[ps,bs]);
+    op.next=()=>{if(!ht){ht=new Map();let r;while((r=bs.next())){op.st.in++;const k=r[qname(bc)];if(!ht.has(k))ht.set(k,[]);ht.get(k).push(r)}op.st.extra=`hash table: ${op.st.in} row(s) built from ${bi.tb.name}`+(op.st.in>ctx.workMem?` (work_mem ${ctx.workMem}: would spill)`:'')}
+      for(;;){if(cur&&mi<matches.length){op.st.out++;return{...cur,...matches[mi++]}}cur=ps.next();if(!cur)return null;matches=ht.get(cur[qname(pcol)])||[];mi=0}};
+    top=op;
+  }
+  if(b.hasAgg){const child=top,op=mkOp('Agg',(b.group?'group by '+qname(b.group)+' · ':'')+b.sel.filter(s=>s.agg).map(s=>s.label).join(', '),[child]);let res=null,i=0;
+    op.next=()=>{if(!res){const g=new Map();let r;while((r=child.next())){op.st.in++;const k=b.group?r[qname(b.group)]:'';if(!g.has(k))g.set(k,[]);g.get(k).push(r)}
+      if(!g.size&&!b.group)g.set('',[]);res=[...g.entries()].sort((a,c)=>cmp(a[0],c[0])).map(([k,rows])=>{const o={};if(b.group)o[qname(b.group)]=k;b.sel.forEach(s=>{if(s.agg){const vals=s.arg?rows.map(r=>r[qname(s.arg)]).filter(x=>x!=null):rows;o[s.label]=s.agg==='COUNT'?(s.arg?vals.length:rows.length):s.agg==='SUM'?vals.reduce((a,x)=>a+x,0):s.agg==='AVG'?(vals.length?+(vals.reduce((a,x)=>a+x,0)/vals.length).toFixed(2):null):s.agg==='MIN'?Math.min(...vals):Math.max(...vals)}});return o})}
+      if(i<res.length){op.st.out++;return res[i++]}return null};top=op;
+  }
+  if(b.order){const child=top,op=mkOp('Sort',`${qname(b.order.col)}${b.order.desc?' DESC':''}`,[child]);let res=null,i=0;
+    op.next=()=>{if(!res){res=[];let r;while((r=child.next())){op.st.in++;res.push(r)}const k=b.hasAgg?(b.group&&b.order.col.name===b.group.name?qname(b.group):b.sel.find(s=>s.agg)?.label):qname(b.order.col);res.sort((x,y)=>(b.order.desc?-1:1)*cmp(x[k],y[k]));op.st.extra=`sorted ${res.length} row(s) `+(res.length>ctx.workMem?`(external: exceeds work_mem ${ctx.workMem})`:'in memory')}
+      if(i<res.length){op.st.out++;return res[i++]}return null};top=op;
+  }
+  {const child=top,op=mkOp('Project',b.sel.map(s=>s.label).join(', '),[child]);
+    op.next=()=>{const r=child.next();if(!r)return null;op.st.in++;op.st.out++;const o={};b.sel.forEach(s=>{o[s.label]=s.agg?r[s.label]:r[qname(s.col)]});return o};top=op}
+  if(b.limit!=null){const child=top,op=mkOp('Limit',String(b.limit),[child]);let n=0;op.next=()=>{if(n>=b.limit)return null;const r=child.next();if(!r)return null;n++;op.st.in++;op.st.out++;return r};top=op}
+  // wrap to record a trace of the first emitted rows
+  (function wrap(o,d){o.depth=d;const f=o.next;o.next=()=>{const r=f();if(r&&ctx.trace.length<60)ctx.trace.push({op:o,row:r,seq:ctx.trace.length});return r};(o.kids||[]).forEach(k=>wrap(k,d+1))})(top,0);
+  return top;
+}
+function opList(o,acc=[],d=0){acc.push({o,d});(o.kids||[]).forEach(k=>opList(k,acc,d+1));return acc}
+function explainText(top,plan){return opList(top).map(({o,d})=>{const e=o.type==='Project'||o.type==='Limit'||o.type==='Agg'||o.type==='Sort'?'':'';return' '.repeat(d*3)+(d?'-> ':'')+OPN[o.type]+' ('+o.detail+')  rows in/out '+o.st.in+'/'+o.st.out+(o.st.pages?' · pages '+o.st.pages:'')+(o.st.loops>1?' · loops '+o.st.loops:'')+(o.st.extra?'  ['+o.st.extra+']':'')}).join('\n')}
+
+/* ================= config + build ================= */
+const OPT={frames:3,pat:'query',fan:4,ikey:'',iop:'=',stale:false,wm:6,mvsc:'snap',walCrash:6,torn:false,vlong:true,vn:10,ckK:8,isc:'nonrep',iso:'rc',
+  qpick:0,sort:'ext',fin:3};
+let S=null;
+function cfgRead(){return{text:$('#src').value,fmt:$('#fmt').value,idx:$('#idxc').value,sql:$('#sql').value}}
+function build(){
+  const c=cfgRead(),o={cfg:c};
+  if(!c.text.trim()){o.error='No data yet.';return o}
+  let ds;try{ds=parseWhole(c.text,c.fmt==='auto'?detect(c.text):c.fmt)}catch(e){o.error='Cannot parse input: '+e.message;return o}
+  if(!ds.rows.length){o.error='No rows.';return o}
+  if(ds.rows.length>300){o.error='Please keep the data under 300 rows.';return o}
+  o.rows=ds.rows;o.columns=ds.columns;
+  const tcols=ds.columns.map(n=>({name:n,type:typeOfCol(ds.rows,n)}));
+  const cat={t:{name:'t',cols:tcols,rows:ds.rows}};
+  // dimension table d from a low-cardinality text column
+  const dimCol=tcols.find(c=>c.type==='text'&&new Set(ds.rows.map(r=>r[c.name])).size>=2&&new Set(ds.rows.map(r=>r[c.name])).size<=12);
+  if(dimCol){const vals=[...new Set(ds.rows.map(r=>r[dimCol.name]))].sort();cat.d={name:'d',cols:[{name:dimCol.name,type:'text'},{name:'label',type:'text'},{name:'weight',type:'integer'}],rows:vals.map((v,i)=>({[dimCol.name]:v,label:'L-'+v,weight:(i+1)*10}))}}
+  o.cat=cat;o.dimCol=dimCol&&dimCol.name;
+  o.heaps={};Object.values(cat).forEach(tb=>o.heaps[tb.name]=new MV(tb.rows));
+  // index
+  const ic=c.idx&&c.idx!=='(none)'?tcols.find(x=>x.name===c.idx):null;
+  if(ic){const tree=new BT(OPT.fan);o.heaps.t.pages.forEach(pg=>pg.tuples.forEach(t=>tree.insert(t.row[ic.name],t.rid)));o.index={table:'t',col:ic.name,tree}}else o.index=null;
+  o.stats={};Object.values(cat).forEach(tb=>o.stats[tb.name]=analyze(tb,o.heaps[tb.name],OPT.stale&&tb.name==='t'?0.34:1));
+  o.statsFresh={};Object.values(cat).forEach(tb=>o.statsFresh[tb.name]=analyze(tb,o.heaps[tb.name],1));
+  // query
+  try{const p=parseSQL(c.sql);o.ast=p.ast;o.tokens=p.tokens;o.bound=bindQuery(p.ast,cat);o.logical=logicalTree(o.bound);
+    o.plan=planQuery(o.bound,{stats:o.stats,index:o.index,workMem:OPT.wm});
+    const ctx={heaps:o.heaps,pool:new BP(OPT.frames),index:o.index,access:[],trace:[],workMem:OPT.wm};
+    const top=buildExec(o.plan,o.bound,ctx);const res=[];let r;while((r=top.next())&&res.length<5000)res.push(r);
+    o.ctx=ctx;o.top=top;o.result=res;o.explain=explainText(top,o.plan);
+  }catch(e){o.qerr=e.msg||String(e.message||e);if(e.stack&&!e.msg)console.error(e)}
+  return o;
+}
+
+/* ================= player ================= */
+let gen=0,paused=false,speed=1,cur=0,playingAll=false;
+function animate(draw,dur){const g=++gen;let el=0,last=null;return new Promise(res=>{function frame(now){if(g!==gen){res(false);return}if(last===null)last=now;const dt=now-last;last=now;if(!paused)el+=dt*speed;const p=Math.min(1,el/dur);draw(p);if(p<1)requestAnimationFrame(frame);else res(true)}requestAnimationFrame(frame)})}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms/speed));
+const needQ=()=>S.qerr?`<div class="box bad">The current SQL has an error: ${esc(S.qerr)}. Fix the query or pick an example.</div>`:'';
+
+/* =========================================================
+   PHASE 1: SQL → AST → BOUND → LOGICAL (F01)
+   ========================================================= */
+function draw1(p){
+  const stage=p<0.25?1:p<0.5?2:p<0.75?3:4;
+  const cat=Object.values(S.cat).map(tb=>`<div class="box"><b>${tb.name}</b> <span class="note">(${tb.rows.length} rows)</span><br>${tb.cols.map(c=>`<span class="chip">${esc(c.name)} ${c.type}</span>`).join(' ')}</div>`).join('');
+  let err=S.qerr?`<div class="caption bad"><b>ERROR:</b> ${esc(S.qerr)}<div class="note">Parsing and binding fail with an explicit message before any row is read.</div></div>`:'';
+  const toks=S.tokens?`<div class="chips">${S.tokens.map(t=>`<span class="chip" style="border-color:${t.t==='kw'?'var(--acc)':t.t==='str'?'var(--t2)':t.t==='num'?'var(--t1)':'var(--line)'}">${esc(t.t==='str'?"'"+t.v+"'":t.v)}</span>`).join('')}</div>`:'';
+  return`<div class="g2"><div><h3 style="margin-top:0">Catalog</h3>${cat}<div class="note">Types are inferred from your data; every table and field has a name and a type, and names are validated at bind time.</div></div>
+  <div><h3 style="margin-top:0">${stage>=1?'① Tokens':''}</h3>${S.tokens&&stage>=1?toks:''}${stage>=2&&S.ast?`<h3>② Parsed query (AST)</h3><pre>${esc(J({select:S.ast.sel,from:S.ast.tables,where:S.ast.preds.map(x=>[x.l,x.op,x.r.v]),join:S.ast.join,groupBy:S.ast.group,orderBy:S.ast.order,limit:S.ast.limit}))}</pre>`:''}</div></div>${err}
+  ${S.bound&&stage>=3?`<h3>③ Binder: names resolved to typed columns</h3><div class="chips">${S.bound.sel.map(s=>`<span class="chip">${esc(s.label)} → ${s.col?esc(s.col.table+'.'+s.col.name)+' : '+s.col.type:'aggregate'}</span>`).join('')}</div>`:''}
+  ${S.logical&&stage>=4?`<h3>④ Logical plan (no data read yet)</h3><pre>${esc(showTree(S.logical))}</pre><div class="note">The logical tree says <i>what</i> to compute (scan, filter, join, aggregate, sort, project, limit). Later phases decide <i>how</i>.</div>`:''}`;
+}
+
+/* =========================================================
+   PHASE 2: HEAP PAGES + BUFFER POOL (F02)
+   ========================================================= */
+function pageCard(pg,state,hl){
+  const hdr=PHDR,slots=pg.tuples.length*SLOT,tb=pg.tuples.reduce((a,t)=>a+t.bytes,0),free=PAGE-hdr-slots-tb;
+  const w=x=>x/PAGE*100;
+  return`<div class="pg ${state||''} ${hl?'dirty':''}"><h5>page ${pg.no} · ${pg.tuples.length} tuples · free ${free} B</h5><div class="pgbar"><i style="width:${w(hdr)}%;background:var(--t7)" title="header"></i><i style="width:${w(slots)}%;background:var(--t0)" title="slot array"></i><i style="width:${w(free)}%;background:var(--card)" title="free space"></i><i style="width:${w(tb)}%;background:var(--t1)" title="tuples"></i></div>${pg.tuples.slice(0,10).map(t=>`<span class="tup ${t.dead?'dead':''}" title="${esc(J(t.row))}">(${t.rid[0]},${t.rid[1]})</span>`).join('')}${pg.tuples.length>10?'…':''}</div>`;
+}
+function accessPattern(){
+  const h=S.heaps.t,n=h.pages.length;
+  if(OPT.pat==='query'&&S.ctx&&S.ctx.access.length)return{acc:S.ctx.access.map(k=>({k,w:false})),label:'the page accesses of your query'};
+  if(OPT.pat==='seq2'){const a=[];for(let r=0;r<2;r++)for(let i=0;i<n;i++)a.push({k:'t:'+i,w:false});return{acc:a,label:'two sequential scans of the whole table'}}
+  if(OPT.pat==='random'){const rnd=lcg(5),a=[];for(let i=0;i<30;i++)a.push({k:'t:'+Math.floor(Math.pow(rnd(),2)*n),w:false});return{acc:a,label:'30 skewed random page reads (hot pages)'}}
+  const a=[];for(let i=0;i<n;i++){a.push({k:'t:'+i,w:i%2===0})}for(let i=0;i<n;i++)a.push({k:'t:'+i,w:false});return{acc:a,label:'a scan that updates every second page, then a second scan'}
+}
+function draw2(p){
+  const h=S.heaps.t,pa=accessPattern(),pool=new BP(OPT.frames);pa.acc.forEach(a=>pool.get(a.k,a.w));
+  const k=p>=1?pa.acc.length:Math.max(1,Math.ceil(p*pa.acc.length)),L=pool.log[k-1]||pool.log[0];
+  let hit=0,miss=0,ev=0,fl=0;pool.log.slice(0,k).forEach(l=>{if(l.kind==='hit')hit++;else miss++;if(l.ev)ev++;if(l.fl)fl++});
+  const pages=h.pages.map(pg=>{const f=L&&L.frames.find(x=>x.k==='t:'+pg.no);return pageCard(pg,L&&L.k==='t:'+pg.no?(L.kind==='hit'?'hit':'miss'):'',f&&f.d)}).join('');
+  const frames=Array.from({length:OPT.frames},(_,i)=>{const f=L&&L.frames[i];return`<div class="pg ${f&&f.d?'dirty':''} ${f&&L.k===f.k?(L.kind==='hit'?'hit':'miss'):''}" style="min-height:44px"><h5>frame ${i}</h5>${f?`<b>${esc(f.k)}</b>${f.d?' <span class="tag o">dirty</span>':''}`:'<span class="note">empty</span>'}</div>`}).join('');
+  return`<div class="caption">Access ${k}/${pa.acc.length} (${esc(pa.label)}): page <b>${esc(L.k)}</b> → <b class="${L.kind==='hit'?'ok':'bad'}">${L.kind==='hit'?'buffer hit':'miss: read from disk'}</b>${L.ev?`; evicted <b>${esc(L.ev)}</b>${L.fl?' (dirty: flushed first)':''}`:''}</div>
+  <h3>Heap file: ${h.pages.length} slotted pages of ${PAGE} B (header · slot array · free space · tuples growing from the end)</h3><div class="grid">${pages}</div>
+  <h3>Buffer pool: ${OPT.frames} frame(s)</h3><div class="grid" style="grid-template-columns:repeat(${Math.min(OPT.frames,4)},1fr)">${frames}</div>
+  <div class="chips" style="margin-top:8px"><span class="chip ok">hits ${hit}</span><span class="chip bad">misses ${miss}</span><span class="chip">evictions ${ev}</span><span class="chip">dirty flushes ${fl}</span><span class="chip">hit rate ${(hit/Math.max(1,hit+miss)*100).toFixed(0)}%</span></div>
+  <div class="note">A row is addressed by a stable row ID (page, slot). Pages are read through a fixed number of frames: a finite cache can thrash when a scan is bigger than the pool (try 2 frames with “two sequential scans”). Dirty pages must be written before their frame is reused.</div>`;
+}
+
+/* =========================================================
+   PHASE 3: ITERATOR EXECUTION (F03)
+   ========================================================= */
+function draw3(p){
+  if(S.qerr)return needQ();
+  const ol=opList(S.top),tr=S.ctx.trace,k=p>=1?tr.length:Math.ceil(p*tr.length),cur=tr[k-1];
+  const counts=new Map();tr.slice(0,k).forEach(e=>counts.set(e.op,(counts.get(e.op)||0)+1));
+  const ops=ol.map(({o,d})=>`<div class="op ${cur&&cur.op===o?'act':''}" style="margin-left:${d*22}px"><b>${OPN[o.type]}</b><small>${esc(short(o.detail,56))}</small><div class="note" style="margin:2px 0 0">emitted so far ${p>=1?o.st.out:(counts.get(o)||0)} · input rows ${o.st.in} · pages ${o.st.pages}${o.st.loops>1?' · loops '+o.st.loops:''}${o.st.extra?' · '+esc(o.st.extra):''}</div></div>`).join('');
+  const hdr=S.bound.sel.map(s=>s.label);
+  return`<div class="caption">Each operator pulls rows from its child one at a time (<span class="mono">next()</span>). ${cur?`Row ${k}/${tr.length} just emitted by <b>${OPN[cur.op.type]}</b>: <span class="mono">${esc(short(J(cur.row),80))}</span>`:'No rows.'}</div>
+  <div class="g2"><div><h3 style="margin-top:0">Operator tree (root pulls from leaves)</h3>${ops}<div class="note">Scan, Filter, Project and Limit stream rows with constant memory. Sort and Aggregate are <b>blocking</b>: they consume their whole input first. A nested-loop join rescans its inner side for every outer row (watch “loops”).</div></div>
+  <div><h3 style="margin-top:0">Result (${S.result.length} row${S.result.length===1?'':'s'})</h3><table><tr>${hdr.map(h=>`<th>${esc(h)}</th>`).join('')}</tr>${S.result.slice(0,10).map(r=>`<tr>${hdr.map(h=>`<td>${esc(r[h]??'NULL')}</td>`).join('')}</tr>`).join('')}</table>${S.result.length>10?`<div class="note">… ${S.result.length-10} more</div>`:''}
+  <h3>EXPLAIN ANALYZE (actual counters)</h3><pre>${esc(S.explain)}</pre></div></div>
+  <div class="chips" style="margin-top:6px"><span class="chip">buffer hits ${S.ctx.pool.s.hit}</span><span class="chip">buffer misses ${S.ctx.pool.s.miss}</span><span class="chip">pages touched ${S.ctx.access.length}</span></div>`;
+}
+
+/* =========================================================
+   PHASE 4: B-TREE INDEX (F04)
+   ========================================================= */
+function numericCols(){return S.cat.t.cols.filter(c=>c.type==='integer').map(c=>c.name)}
+function draw4(p){
+  const col=(S.cfg.idx&&S.cfg.idx!=='(none)')?S.cfg.idx:(numericCols().find(c=>!/^id$/i.test(c))||S.cat.t.cols[0].name);
+  const h=S.heaps.t,entries=[];h.pages.forEach(pg=>pg.tuples.forEach(t=>entries.push([t.row[col],t.rid])));
+  const k=Math.max(1,Math.min(entries.length,Math.ceil(clamp(p/0.7,0,1)*entries.length)||1)),tr=new BT(OPT.fan);entries.slice(0,p>=1?entries.length:k).forEach(([kv,rid])=>tr.insert(kv,rid));
+  const lv=tr.levels(),W=900,rows=lv.length,H=rows*62+10;
+  const probe=OPT.ikey===''?entries[Math.floor(entries.length/2)][0]:(isNaN(Number(OPT.ikey))?OPT.ikey:Number(OPT.ikey));
+  const look=(S.cfg.idx===col||true)?tr.find(probe):{rids:[],path:[]},pathSet=new Set(look.path);
+  let sv=`<svg viewBox="0 0 ${W} ${H}" style="max-height:${H}px">`;
+  lv.forEach((nodes,li)=>{const y=6+li*62,w=Math.min(190,(W-20)/nodes.length-8);nodes.forEach((n,i)=>{const x=10+(W-20)*(i+0.5)/nodes.length-w/2;n._x=x+w/2;n._y=y;
+    sv+=`<g><rect x="${x}" y="${y}" width="${w}" height="34" rx="6" fill="${pathSet.has(n.id)&&p>=0.7?'var(--p4)':n.leaf?'var(--p2)':'var(--p0)'}" stroke="${pathSet.has(n.id)&&p>=0.7?'var(--acc2)':'var(--line)'}" stroke-width="${pathSet.has(n.id)&&p>=0.7?3:1.5}"/><text x="${x+5}" y="${y+14}" style="font-size:9px;fill:var(--mut)">${n.leaf?'leaf':'internal'} #${n.id}</text><text x="${x+5}" y="${y+28}" style="font-size:10.5px">${esc(short(n.keys.join(' | '),Math.floor(w/6.4)))}</text></g>`})});
+  lv.forEach((nodes,li)=>{if(li===0)return;lv[li-1].forEach(par=>{if(par.leaf)return;par.kids.forEach(ch=>{sv+=`<line x1="${par._x}" y1="${par._y+34}" x2="${ch._x}" y2="${ch._y}" stroke="var(--mut)"/>`})})});sv+='</svg>';
+  // cost comparison for predicate col OP probe
+  const full=new BT(OPT.fan);entries.forEach(([kv,rid])=>full.insert(kv,rid));
+  const op=OPT.iop,lo=op==='>='||op==='>'?probe:null,hi=op==='<='||op==='<'?probe:null,rr=op==='='?full.find(probe):full.range(lo,hi,op!=='>',op!=='<');const rids=op==='='?rr.rids:rr.rids,nodes=op==='='?rr.path.length:rr.visited.length;
+  const heapPages=new Set(rids.map(r=>r[0])).size;
+  const splitCt=tr.events.filter(e=>e.t==='split').length;
+  return`<div class="caption">Building a B+tree on <b>${esc(col)}</b> (max ${OPT.fan-1} keys per node): inserted ${p>=1?entries.length:k}/${entries.length} keys, <b>${splitCt}</b> page split(s), height <b>${tr.height()}</b>. Internal nodes route; leaves hold (key → row ID) and are chained for range scans.</div>${sv}
+  <div class="g2"><div><h3>Lookup <span class="mono">${esc(col)} = ${esc(probe)}</span> (highlighted path)</h3><div class="chips">${look.path.map(id=>`<span class="chip">node #${id}</span>`).join(' → ')}</div><div class="note">${look.rids.length} row ID(s): ${look.rids.slice(0,6).map(r=>'('+r+')').join(' ')} — root-to-leaf in ${look.path.length} page reads instead of scanning ${h.pages.length} heap pages.</div></div>
+  <div><h3>Index scan vs sequential scan: <span class="mono">${esc(col)} ${esc(op)} ${esc(probe)}</span></h3><table><tr><th></th><th class="n">index pages</th><th class="n">heap pages</th><th class="n">total I/O</th></tr><tr><td>Index scan</td><td class="n">${nodes}</td><td class="n">${heapPages}</td><td class="n"><b>${nodes+heapPages}</b></td></tr><tr><td>Seq scan</td><td class="n">0</td><td class="n">${h.pages.length}</td><td class="n"><b>${h.pages.length}</b></td></tr></table>
+   <div class="note">${rids.length} of ${entries.length} rows match. Selective predicates favour the index; when many rows match, the random heap fetches cost more than one sequential pass. The index scan still re-checks each heap tuple's visibility (phase 5).</div></div></div>`;
+}
+
+/* =========================================================
+   PHASE 5: TRANSACTIONS + MVCC (F05)
+   ========================================================= */
+function mvTable(){
+  const t=S.cat.t,key=t.cols[0].name,val=numericCols().find(c=>c!==key)||numericCols()[0]||null;
+  return{key,val,rows:t.rows.slice(0,4).map((r,i)=>({[key]:r[key],val:val?r[val]:100*(i+1)}))};
+}
+const MVSC={
+  snap:{title:'A snapshot never sees later commits',steps:[['A','BEGIN'],['A','SELECT',0],['B','BEGIN'],['B','UPDATE',0,50],['B','COMMIT'],['A','SELECT',0],['A','COMMIT'],['A','BEGIN'],['A','SELECT',0],['A','COMMIT']],verdict:'A read the old version for its whole transaction, even after B committed; readers never blocked and writers never waited. A new transaction sees the new version.'},
+  rollback:{title:'Rollback leaves a dead, invisible version',steps:[['A','BEGIN'],['A','UPDATE',1,70],['B','BEGIN'],['B','SELECT',1],['A','ROLLBACK'],['B','SELECT',1],['B','COMMIT']],verdict:'While A was open, B saw the old row; after ROLLBACK the version A wrote is aborted and permanently invisible (vacuum can remove it later).'},
+  conflict:{title:'Write-write conflict: first updater wins',steps:[['A','BEGIN'],['B','BEGIN'],['A','UPDATE',2,10],['B','UPDATE',2,20],['A','COMMIT'],['B','ROLLBACK']],verdict:'B tried to update a row A had already changed: B waited for A, and once A committed B had to abort (its snapshot is older than A\'s commit). Readers still never block.'},
+  delete:{title:'Insert and delete are versions too',steps:[['A','BEGIN'],['B','BEGIN'],['B','DELETE',3],['B','INSERT'],['B','COMMIT'],['A','SELECT*'],['A','COMMIT'],['C','BEGIN'],['C','SELECT*'],['C','COMMIT']],verdict:'A\'s snapshot still sees the deleted row and not the inserted one (no phantom, no missing row); a later transaction sees the new state.'},
+};
+function runMV(name){
+  const mt=mvTable(),sc=MVSC[name],mv=new MV(mt.rows),S_={},frames=[],waits=[];
+  const fmtRow=r=>r?J(r):'(none)';
+  const sel=(s,k)=>{const sn=S_[s].snap;const t=mv.all().find(t=>t.rid[1]!==undefined&&mv.visible(t,sn)&&String(t.row[mt.key])===String(mt.rows[k][mt.key]));return t?t.row.val:null};
+  const exec=(s,a,k,v,retry)=>{
+    let reply='';
+    switch(a){
+      case'BEGIN':{const x=mv.begin();S_[s]={x,snap:null};S_[s].snap=mv.snapshot(x);reply=`txid ${x}, snapshot: sees commits < ${S_[s].snap.xmax}${S_[s].snap.xip.length?' except in-progress {'+S_[s].snap.xip+'}':''}`;break}
+      case'SELECT':reply=`val = ${J(sel(s,k))}`;break;
+      case'SELECT*':{const rows=mv.all().filter(t=>mv.visible(t,S_[s].snap)).map(t=>t.row[mt.key]);reply=`rows: ${rows.join(', ')}`;break}
+      case'UPDATE':{const t=mv.all().find(t=>mv.visible(t,S_[s].snap)&&String(t.row[mt.key])===String(mt.rows[k][mt.key]));
+        if(!t){reply='0 rows';break}
+        if(t.xmax&&mv.status[t.xmax]==='active'&&t.xmax!==S_[s].x){waits.push({s,blocker:Object.keys(S_).find(q=>S_[q].x===t.xmax),a,k,v});reply=`⏳ WAITS for txid ${t.xmax} (row locked by an in-progress update)`;return{reply,blocked:true}}
+        if(t.xmax&&mv.status[t.xmax]==='committed'){reply='ERROR: could not serialize access due to concurrent update';return{reply,error:true}}
+        const nr={...t.row,val:t.row.val+v};mv.update(S_[s].x,t,nr);reply=`UPDATE 1 (new version val=${nr.val}, old version gets xmax=${S_[s].x})`;break}
+      case'DELETE':{const t=mv.all().find(t=>mv.visible(t,S_[s].snap)&&String(t.row[mt.key])===String(mt.rows[k][mt.key]));if(t){t.xmax=S_[s].x;reply='DELETE 1 (xmax set)'}else reply='0 rows';break}
+      case'INSERT':{mv.put(S_[s].x,{[mt.key]:'new-row',val:999});reply='INSERT 1 (new tuple with xmin='+S_[s].x+')';break}
+      case'COMMIT':mv.commit(S_[s].x);reply='COMMIT';break;
+      case'ROLLBACK':mv.abort(S_[s].x);reply='ROLLBACK';break;
+    }
+    return{reply};
+  };
+  sc.steps.forEach(([s,a,k,v],i)=>{
+    if(!S_[s]&&a!=='BEGIN')S_[s]={x:0,snap:null};
+    const r=exec(s,a,k,v);
+    let after=[];
+    if(a==='COMMIT'||a==='ROLLBACK'){waits.filter(w=>w.blocker===s).forEach(w=>{const rr=a==='COMMIT'?{reply:'ERROR: could not serialize access due to concurrent update (the blocker committed)'}:exec(w.s,w.a,w.k,w.v,true);after.push(`${w.s} resumes → ${rr.reply}`);waits.splice(waits.indexOf(w),1)})}
+    frames.push({i,s,a,k,v,reply:r.reply,after,tuples:mv.all().map(t=>({rid:t.rid,row:t.row,xmin:t.xmin,xmax:t.xmax,st:mv.status[t.xmin],sx:t.xmax?mv.status[t.xmax]:null,dead:t.dead,visA:S_.A&&S_.A.snap?mv.visible(t,S_.A.snap):false,visB:S_.B&&S_.B.snap?mv.visible(t,S_.B.snap):false})),status:{...mv.status}});
+  });
+  return{sc,frames,mt};
+}
+function draw5(p){
+  const R=runMV(OPT.mvsc),k=p>=1?R.frames.length:Math.max(1,Math.ceil(p*R.frames.length)),f=R.frames[k-1];
+  return`<div class="caption">${esc(R.sc.title)} · step ${k}/${R.frames.length}: <b>${f.s}</b> <span class="mono">${esc(f.a)}${f.k!==undefined?' row '+f.k:''}</span> → ${esc(f.reply)}${f.after.map(a=>'<br>↳ '+esc(a)).join('')}</div>
+  <div class="g2"><div><table><tr><th>#</th><th>session</th><th>statement</th><th>result</th></tr>${R.frames.slice(0,k).map((x,i)=>`<tr style="${i===k-1?'background:var(--p0)':''}"><td>${i+1}</td><td><b>${x.s}</b></td><td class="mono">${esc(x.a)}${x.k!==undefined?' #'+x.k:''}</td><td class="mono">${esc(short(x.reply,70))}</td></tr>`).join('')}</table></div>
+  <div><h3 style="margin-top:0">Heap tuples (versions)</h3><table><tr><th>rid</th><th>row</th><th>xmin</th><th>xmax</th><th>A sees</th><th>B sees</th></tr>${f.tuples.map(t=>`<tr style="${t.st==='aborted'?'opacity:.5':''}"><td>(${t.rid})</td><td class="mono">${esc(short(J(t.row),30))}</td><td>${t.xmin} <small>${t.st[0]}</small></td><td>${t.xmax||'-'}${t.sx?' <small>'+t.sx[0]+'</small>':''}</td><td>${t.visA?'<b class="ok">✔</b>':''}</td><td>${t.visB?'<b class="ok">✔</b>':''}</td></tr>`).join('')}</table><div class="note">c = committed, a = aborted/active</div></div></div>
+  ${p>=1?`<div class="caption good">${esc(R.sc.verdict)}</div>`:''}
+  <div class="note">An update never overwrites a row: it stamps the old version with <b>xmax</b> and adds a new version with <b>xmin</b>. A snapshot (the set of transactions visible at its start) decides which version each reader sees, so readers don't block writers. Dead versions accumulate until VACUUM (phase 7).</div>`;
+}
+
+/* =========================================================
+   PHASE 6: WAL + CRASH RECOVERY (F06)
+   ========================================================= */
+function walSim(crashAt,torn){
+  const mt=mvTable(),rows=mt.rows.slice(0,3);
+  const ops=[['T2','UPDATE',0,10],['T3','UPDATE',1,20],['T2','COMMIT'],['FLUSHPAGE',0],['T3','UPDATE',2,30],['T4','UPDATE',0,5],['T4','COMMIT'],['T3','UPDATE',1,7]];
+  const disk=[{lsn:0,tup:rows.map((r,i)=>({slot:i,row:{...r},xmin:1,xmax:0}))}],buf=JSON.parse(JSON.stringify(disk));
+  const wal=[];let lsn=0,flushed=0;const acked=[];const log=[];
+  const append=rec=>{rec.lsn=++lsn;wal.push(rec);return rec};
+  const flushWal=to=>{flushed=Math.max(flushed,to)};
+  const xids={T2:2,T3:3,T4:4};
+  ops.slice(0,crashAt).forEach((op,i)=>{
+    const [who,a,k,v]=op;let note='';
+    if(who==='FLUSHPAGE'){const pg=buf[0];if(pg.lsn>flushed){flushWal(pg.lsn);note=`write-ahead rule: page LSN ${pg.lsn} > flushed WAL → flush WAL up to ${pg.lsn} first. `}disk[0]=JSON.parse(JSON.stringify(pg));note+=`page 0 written to disk (pageLSN ${pg.lsn})`}
+    else if(a==='UPDATE'){const x=xids[who],cur=buf[0].tup.filter(t=>t.slot===k||t.slot===k).slice(-1)[0];const nl=buf[0].tup.length;
+      const oldv=[...buf[0].tup].reverse().find(t=>t.row.val!==undefined&&String(t.row[mt.key])===String(rows[k][mt.key])&&!t.xmax);
+      const rec=append({xid:x,type:'UPDATE',slot:oldv?oldv.slot:-1,newSlot:nl,row:{...rows[k],val:(oldv?oldv.row.val:0)+v}});
+      if(oldv)oldv.xmax=x;buf[0].tup.push({slot:nl,row:rec.row,xmin:x,xmax:0});buf[0].lsn=rec.lsn;note=`WAL record LSN ${rec.lsn} (xid ${x}) written to the log buffer BEFORE the page change is visible to disk; page 0 is dirty`}
+    else if(a==='COMMIT'){const x=xids[who],rec=append({xid:x,type:'COMMIT'});flushWal(rec.lsn);acked.push(x);note=`COMMIT record LSN ${rec.lsn}; WAL flushed to ${flushed} before the client gets "COMMIT"`}
+    log.push({who,op:a==='FLUSHPAGE'?'':a,txt:who==='FLUSHPAGE'?'background writer':'',note});
+  });
+  // crash
+  const surviving=wal.filter(r=>r.lsn<=flushed);let torn_=null;
+  let walBytes=surviving.map(r=>J(r)).join('\n');
+  const inflight=wal.find(r=>r.lsn>flushed);
+  if(torn&&inflight){const ls=J(inflight);walBytes+=(walBytes?'\n':'')+ls.slice(0,Math.floor(ls.length*0.55));torn_=inflight}
+  // recovery: validate, redo all, commit status from COMMIT records
+  const valid=[];walBytes.split('\n').filter(Boolean).forEach(line=>{try{valid.push(JSON.parse(line))}catch{}});
+  const committed=new Set(valid.filter(r=>r.type==='COMMIT').map(r=>r.xid));
+  const rec=JSON.parse(JSON.stringify(disk));let redone=0,skipped=0;
+  valid.forEach(r=>{if(r.type!=='UPDATE')return;const pg=rec[0];if(r.lsn<=pg.lsn){skipped++;return}const old=pg.tup.find(t=>t.slot===r.slot);if(old)old.xmax=r.xid;if(!pg.tup.some(t=>t.slot===r.newSlot))pg.tup.push({slot:r.newSlot,row:r.row,xmin:r.xid,xmax:0});pg.lsn=r.lsn;redone++});
+  const visibleOf=pg=>pg.tup.filter(t=>(t.xmin===1||committed.has(t.xmin))&&!(t.xmax&&committed.has(t.xmax))).map(t=>({k:t.row[mt.key],v:t.row.val}));
+  const after=visibleOf(rec[0]);
+  const expect=rows.map((r,i)=>{let v=r.val;ops.slice(0,crashAt).forEach(op=>{});return{k:r[mt.key],v}});
+  // expected = initial + updates of txns whose COMMIT was acknowledged
+  const exp=rows.map(r=>({k:r[mt.key],v:r.val}));ops.slice(0,crashAt).forEach(op=>{if(op[1]==='UPDATE'&&acked.includes(xids[op[0]])){const e=exp[op[2]];e.v+=op[3]}});
+  const ok=exp.every(e=>{const g=after.find(x=>String(x.k)===String(e.k));return g&&g.v===e.v});
+  return{ops,log,wal,flushed,disk,buf,surviving,valid,committed,rec,redone,skipped,after,exp,ok,acked,mt,torn:!!torn_,nValid:valid.length,total:surviving.length,crashAt};
+}
+function draw6(p){
+  const k=OPT.walCrash,W=walSim(k,OPT.torn),show=Math.ceil(clamp(p/0.6,0,1)*W.log.length),rp=p>=0.6;
+  const pgBox=(t,lbl)=>`<div class="box"><b>${lbl}</b> <span class="note">pageLSN ${t.lsn}</span><div>${t.tup.map(x=>`<span class="tup ${x.xmax?'dead':'live'}" title="xmin ${x.xmin} xmax ${x.xmax}">${esc(x.row[W.mt.key])}:${x.row.val} <small>x${x.xmin}</small></span>`).join('')}</div></div>`;
+  return`<div class="caption">Crash after step ${k}/${W.ops.length}. WAL flushed up to LSN <b>${W.flushed}</b> of ${W.wal.length}; acknowledged commits: ${W.acked.length?W.acked.map(x=>'xid '+x).join(', '):'none'}. ${OPT.torn?'<span class="bad">The in-flight WAL record (never flushed, never acknowledged) is torn mid-write and is rejected on replay.</span>':''}</div>
+  <div class="g2"><div><h3 style="margin-top:0">Before the crash</h3>${W.log.slice(0,show).map((l,i)=>`<div class="row"><b>${l.who}</b> ${esc(l.op)} · ${esc(l.note)}</div>`).join('')||'<div class="note">…</div>'}</div>
+  <div><h3 style="margin-top:0">Log vs pages</h3><table><tr><th>LSN</th><th>xid</th><th>record</th><th>on disk?</th></tr>${W.wal.map(r=>`<tr><td>${r.lsn}</td><td>${r.xid}</td><td class="mono">${r.type}${r.type==='UPDATE'?' → '+esc(J(r.row)):''}</td><td>${r.lsn<=W.flushed?'<span class="ok">flushed</span>':'<span class="bad">lost</span>'}</td></tr>`).join('')||'<tr><td colspan="4">no records</td></tr>'}</table></div></div>
+  ${rp?`<h3>Recovery after restart</h3><div class="g2"><div>${pgBox(W.disk[0],'page 0 as found on disk (stale)')}<div class="note">The data page on disk may miss changes: pages are written lazily, only the log is forced at commit.</div></div>
+  <div>${pgBox(W.rec[0],'page 0 after replay')}<div class="note">Validated ${W.nValid}/${W.total} WAL record(s) (torn tail ignored), redid ${W.redone}, skipped ${W.skipped} already on the page (pageLSN check makes replay idempotent). Committed xids found in the log: {${[...W.committed].join(', ')||'-'}}.</div></div></div>
+  <div class="caption ${W.ok?'good':'bad'}">Recovered visible state: ${W.after.map(x=>esc(x.k)+'='+x.v).join(', ')}. ${W.ok?'<b class="ok">Every acknowledged commit survived and uncommitted work (xid 3) stayed invisible ✔</b>':'<b class="bad">Mismatch with acknowledged commits ✘</b>'}</div>`:''}
+  <div class="note">Rule 1: a change is logged <i>before</i> its page may be written (log-before-data). Rule 2: COMMIT is acknowledged only after its log record is on disk. Dirty pages can be flushed whenever; after a crash the log is validated, replayed, and a torn last record is rejected. Transactions without a COMMIT record never become visible.</div>`;
+}
+
+/* =========================================================
+   PHASE 7: VACUUM (F07)
+   ========================================================= */
+function vacSim(){
+  const mt=mvTable(),mv=new MV(S.cat.t.rows.slice(0,12).map((r,i)=>({[mt.key]:r[mt.key],val:mt.val?r[mt.val]:100+i})));
+  let reader=null;if(OPT.vlong){reader=mv.begin()}
+  const rnd=lcg(3);
+  for(let i=0;i<OPT.vn;i++){const x=mv.begin(),live=mv.all().filter(t=>!t.dead&&!t.xmax);const t=live[Math.floor(rnd()*live.length)];mv.update(x,t,{...t.row,val:t.row.val+1});mv.commit(x)}
+  const before=mv.stats(),hz=mv.horizon();const pagesBefore=mv.pages.map(pg=>({no:pg.no,tup:pg.tuples.map(t=>({rid:t.rid,dead:t.dead||mv.status[t.xmin]==='aborted'||(t.xmax&&mv.status[t.xmax]==='committed'),xmin:t.xmin,xmax:t.xmax,row:t.row})),used:pg.used}));
+  const vb=JSON.stringify(pagesBefore),res=mv.vacuum(hz),after=mv.stats();
+  const pagesAfter=mv.pages.map(pg=>({no:pg.no,tup:pg.tuples.map(t=>({rid:t.rid,dead:t.dead||false,gone:t.dead,xmin:t.xmin,xmax:t.xmax,row:t.row})),used:pg.used}));
+  const blocked=mv.all().filter(t=>!t.dead&&t.xmax&&mv.status[t.xmax]==='committed').length;
+  return{before,after,hz,res,pagesBefore,pagesAfter,reader,blocked,nextx:mv.xid+1};
+}
+function draw7(p){
+  const V=vacSim(),phase=p<0.35?0:p<0.7?1:2,pages=phase>=2?V.pagesAfter:V.pagesBefore;
+  const pg=pages.map(x=>`<div class="pg"><h5>page ${x.no} · used ${x.used}/${PAGE} B</h5><div class="pgbar"><i style="width:${x.used/PAGE*100}%;background:var(--t1)"></i></div>${x.tup.map(t=>`<span class="tup ${t.gone?'dead':t.dead?'dead':'live'}" title="xmin ${t.xmin} xmax ${t.xmax}" style="${t.gone?'opacity:.2':''}">${t.gone?'free':'('+t.rid+')'}</span>`).join('')}</div>`).join('');
+  return`<div class="caption">${['After '+OPT.vn+' updates every old version stays in the heap: dead versions (struck through) bloat the pages.','VACUUM computes the visibility horizon = oldest transaction that may still need an old version: <b>'+V.hz+'</b>'+(V.reader?` (a long-running transaction <b>${V.reader}</b> pins it)`:' (no open transaction: the horizon is the next txid '+V.nextx+')')+'.','VACUUM removes only versions invisible to every snapshot ≥ the horizon: removed <b>'+V.res.removed+'</b> version(s), reclaimed <b>'+V.res.bytes+' B</b>, '+V.blocked+' dead version(s) still retained.'][phase]}</div>
+  <div class="grid">${pg}</div>
+  <div class="chips" style="margin-top:8px"><span class="chip">live tuples ${V.before.live}</span><span class="chip bad">dead tuples ${phase>=2?V.after.dead+V.blocked:V.before.dead}</span><span class="chip">dead bytes ${phase>=2?V.after.deadB:V.before.deadB}</span><span class="chip">pages ${V.after.pages}</span><span class="chip">horizon ${V.hz}</span></div>
+  <div class="note">${OPT.vlong?'<b class="bad">A long-running transaction holds the horizon back, so VACUUM cannot reclaim anything newer than its snapshot.</b> Turn the checkbox off and vacuum again.':'With no old snapshots, every dead version is safe to remove and its slot becomes reusable space.'} MVCC trades readers-don't-block-writers for dead versions; VACUUM is the garbage collector, and it must never remove a version some snapshot can still see.</div>`;
+}
+
+/* =========================================================
+   PHASE 8: STATISTICS + COST PLANNER (F08)
+   ========================================================= */
+function draw8(p){
+  if(S.qerr)return needQ();
+  const pl=S.plan,st=S.stats.t,fresh=S.statsFresh.t,root=pl.root,tcol=S.cat.t.cols.filter(c=>c.type==='integer')[1]||S.cat.t.cols[0];
+  const col=S.cat.t.cols.find(c=>c.type==='integer'&&!/^id$/i.test(c.name))||S.cat.t.cols[0];const cs=st.cols[col.name],cf=fresh.cols[col.name];
+  const hist=cs.hist?`<svg viewBox="0 0 300 90" style="max-height:100px">${cs.hist.map((v,i)=>`<rect x="${10+i*56}" y="${75-v/Math.max(1,...cs.hist)*60}" width="50" height="${v/Math.max(1,...cs.hist)*60}" fill="var(--t0)"/><text x="${10+i*56}" y="87" style="font-size:9px">${(cs.min+i*cs.w).toFixed(0)}</text>`).join('')}</svg>`:'';
+  const alts=(a)=>`<table><tr><th>alternative</th><th class="n">est. cost</th></tr>${a.map((x,i)=>`<tr style="${i===0?'background:var(--p2)':''}"><td>${esc(x.name)}${i===0?' <span class="tag g">chosen</span>':''}</td><td class="n">${x.cost.toFixed(2)}</td></tr>`).join('')}</table>`;
+  const scans=pl.scans.map(s=>`<h3>Access path for <span class="mono">${s.tb.name} ${s.tb.alias}</span>${s.preds.length?' (filter '+esc(s.preds.map(p=>p.l.name+p.op+J(p.r.lit)).join(' AND '))+')':''}</h3>${alts(s.alts)}<div class="note">estimated rows ${s.est.rows.toFixed(1)} · actual ${S.top?opList(S.top).filter(x=>x.o.type===s.type&&x.o.detail.startsWith(s.tb.name)||x.o.type===s.type&&x.o.detail.includes(s.tb.name)).map(x=>x.o.st.out)[0]??'-':'-'}</div>`).join('');
+  const rowsAct=S.result.length;const topEst=Math.round(S.top?opList(S.top).slice(-1)[0].o.st.out:0);
+  const rep=opList(S.top).filter(x=>['SeqScan','IndexScan','NLJ','HashJoin'].includes(x.o.type));
+  const cmpRows=rep.map(({o})=>{const est=o.type==='NLJ'||o.type==='HashJoin'?pl.root.est.rows:(pl.scans.find(s=>o.detail.startsWith(s.tb.name))||pl.scans[0]).est.rows;return`<tr><td>${OPN[o.type]}</td><td class="n">${est.toFixed(1)}</td><td class="n">${o.st.out}</td><td class="n ${Math.abs(est-o.st.out)>Math.max(2,o.st.out*0.5)?'bad':'ok'}">${o.st.out?(est/o.st.out).toFixed(2)+'×':'-'}</td></tr>`}).join('');
+  return`<div class="caption">ANALYZE collected row/page counts, distinct values, min/max, a histogram and most-common values per column${OPT.stale?'. <b class="bad">These statistics are STALE: they describe only the first third of the table.</b>':'.'} The planner multiplies selectivities and compares costs (page reads, CPU, random-vs-sequential I/O).</div>
+  <div class="g2"><div><h3 style="margin-top:0">Statistics of t</h3><div class="chips"><span class="chip">rows ${st.rows}${st.rows!==fresh.rows?' (true '+fresh.rows+')':''}</span><span class="chip">pages ${st.pages}</span><span class="chip">${esc(col.name)}: ndv ${cs.ndv}, min ${cs.min}, max ${cs.max}</span></div>${hist}<div class="note">equi-width histogram of <b>${esc(col.name)}</b>${OPT.stale&&cf&&cf.max!==cs.max?` (true max ${cf.max})`:''}</div>${scans}${pl.joinAlts?`<h3>Join method</h3>${alts(pl.joinAlts)}`:''}</div>
+  <div><h3 style="margin-top:0">Chosen plan</h3><pre>${esc(S.explain)}</pre><h3>Estimated vs actual rows</h3><table><tr><th>operator</th><th class="n">estimated</th><th class="n">actual</th><th class="n">error</th></tr>${cmpRows}</table>
+   <div class="note">Big estimate errors (red) mean the planner picked a plan for the wrong data: typical causes are skew and stale statistics. Toggle “stale statistics” and compare.</div></div></div>`;
+}
+
+/* =========================================================
+   PHASE 9: EXTERNAL SORT + HASH JOIN SPILL (F09)
+   ========================================================= */
+function extSort(vals,W,fan){
+  const runs=[];for(let i=0;i<vals.length;i+=W)runs.push(vals.slice(i,i+W).sort((a,b)=>cmp(a,b)));
+  const gens=[runs.map(r=>r.length)];let cur=runs,passes=0,pagesIO=vals.length*2/ Math.max(1,6);
+  while(cur.length>1){const nx=[];for(let i=0;i<cur.length;i+=fan)nx.push(cur.slice(i,i+fan).flat().sort((a,b)=>cmp(a,b)));cur=nx;passes++;gens.push(cur.map(r=>r.length))}
+  return{runs,passes,sorted:cur[0]||[],gens,written:vals.length*(1+passes)};
+}
+function hashJoinSpill(R,Sx,W,nPart){
+  const build=R.length<=Sx.length?R:Sx,probe=build===R?Sx:R;let inMem=build.length<=W;const out=[];
+  if(inMem){const ht=new Map();build.forEach(b=>{if(!ht.has(b.k))ht.set(b.k,[]);ht.get(b.k).push(b)});probe.forEach(pr=>(ht.get(pr.k)||[]).forEach(b=>out.push([b.id,pr.id])));return{inMem,parts:[],out,files:0,spilled:0}}
+  const parts=Array.from({length:nPart},()=>({b:[],p:[]}));build.forEach(b=>parts[fnvStr(String(b.k))%nPart].b.push(b));probe.forEach(pr=>parts[fnvStr(String(pr.k))%nPart].p.push(pr));
+  parts.forEach(pt=>{const ht=new Map();pt.b.forEach(b=>{if(!ht.has(b.k))ht.set(b.k,[]);ht.get(b.k).push(b)});pt.p.forEach(pr=>(ht.get(pr.k)||[]).forEach(b=>out.push([b.id,pr.id])))});
+  return{inMem,parts,out,files:parts.length*2,spilled:build.length+probe.length};
+}
+function draw9(p){
+  const t=S.cat.t,col=t.cols.find(c=>c.type==='integer'&&!/^id$/i.test(c.name))||t.cols[0],vals=t.rows.map(r=>r[col.name]);
+  const W=OPT.wm,fan=3,es=extSort(vals,W,fan),ok=J(es.sorted)===J([...vals].sort((a,b)=>cmp(a,b)));
+  const dc=S.dimCol,left=t.rows.map((r,i)=>({id:i,k:dc?r[dc]:r[t.cols[0].name]})),dimRows=S.cat.d?S.cat.d.rows.map((r,i)=>({id:i,k:r[dc]})):left.slice(0,6);
+  const hjR=left,hjS=dimRows.length>=left.length?dimRows:left.map(x=>({...x,k:x.k})),buildBigger=hjR.length;
+  // for a spill demo join the table with itself on the key column when the dimension is tiny
+  const A=left,B=left.map(x=>({id:x.id,k:x.k})),h=hashJoinSpill(A,B,W,4),nl=[];A.forEach(a=>B.forEach(b=>{if(a.k===b.k)nl.push([a.id,b.id])}));
+  const same=J(h.out.map(x=>x.join('-')).sort())===J(nl.map(x=>x.join('-')).sort())||J(h.out.map(x=>x.slice().sort().join('-')).sort())===J(nl.map(x=>x.slice().sort().join('-')).sort());
+  const stage=p<0.5?0:1,k=Math.ceil(clamp(p/0.5,0,1)*es.runs.length);
+  const sortHtml=`<h3 style="margin-top:0">External sort of ${esc(col.name)}: work_mem = ${W} rows</h3><div class="note" style="margin:0">① sort ${W}-row chunks in memory and spill each as a run</div>${es.runs.map((r,i)=>`<div class="chips" style="margin:3px 0;${i<(stage?es.runs.length:k)?'':'opacity:.2'}"><span class="chip" style="background:${pc(i)}">run ${i} (temp file)</span>${r.map(v=>`<span class="chip">${v}</span>`).join('')}</div>`).join('')}
+    <div class="note">② k-way merge, fan-in ${fan}: ${es.passes} pass(es) → ${es.gens.map(g=>g.length).join(' → ')} run(s).</div>${stage?`<div class="chips">${es.sorted.slice(0,24).map(v=>`<span class="chip" style="border-color:var(--ok)">${v}</span>`).join('')}${es.sorted.length>24?'…':''}</div><div class="note">Output ${ok?'<b class="ok">equals an in-memory sort ✔</b>':'<b class="bad">differs ✘</b>'}; ${es.written} row writes to temp files; all ${es.runs.length} run files deleted after the merge (also on error).</div>`:''}`;
+  const hjHtml=`<h3 style="margin-top:0">Hash join (build ${A.length} rows on ${esc(S.dimCol||t.cols[0].name)}), work_mem = ${W}</h3>${h.inMem?'<div class="caption good">Build side fits in memory: one in-memory hash table, then probe.</div>':`<div class="caption bad">Build side (${A.length}) exceeds work_mem (${W}): <b>Grace hash join</b>. Both inputs are hash-partitioned into ${h.parts.length} partition files (${h.files} temp files, ${h.spilled} rows written), then each partition pair is joined in memory.</div><table><tr><th>partition</th><th class="n">build rows</th><th class="n">probe rows</th><th>fits?</th></tr>${h.parts.map((pt,i)=>`<tr style="${stage&&i<Math.ceil(p*4)?'':'opacity:.4'}"><td>${i}</td><td class="n">${pt.b.length}</td><td class="n">${pt.p.length}</td><td>${pt.b.length<=W?'<span class="ok">yes</span>':'<span class="bad">recurse</span>'}</td></tr>`).join('')}</table>`}
+    <div class="chips" style="margin-top:6px"><span class="chip">join output ${h.out.length} pairs ${same?'= nested loop ✔':'≠ nested loop'}</span><span class="chip">nested loop would compare ${A.length*B.length} pairs</span><span class="chip">hash join compares ~${h.out.length+A.length+B.length}</span></div>`;
+  return`<div class="g2"><div>${sortHtml}</div><div>${hjHtml}</div></div><div class="note">Both algorithms respect a memory budget by spilling to temporary files: sorted runs merged in passes, or hash partitions processed one at a time. Better algorithms avoid repeated scans (nested loop) at the price of temp disk I/O and cleanup (<code>temp files removed after success or interruption</code>). Change work_mem in the controls.</div>`;
+}
+
+/* =========================================================
+   PHASE 10: CHECKPOINT + WAL LIFECYCLE (F10)
+   ========================================================= */
+function ckSim(K,n,seg){
+  const rnd=lcg(77),nPages=8,dirty=new Set(),events=[];let lsn=0,redo=0,flushes=0;const recs=[];
+  for(let i=1;i<=n;i++){const pg=Math.floor(rnd()*nPages);lsn=i;recs.push({lsn,pg});dirty.add(pg);events.push({t:'wal',lsn,pg});
+    if(K>0&&i%K===0){flushes+=dirty.size;events.push({t:'ckpt',lsn,flush:dirty.size});dirty.clear();redo=lsn}}
+  const replay=n-redo,segs=Math.ceil(n/seg),retired=redo?Math.floor(redo/seg):0;
+  return{recs,events,flushes,redo,replay,segs,retired,keep:segs-retired,K,n,dirtyEnd:dirty.size};
+}
+function draw10(p){
+  const n=43,seg=8,cur=ckSim(OPT.ckK,n,seg),cfgs=[3,8,20,0].map(k=>[k,ckSim(k,n,seg)]);
+  const k=p>=1?n:Math.ceil(p*n),sim=ckSim(OPT.ckK,k,seg);
+  const W=640,xs=i=>10+i/n*W;let tl=`<svg viewBox="0 0 680 100"><line x1="10" x2="650" y1="50" y2="50" stroke="var(--line)" stroke-width="2"/>`;
+  for(let i=1;i<=Math.min(k,n);i++)tl+=`<circle cx="${xs(i)}" cy="50" r="2.5" fill="${i>sim.redo?'var(--bad)':'var(--ok)'}"/>`;
+  if(OPT.ckK>0)for(let i=OPT.ckK;i<=k;i+=OPT.ckK)tl+=`<path d="M${xs(i)},22 l6,8 l-6,8 l-6,-8z" fill="var(--acc)"><title>checkpoint at LSN ${i}</title></path>`;
+  for(let i=0;i<=n;i+=seg)tl+=`<line x1="${xs(i)}" x2="${xs(i)}" y1="60" y2="76" stroke="var(--mut)"/><text x="${xs(i)+2}" y="88" style="font-size:9px;fill:var(--mut)">seg ${i/seg}</text>`;
+  tl+=`<line x1="${xs(sim.redo)}" x2="${xs(sim.redo)}" y1="12" y2="70" stroke="var(--acc2)" stroke-width="2"/><text x="${xs(sim.redo)+3}" y="12" style="fill:var(--acc2);font-size:10px">redo start LSN ${sim.redo}</text></svg>`;
+  const row=(lbl,s,on)=>`<tr style="${on?'background:var(--p0)':''}"><td><b>${lbl}</b></td><td class="n">${s.flushes}</td><td class="n ${s.replay>20?'bad':''}">${s.replay}</td><td class="n">${s.keep}/${s.segs}</td></tr>`;
+  return`<div class="caption">${k} WAL records written so far (dots: green = already reflected in pages, red = must be replayed after a crash now). A checkpoint flushes all dirty pages and records a durable <b>redo start position</b>; WAL before it is no longer needed.</div>${tl}
+  <div class="chips" style="margin:6px 0"><span class="chip">crash now → replay <b>${sim.replay}</b> record(s)</span><span class="chip">WAL segments retained ${sim.keep}/${sim.segs}</span><span class="chip">page flushes by checkpoints ${sim.flushes}</span></div>
+  <table><tr><th>checkpoint every</th><th class="n">page writes (I/O)</th><th class="n">records to replay</th><th class="n">WAL segments kept</th></tr>${cfgs.map(([kk,s])=>row(kk?kk+' records':'never',s,kk===OPT.ckK)).join('')}</table>
+  <div class="note">Frequent checkpoints shorten recovery and let old WAL segments be recycled, but they write more pages (and repeatedly rewrite hot pages). Rare checkpoints make writes cheaper and recovery slower, and WAL keeps growing. A segment may only be retired once everything in it is safely in pages (and not needed by an active snapshot/replica).</div>`;
+}
+
+/* =========================================================
+   PHASE 11: ISOLATION LEVELS + DEADLOCK (F11)
+   ========================================================= */
+function runIso(sc,level){
+  const mt=mvTable(),rows=[{[mt.key]:'x',val:100},{[mt.key]:'y',val:100},{[mt.key]:'z',val:100}];
+  const mv=new MV(rows),ses={};const trace=[];
+  const snapFor=s=>level==='rc'||!ses[s].snap?mv.snapshot(ses[s].x):ses[s].snap;
+  const find=(s,key,sn)=>mv.all().find(t=>mv.visible(t,sn)&&t.row[mt.key]===key);
+  const begin=s=>{const x=mv.begin();ses[s]={x,snap:null};trace.push([s,'BEGIN',`txid ${x}`])};
+  const readOnce=(s)=>{const sn=snapFor(s);if(level==='rr'&&!ses[s].snap)ses[s].snap=sn;return sn};
+  const sel=(s,key)=>{const sn=readOnce(s),t=find(s,key,sn);trace.push([s,`SELECT val FROM t WHERE k='${key}'`,t?t.row.val:'(none)']);return t?t.row.val:null};
+  const cnt=(s,thr)=>{const sn=readOnce(s),n=mv.all().filter(t=>mv.visible(t,sn)&&t.row.val>=thr).length;trace.push([s,`SELECT count(*) WHERE val>=${thr}`,n]);return n};
+  const upd=(s,key,fn,desc)=>{const sn=readOnce(s),t=find(s,key,sn);if(!t){trace.push([s,desc,'0 rows']);return}
+    // latest committed version if another txn changed it (read committed re-evaluates)
+    const latest=mv.all().find(x=>!x.dead&&x.row[mt.key]===key&&!x.xmax&&(mv.status[x.xmin]==='committed'||x.xmin===ses[s].x));
+    if(t.xmax&&mv.status[t.xmax]==='committed'&&t.xmax!==ses[s].x){if(level==='rr'){trace.push([s,desc,'ERROR: could not serialize access due to concurrent update']);ses[s].err=true;return}
+      if(latest){const nv=fn(latest.row.val);mv.update(ses[s].x,latest,{...latest.row,val:nv});trace.push([s,desc,`re-evaluated on the newest committed row (${latest.row.val}) → ${nv}`]);return}}
+    const nv=fn(t.row.val);mv.update(ses[s].x,t,{...t.row,val:nv});trace.push([s,desc,`UPDATE 1 → ${nv}`]);};
+  const ins=(s,key,val)=>{mv.put(ses[s].x,{[mt.key]:key,val});trace.push([s,`INSERT (${key}, ${val})`,'INSERT 1'])};
+  const com=s=>{if(ses[s].err){mv.abort(ses[s].x);trace.push([s,'ROLLBACK','(aborted after error)']);return}mv.commit(ses[s].x);trace.push([s,'COMMIT','COMMIT'])};
+  let verdict='';
+  if(sc==='nonrep'){begin('A');begin('B');const a1=sel('A','x');upd('B','x',v=>v+50,"UPDATE SET val=val+50 WHERE k='x'");com('B');const a2=sel('A','x');com('A');verdict=a1===a2?`A read ${a1} twice: <b class="ok">repeatable</b>.`:`A read ${a1} then ${a2} inside one transaction: <b class="bad">non-repeatable read</b> (Read Committed refreshes the snapshot each statement).`}
+  if(sc==='phantom'){begin('A');begin('B');const c1=cnt('A',100);ins('B','w',150);com('B');const c2=cnt('A',100);com('A');verdict=c1===c2?`The same count query returned ${c1} both times: <b class="ok">no phantom</b> (the snapshot excludes B's new row).`:`count went ${c1} → ${c2}: <b class="bad">phantom row</b> appeared mid-transaction.`}
+  if(sc==='skew'){begin('A');begin('B');const a=cnt('A',100),b=cnt('B',100);if(a>=2)upd('A','x',v=>v-100,"UPDATE x (on duty ≥2, so I may leave)");if(b>=2)upd('B','y',v=>v-100,"UPDATE y (on duty ≥2, so I may leave)");com('A');com('B');
+    const sn=mv.snapshot(0),left=mv.all().filter(t=>mv.visible(t,sn)&&t.row.val>=100).length;verdict=left<2?`Both transactions saw 3 people on duty, each removed a <i>different</i> row and both committed: <b class="bad">write skew</b> (only ${left} left). Neither level prevents it here: it needs SERIALIZABLE (SSI), which this model omits.`:'No skew.'}
+  if(sc==='lost'){begin('A');begin('B');sel('A','x');sel('B','x');upd('A','x',v=>v+10,"UPDATE SET val=val+10 WHERE k='x'");com('A');upd('B','x',v=>v+20,"UPDATE SET val=val+20 WHERE k='x'");com('B');const sn=mv.snapshot(0),t=find('A','x',sn);
+    verdict=level==='rc'?`B's UPDATE waited for A, then re-read the newest row and added 20 to 110: final <b>${t.row.val}</b> — <b class="ok">no lost update</b>.`:`Under Repeatable Read B could not update a row changed after its snapshot: <b class="bad">it aborts</b> (serialization failure) and must retry. Final ${t.row.val}.`}
+  return{trace,verdict};
+}
+function deadlockSim(){
+  const ev=[['A','lock r1','granted'],['B','lock r2','granted'],['A','lock r2','waits for B'],['B','lock r1','waits for A → cycle']];
+  return ev;
+}
+function draw11(p){
+  if(OPT.isc==='deadlock'){
+    const ev=deadlockSim(),k=Math.max(1,Math.ceil(clamp(p/0.6,0,1)*ev.length)),det=p>=0.7,res=p>=0.9;
+    const edges=[];if(k>=3)edges.push(['A','B']);if(k>=4)edges.push(['B','A']);
+    const node=(x,y,l,dead)=>`<circle cx="${x}" cy="${y}" r="26" fill="${dead?'var(--p5)':'var(--p0)'}" stroke="var(--line)" stroke-width="2"/><text x="${x}" y="${y+4}" text-anchor="middle" font-weight="700">${l}${dead?' ✕':''}</text>`;
+    const sv=`<svg viewBox="0 0 400 160" style="max-height:180px"><defs><marker id="dm" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="var(--bad)"/></marker></defs>${node(110,80,'A',false)}${node(290,80,'B',res)}${edges.map(([f,t],i)=>`<path d="M${f==='A'?136:264},${70+(i?20:0)} Q200,${i?140:20} ${f==='A'?264:136},${70+(i?20:0)}" fill="none" stroke="var(--bad)" stroke-width="2" marker-end="url(#dm)"/>`).join('')}<text x="200" y="${edges.length>1?85:15}" text-anchor="middle" style="fill:var(--bad)">${edges.length>1?'wait-for cycle':''}</text></svg>`;
+    return`<div class="caption ${det?'bad':''}">Deadlock: two transactions lock two rows in opposite order. ${det?'The deadlock detector finds the cycle in the wait-for graph (after deadlock_timeout) and aborts one victim, releasing its locks.':''}</div>
+    <div class="g2"><div><table><tr><th>session</th><th>statement</th><th>result</th></tr>${ev.slice(0,k).map(e=>`<tr><td><b>${e[0]}</b></td><td class="mono">${e[1]}</td><td>${e[2]}</td></tr>`).join('')}</table>${det?`<div class="caption ${res?'good':'bad'}" style="margin-top:8px">${res?'<b>B is chosen as the victim and aborted</b> (ERROR: deadlock detected). A acquires r2 and commits; B can retry. Without detection both would wait forever.':'detecting…'}</div>`:''}</div><div>${sv}<div class="note">Edges mean “waits for”. A cycle can never resolve by waiting, so one transaction must abort. A simple alternative is a lock timeout, which also breaks the cycle but aborts on any long wait.</div></div></div>`;
+  }
+  const rcR=runIso(OPT.isc,'rc'),rrR=runIso(OPT.isc,'rr'),R=OPT.iso==='rc'?rcR:rrR,k=p>=1?R.trace.length:Math.max(1,Math.ceil(p*R.trace.length));
+  const titles={nonrep:'Non-repeatable read',phantom:'Phantom read',skew:'Write skew (doctors on call)',lost:'Lost update'};
+  return`<div class="caption">${titles[OPT.isc]} under <b>${OPT.iso==='rc'?'Read Committed (new snapshot per statement)':'Repeatable Read (one snapshot per transaction)'}</b>.</div>
+  <div class="g2"><div><table><tr><th>#</th><th>session</th><th>statement</th><th>result</th></tr>${R.trace.slice(0,k).map((t,i)=>`<tr style="${i===k-1?'background:var(--p0)':''}"><td>${i+1}</td><td><b>${t[0]}</b></td><td class="mono">${esc(t[1])}</td><td class="mono">${esc(String(t[2]))}</td></tr>`).join('')}</table></div>
+  <div>${p>=1?`<div class="caption ${/bad/.test(R.verdict)?'bad':'good'}">${R.verdict}</div>`:''}<h3>Same history, both levels</h3><table><tr><th>level</th><th>outcome</th></tr><tr><td><b>Read Committed</b></td><td>${rcR.verdict}</td></tr><tr><td><b>Repeatable Read</b></td><td>${rrR.verdict}</td></tr></table></div></div>
+  <div class="note">Stronger isolation removes anomalies but can add aborts and waits. Repeatable Read stops non-repeatable reads and phantoms (snapshot) but turns a lost-update race into an error; write skew survives both levels without serializable isolation.</div>`;
+}
+
+/* ================= phases table + controls ================= */
+const PHASES=[
+ {t:'SQL & catalog',s:'parse · bind · logical plan',f:'F01',dur:6000,draw:draw1,b:'Tables have typed columns in a catalog. SQL is tokenized, parsed into an AST, bound against the catalog (unknown or ambiguous names fail loudly) and turned into a logical tree of relational operators, all before reading any data.'},
+ {t:'Heap & buffer pool',s:'pages · frames · eviction',f:'F02',dur:7000,draw:draw2,b:'Rows live on fixed-size slotted pages addressed by (page, slot). Pages are read through a small buffer pool that pins, tracks dirty state and evicts under a fixed budget.'},
+ {t:'Iterator execution',s:'scan · filter · join · sort',f:'F03',dur:7000,draw:draw3,b:'The executor is a tree of operators that pull rows from their children one at a time. Streaming operators use constant memory; sort and aggregate block; a nested-loop join rescans its inner side.'},
+ {t:'B-tree index',s:'insert · split · scan',f:'F04',dur:7000,draw:draw4,b:'A B+tree maps keys to row IDs in ordered pages. Lookups descend root to leaf; ranges walk the leaf chain. Indexes win for selective predicates and cost writes and random I/O otherwise.'},
+ {t:'Transactions & MVCC',s:'versions · snapshots',f:'F05',dur:7000,draw:draw5,b:'Updates create new row versions stamped with xmin/xmax. A snapshot decides which version each transaction sees, so readers do not block writers; conflicting writers wait or abort.'},
+ {t:'WAL & recovery',s:'log before page',f:'F06',dur:7000,draw:draw6,b:'Changes are logged before pages may be written and COMMIT is acknowledged only after its log record is durable. After a crash the log is validated and replayed; torn tails and uncommitted work are ignored.'},
+ {t:'VACUUM',s:'dead versions · horizon',f:'F07',dur:6000,draw:draw7,b:'Dead versions are reclaimed only when no snapshot can still see them. The oldest open transaction sets the horizon, so a long-running one blocks cleanup and causes bloat.'},
+ {t:'Planner & statistics',s:'cost · estimates',f:'F08',dur:5000,draw:draw8,b:'ANALYZE summarises each table. The planner estimates selectivity and cost for each access path and join method, then compares its estimates with the actual rows. Stale or skewed statistics lead to wrong plans.'},
+ {t:'Sort & hash join',s:'work_mem · spill',f:'F09',dur:7000,draw:draw9,b:'Under a memory budget a sort spills sorted runs and merges them, and a hash join partitions both inputs to temporary files. Temp files are cleaned up on success or failure.'},
+ {t:'Checkpoint & WAL',s:'recovery time',f:'F10',dur:6000,draw:draw10,b:'A checkpoint flushes dirty pages and records where recovery may start, letting old WAL be recycled. Frequency trades write I/O against recovery time and WAL size.'},
+ {t:'Isolation & deadlocks',s:'anomalies · wait-for',f:'F11',dur:7000,draw:draw11,b:'The same history behaves differently under Read Committed and Repeatable Read. Locks create waits; a wait-for cycle is a deadlock that the detector resolves by aborting a victim.'},
+];
+function ctlHTML(k){
+  if(!S||S.error)return'';
+  const sel=(key,opts,val)=>`<select data-opt="${key}">${opts.map(([v,l])=>`<option value="${v}" ${String(v)===String(val)?'selected':''}>${esc(l)}</option>`).join('')}</select>`;
+  const rng=(key,min,max,step,val,suf='')=>`<input type="range" data-opt="${key}" min="${min}" max="${max}" step="${step}" value="${val}" style="width:120px"> ${val}${suf}`;
+  if(k===0)return`<span class="note">Edit the SQL above or pick an example. Try an invalid column, an ambiguous column after a join, or comparing text with a number.</span>`;
+  if(k===1)return`<label>Buffer frames ${rng('frames',2,8,1,OPT.frames)}</label><label>Access pattern ${sel('pat',[['query','your query'],['seq2','two full scans'],['random','hot random reads'],['upd','scan with updates']],OPT.pat)}</label>`;
+  if(k===2)return`<label>Buffer frames ${rng('frames',2,8,1,OPT.frames)}</label><label>work_mem ${rng('wm',2,40,1,OPT.wm,' rows')}</label>`;
+  if(k===3){return`<label>Fan-out ${sel('fan',[3,4,5,6].map(x=>[x,x]),OPT.fan)}</label><label>Probe value <input type="text" data-opt="ikey" value="${esc(OPT.ikey)}" style="width:90px" placeholder="auto"></label><label>Operator ${sel('iop',['=','>=','<=','>','<'].map(x=>[x,x]),OPT.iop)}</label><span class="note">The index column is chosen in the panel above.</span>`}
+  if(k===4)return`<label>Scenario ${sel('mvsc',[['snap','snapshot reads'],['rollback','rollback'],['conflict','write conflict'],['delete','insert + delete']],OPT.mvsc)}</label>`;
+  if(k===5)return`<label>Crash after step ${sel('walCrash',[...Array(9).keys()].map(i=>[i,i===0?'before anything':'step '+i]),OPT.walCrash)}</label><label><input type="checkbox" data-opt="torn" ${OPT.torn?'checked':''}> torn last WAL record</label>`;
+  if(k===6)return`<label>Updates ${rng('vn',2,24,1,OPT.vn)}</label><label><input type="checkbox" data-opt="vlong" ${OPT.vlong?'checked':''}> long-running open transaction</label>`;
+  if(k===7)return`<label><input type="checkbox" data-opt="stale" ${OPT.stale?'checked':''}> stale statistics</label><span class="note">Index choice is in the panel above; edit the WHERE clause to see plan changes.</span>`;
+  if(k===8)return`<label>work_mem ${rng('wm',2,40,1,OPT.wm,' rows')}</label>`;
+  if(k===9)return`<label>Checkpoint every ${sel('ckK',[[3,'3 records'],[8,'8 records'],[20,'20 records'],[0,'never']],OPT.ckK)}</label>`;
+  if(k===10)return`<label>History ${sel('isc',[['nonrep','non-repeatable read'],['phantom','phantom'],['skew','write skew'],['lost','lost update'],['deadlock','deadlock']],OPT.isc)}</label>${OPT.isc==='deadlock'?'':`<label>Isolation ${sel('iso',[['rc','Read Committed'],['rr','Repeatable Read']],OPT.iso)}</label>`}`;
+  return'';
+}
+const STROPT=['pat','ikey','iop','mvsc','isc','iso'],BOOLOPT=['torn','vlong','stale'];
+$('#phCtl').addEventListener('change',e=>{
+  const t=e.target.closest('[data-opt]');if(!t)return;const key=t.dataset.opt;
+  OPT[key]=BOOLOPT.includes(key)?t.checked:STROPT.includes(key)?t.value:+t.value;
+  stopAll();rebuild(false);
+});
+$('#phCtl').addEventListener('input',e=>{});
+
+/* ================= render / wiring ================= */
+function renderNav(){$('#nav').innerHTML=PHASES.map((ph,i)=>`<div class="nv ${i===cur?'act':''} ${i<cur?'done':''}" data-ph="${i}"><b>${i+1}. ${ph.t}</b><small>${ph.s} · ${ph.f}</small></div>`).join('')}
+function showPhase(k,p=1){cur=k;renderNav();ovRender();const ph=PHASES[k];$('#blurb').innerHTML=`${ph.b}<div class="ft">Reimplementation feature: ${ph.f}</div>`;$('#phCtl').innerHTML=ctlHTML(k);paintView(p);$('#prev').disabled=k===0;$('#nextB').disabled=k===PHASES.length-1}
+function paintView(p=1){
+  if(!S||S.error){$('#phView').innerHTML=`<div class="box bad">${esc(S?S.error:'')}</div>`;return}
+  try{$('#phView').innerHTML=PHASES[cur].draw(p)}catch(e){$('#phView').innerHTML=`<div class="box bad">Render error: ${esc(e.message)}</div>`;console.error(e)}
+}
+function stopAll(){gen++;playingAll=false;paused=false;$('#pauseBtn').disabled=true;$('#pauseBtn').textContent='⏸ Pause'}
+$('#nav').onclick=e=>{const n=e.target.closest('[data-ph]');if(!n)return;stopAll();showPhase(+n.dataset.ph)};
+$('#prev').onclick=()=>{stopAll();showPhase(Math.max(0,cur-1))};
+$('#nextB').onclick=()=>{stopAll();showPhase(Math.min(PHASES.length-1,cur+1))};
+$('#anim').onclick=()=>{stopAll();animate(p=>paintView(p),PHASES[cur].dur)};
+$('#playAll').onclick=async()=>{if(!S||S.error)return;stopAll();playingAll=true;$('#pauseBtn').disabled=false;for(let k=0;k<PHASES.length;k++){showPhase(k,0);const ok=await animate(p=>paintView(p),PHASES[k].dur);if(!ok)return;await sleep(500);if(!playingAll)return}playingAll=false;$('#pauseBtn').disabled=true};
+$('#pauseBtn').onclick=()=>{paused=!paused;$('#pauseBtn').textContent=paused?'▶ Resume':'⏸ Pause'};
+$('#speed').oninput=e=>{speed=+e.target.value;$('#speedV').textContent=speed+'×'};
+function fillSel(sel,opts,keep,pref){const old=keep?$(sel).value:null;$(sel).innerHTML=opts.map(o=>`<option>${esc(o)}</option>`).join('');$(sel).value=opts.includes(old)?old:(opts.includes(pref)?pref:opts[0])}
+function exampleQueries(ds){
+  const cols=ds.columns,num=cols.filter(c=>ds.rows.every(r=>r[c]==null||typeof r[c]==='number')),txt=cols.filter(c=>!num.includes(c)),key=cols[0];
+  const n=num.find(c=>c!==key)||num[0]||key,dim=txt.find(c=>{const d=new Set(ds.rows.map(r=>r[c])).size;return d>=2&&d<=12}),med=[...ds.rows.map(r=>r[n])].sort((a,b)=>a-b)[Math.floor(ds.rows.length*0.5)];
+  const q=[];
+  q.push([`Filter + sort + limit`,`SELECT t.${key}, t.${n} FROM t WHERE t.${n} >= ${med} ORDER BY t.${n} DESC LIMIT 5`]);
+  q.push([`Point lookup`,`SELECT * FROM t WHERE t.${n} = ${ds.rows[2][n]}`]);
+  q.push([`Range scan`,`SELECT t.${key}, t.${n} FROM t WHERE t.${n} > ${ds.rows[Math.floor(ds.rows.length*0.8)][n]}`]);
+  if(dim){q.push([`Join with d`,`SELECT t.${key}, d.label FROM t JOIN d ON t.${dim} = d.${dim} WHERE t.${n} >= ${med}`]);q.push([`Group by`,`SELECT t.${dim}, COUNT(*), AVG(t.${n}) FROM t GROUP BY t.${dim} ORDER BY t.${dim}`])}
+  q.push([`Error: unknown column`,`SELECT t.nope FROM t`]);q.push([`Error: type mismatch`,`SELECT * FROM t WHERE t.${n} = 'abc'`]);
+  return{q,n,dim};
+}
+let EX=null;
+function onData(auto){
+  const text=$('#src').value;let ds;try{const pf=$('#fmt').value==='auto'?detect(text):$('#fmt').value;ds={...parseWhole(text,pf),pf}}catch(e){ds={rows:[],columns:[],err:e.message}}
+  $('#srcInfo').innerHTML=ds.err?`<span class="bad">${esc(ds.err)}</span>`:`${ds.rows.length} rows · ${ds.columns.length} columns (${esc(ds.columns.join(', '))}) · parsed as ${ds.pf} → table <b>t</b>`;
+  if(ds.err||!ds.rows.length)return;
+  EX=exampleQueries(ds);
+  $('#qsel').innerHTML=EX.q.map((x,i)=>`<option value="${i}">${esc(x[0])}</option>`).join('');
+  const numC=ds.columns.filter(c=>ds.rows.every(r=>r[c]==null||typeof r[c]==='number'));
+  fillSel('#idxc',['(none)',...ds.columns],!auto,EX.n);
+  if(auto){$('#qsel').value='0';$('#sql').value=EX.q[0][1]}
+}
+function rebuild(dataChanged,auto){
+  if(dataChanged)onData(auto);
+  S=build();
+  $('#statLine').textContent=S&&!S.error?`table t: ${S.rows.length} rows in ${S.heaps.t.pages.length} pages${S.cat.d?` · dimension table d: ${S.cat.d.rows.length} rows`:''}${S.index?` · btree index on ${S.index.col} (height ${S.index.tree.height()})`:''}`:'';
+  showPhase(cur);
+}
+$('#src').addEventListener('input',()=>{stopAll();rebuild(true,false)});
+$('#fmt').addEventListener('change',()=>{stopAll();rebuild(true,false)});
+$('#idxc').addEventListener('change',()=>{stopAll();rebuild(false)});
+$('#qsel').addEventListener('change',()=>{$('#sql').value=EX.q[+$('#qsel').value][1];stopAll();rebuild(false)});
+$('#sql').addEventListener('input',()=>{stopAll();rebuild(false)});
+$$('[data-sample]').forEach(b=>b.onclick=()=>{const sm=SAMPLES[b.dataset.sample];$('#src').value=sm.t();$('#fmt').value=sm.f;stopAll();rebuild(true,true)});
+$('#file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$('#src').value=r.result;const n=f.name.toLowerCase();$('#fmt').value=n.endsWith('.csv')?'csv':(n.endsWith('.jsonl')||n.endsWith('.ndjson'))?'jsonl':n.endsWith('.json')?'json':'auto';stopAll();rebuild(true,true)};r.readAsText(f)};
+
+/* =========================================================
+   ARCHITECTURE OVERVIEW (components + relationships)
+   ========================================================= */
+const OVS={"w": 1000, "h": 410, "groups": [], "nodes": [{"id": "client", "x": 10, "y": 70, "w": 120, "h": 56, "label": "Client", "sub": "SQL text", "desc": "Sends a SQL statement and receives rows or an error."}, {"id": "parser", "x": 180, "y": 70, "w": 150, "h": 60, "label": "Parser \u00b7 binder", "sub": "SQL \u2192 logical plan", "desc": "Tokenizes and parses SQL, binds names and types against the catalog, and builds a logical relational tree before any data is read.", "phase": 0}, {"id": "planner", "x": 370, "y": 70, "w": 150, "h": 60, "label": "Planner", "sub": "stats \u00b7 cost", "desc": "Uses table statistics to estimate selectivity and costs, then picks access paths and join methods.", "phase": 7}, {"id": "executor", "x": 560, "y": 70, "w": 150, "h": 60, "label": "Executor", "sub": "iterator operators", "desc": "A tree of operators that pull rows one at a time: scan, filter, join, aggregate, sort, project, limit.", "phase": 2}, {"id": "sort", "x": 790, "y": 70, "w": 170, "h": 60, "label": "Sort / Hash join", "sub": "work_mem \u00b7 spill", "desc": "Blocking operators that stay within a memory budget by spilling sorted runs or hash partitions to temp files.", "phase": 8}, {"id": "index", "x": 370, "y": 190, "w": 150, "h": 60, "label": "B-tree index", "sub": "key \u2192 row ID", "desc": "Ordered pages mapping keys to row IDs for point and range access, split as they grow.", "phase": 3}, {"id": "heap", "x": 560, "y": 190, "w": 150, "h": 60, "label": "Heap + buffer pool", "sub": "slotted pages", "desc": "Rows live on fixed-size slotted pages addressed by (page, slot), read through a small pool of in-memory frames.", "phase": 1}, {"id": "mvcc", "x": 790, "y": 190, "w": 170, "h": 60, "label": "MVCC", "sub": "snapshots \u00b7 xmin/xmax", "desc": "Each update creates a new row version; a snapshot decides which version a transaction sees, so readers do not block writers.", "phase": 4}, {"id": "vacuum", "x": 180, "y": 320, "w": 150, "h": 60, "label": "VACUUM", "sub": "dead versions", "desc": "Reclaims row versions no snapshot can still see, bounded by the oldest open transaction (the horizon).", "phase": 6}, {"id": "checkpoint", "x": 370, "y": 320, "w": 150, "h": 60, "label": "Checkpoint", "sub": "bound recovery", "desc": "Flushes dirty pages and records where WAL replay may start, so old WAL can be recycled.", "phase": 9}, {"id": "wal", "x": 560, "y": 320, "w": 150, "h": 60, "label": "WAL", "sub": "log before page", "desc": "Every change is logged before its page may be written, and COMMIT waits for the log to be durable; recovery replays it.", "phase": 5}, {"id": "iso", "x": 790, "y": 320, "w": 170, "h": 60, "label": "Isolation \u00b7 locks", "sub": "anomalies \u00b7 deadlocks", "desc": "Read Committed vs Repeatable Read snapshots, lock waits and deadlock detection.", "phase": 10}], "edges": [{"from": "client", "to": "parser", "label": "SQL", "kind": "data"}, {"from": "parser", "to": "planner", "label": "plan", "kind": "ctl"}, {"from": "planner", "to": "executor", "label": "plan", "kind": "data"}, {"from": "executor", "to": "sort", "label": "spill", "kind": "data"}, {"from": "executor", "to": "index", "label": "index scan", "kind": "data"}, {"from": "executor", "to": "heap", "label": "seq scan", "kind": "data"}, {"from": "index", "to": "heap", "label": "row IDs", "kind": "data"}, {"from": "executor", "to": "mvcc", "label": "visibility", "kind": "ctl"}, {"from": "mvcc", "to": "iso", "label": "policy", "kind": "ctl"}, {"from": "heap", "to": "wal", "label": "log first", "kind": "data"}, {"from": "wal", "to": "checkpoint", "label": "redo", "kind": "ctl"}, {"from": "checkpoint", "to": "heap", "label": "flush", "kind": "ctl"}, {"from": "vacuum", "to": "heap", "label": "prune", "kind": "ctl"}, {"from": "heap", "to": "planner", "label": "stats", "kind": "ctl"}], "flow": [{"n": "client", "t": "The client sends a SQL statement."}, {"n": "parser", "t": "It is parsed and bound against the catalog into a logical plan."}, {"n": "planner", "t": "The planner uses statistics to choose scans and joins."}, {"n": "executor", "t": "The executor runs the plan as pulled iterators."}, {"n": "index", "t": "An index scan finds row IDs without reading every page."}, {"n": "heap", "t": "The heap pages are fetched through the buffer pool."}, {"n": "mvcc", "t": "Each tuple version is checked against the transaction snapshot."}, {"n": "wal", "t": "Writes are logged to the WAL before pages change."}, {"n": "checkpoint", "t": "Checkpoints flush pages and bound recovery work."}]};
+const OVN=Object.fromEntries(OVS.nodes.map(n=>[n.id,n]));
+const OV={sel:null,k:-1};
+function ovAnchor(n,tx,ty){const cx=n.x+n.w/2,cy=n.y+n.h/2,dx=tx-cx,dy=ty-cy;if(!dx&&!dy)return[cx,cy];const s=Math.min((n.w/2)/Math.abs(dx||1e-9),(n.h/2)/Math.abs(dy||1e-9));return[cx+dx*s,cy+dy*s]}
+function ovGeom(e){
+  const a=OVN[e.from],b=OVN[e.to],ca=[a.x+a.w/2,a.y+a.h/2],cb=[b.x+b.w/2,b.y+b.h/2];let c=null;
+  if(e.bend){const mx=(ca[0]+cb[0])/2,my=(ca[1]+cb[1])/2,dx=cb[0]-ca[0],dy=cb[1]-ca[1],L=Math.hypot(dx,dy)||1;c=[mx-dy/L*e.bend,my+dx/L*e.bend]}
+  const p0=ovAnchor(a,...(c||cb)),p1=ovAnchor(b,...(c||ca));
+  const mid=c?[0.25*p0[0]+0.5*c[0]+0.25*p1[0],0.25*p0[1]+0.5*c[1]+0.25*p1[1]]:[(p0[0]+p1[0])/2,(p0[1]+p1[1])/2];
+  return{p0,p1,c,mid};
+}
+function ovRender(){
+  const el=document.getElementById('ovView');if(!el)return;
+  const flow=OVS.flow,k=OV.k,act=new Set(),actE=new Set();
+  if(k>=0){for(let i=0;i<=Math.min(k,flow.length-1);i++)act.add(flow[i].n);for(let i=1;i<=k&&i<flow.length;i++){actE.add(flow[i-1].n+'>'+flow[i].n);actE.add(flow[i].n+'>'+flow[i-1].n)}}
+  const sel=OV.sel,rel=new Set();if(sel){rel.add(sel);OVS.edges.forEach(e=>{if(e.from===sel)rel.add(e.to);if(e.to===sel)rel.add(e.from)})}
+  const curPh=typeof cur==='number'?cur:-1;
+  let s=`<svg viewBox="0 0 ${OVS.w} ${OVS.h}" style="max-height:${OVS.h*1.1}px"><defs><marker id="ovar" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="#8a94a6"/></marker><marker id="ovara" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0L10,5L0,10z" fill="var(--acc)"/></marker></defs>`;
+  (OVS.groups||[]).forEach(g=>{s+=`<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="14" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="7 5"/><text x="${g.x+12}" y="${g.y+g.h-10}" style="fill:var(--mut);font-size:11.5px;font-weight:700">${esc(g.label)}</text>`});
+  OVS.edges.forEach(e=>{
+    const g=ovGeom(e),on=actE.has(e.from+'>'+e.to),dim=sel&&!(e.from===sel||e.to===sel),hl=sel&&(e.from===sel||e.to===sel);
+    const d=g.c?`M${g.p0[0]},${g.p0[1]} Q${g.c[0]},${g.c[1]} ${g.p1[0]},${g.p1[1]}`:`M${g.p0[0]},${g.p0[1]} L${g.p1[0]},${g.p1[1]}`;
+    s+=`<g style="${dim?'opacity:.2':''}"><path d="${d}" class="ove ${e.kind||'data'} ${on||hl?'act':''}" marker-end="url(#${on||hl?'ovara':'ovar'})"/>${on?`<path d="${d}" class="ove flow act" style="stroke-width:5;opacity:.5"/>`:''}
+      <text x="${g.mid[0]}" y="${g.mid[1]-5}" text-anchor="middle" style="font-size:10.5px;fill:${hl||on?'var(--acc)':'var(--mut)'};paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(e.label)}</text></g>`;
+  });
+  OVS.nodes.forEach(n=>{
+    const ph=n.phase,cls=['ovn',sel===n.id?'sel':'',ph!==undefined&&ph===curPh?'cur':'',act.has(n.id)?'act':''].join(' '),dim=sel&&!rel.has(n.id);
+    s+=`<g class="${cls}" data-node="${n.id}" style="${dim?'opacity:.3':''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${ph!==undefined?pc(ph):'var(--card)'}"/>
+      <text x="${n.x+10}" y="${n.y+22}" font-weight="700" style="font-size:12.5px">${esc(n.label)}</text><text x="${n.x+10}" y="${n.y+40}" style="font-size:10.5px;fill:var(--mut)">${esc(n.sub||'')}</text>
+      ${ph!==undefined?`<text x="${n.x+n.w-8}" y="${n.y+n.h-8}" text-anchor="end" style="font-size:10px;font-weight:700;fill:var(--mut)">phase ${ph+1}</text>`:''}</g>`;
+  });
+  s+='</svg>';
+  el.innerHTML=s;
+  const cap=document.getElementById('ovCap');
+  if(cap)cap.innerHTML=k>=0?`<b>Step ${Math.min(k,flow.length-1)+1}/${flow.length}:</b> ${esc(flow[Math.min(k,flow.length-1)].t)}`:(sel?'':'Click a component to see how it connects to the others.');
+  ovInfo();
+}
+function ovInfo(){
+  const el=document.getElementById('ovInfo');if(!el)return;const sel=OV.sel&&OVN[OV.sel];
+  // phase-to-phase dependencies derived from the edges
+  const pairs=new Map();OVS.edges.forEach(e=>{const a=OVN[e.from].phase,b=OVN[e.to].phase;if(a!==undefined&&b!==undefined&&a!==b){const key=a+'>'+b;if(!pairs.has(key))pairs.set(key,[]);pairs.get(key).push(e.label)}});
+  const dep=[...pairs.entries()].sort((x,y)=>x[0].split('>')[0]-y[0].split('>')[0]).map(([k,l])=>{const[a,b]=k.split('>').map(Number);return`<span class="chip" style="background:${pc(a)}">${a+1}. ${esc(PHASES[a].t)}</span> <span class="mono">→ ${esc(short(l.join(' / '),34))} →</span> <span class="chip" style="background:${pc(b)}">${b+1}. ${esc(PHASES[b].t)}</span>`}).join('<br>');
+  let card='';
+  if(sel){
+    const ins=OVS.edges.filter(e=>e.to===sel.id),outs=OVS.edges.filter(e=>e.from===sel.id);
+    card=`<div class="box" style="margin-top:8px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="font-size:15px">${esc(sel.label)}</b><span class="note" style="margin:0">${esc(sel.sub||'')}</span>${sel.phase!==undefined?`<button class="primary" data-go="${sel.phase}">Go to phase ${sel.phase+1}: ${esc(PHASES[sel.phase].t)} ›</button>`:''}</div>
+      <div style="margin:6px 0">${esc(sel.desc||'')}</div>
+      <div class="g2"><div><b style="font-size:12px">Receives</b>${ins.map(e=>`<div class="row"><span style="color:var(--mut)">${esc(OVN[e.from].label)}</span> ─ ${esc(e.label)} ▸</div>`).join('')||'<div class="note">nothing: it is where requests enter.</div>'}</div>
+      <div><b style="font-size:12px">Sends</b>${outs.map(e=>`<div class="row">▸ ${esc(e.label)} ─ <span style="color:var(--mut)">${esc(OVN[e.to].label)}</span></div>`).join('')||'<div class="note">nothing: it is an endpoint.</div>'}</div></div></div>`;
+  }
+  el.innerHTML=card+`<details class="dd" style="margin-top:8px"><summary>How the phases depend on each other</summary><div style="line-height:2.1;margin-top:6px">${dep||'<span class="note">no cross-phase edges</span>'}</div></details>`;
+}
+function jumpPhase(k){stopAll();showPhase(k);const t=document.getElementById('phaseSec');if(t&&t.scrollIntoView)t.scrollIntoView({behavior:'smooth',block:'start'})}
+document.getElementById('ovView').addEventListener('click',e=>{const n=e.target.closest('[data-node]');if(n){OV.k=-1;OV.sel=OV.sel===n.dataset.node?null:n.dataset.node;ovRender()}});
+document.getElementById('ovInfo').addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g)jumpPhase(+g.dataset.go)});
+document.getElementById('ovTrace').onclick=()=>{stopAll();OV.sel=null;OV.k=0;animate(p=>{OV.k=Math.min(OVS.flow.length-1,Math.floor(p*OVS.flow.length));ovRender()},OVS.flow.length*1300)};
+document.getElementById('ovClear').onclick=()=>{stopAll();OV.k=-1;OV.sel=null;ovRender()};
+
+
+/* ================= init ================= */
+$('#src').value=SAMPLES.orders.t();$('#fmt').value='csv';
+rebuild(true,true);
+</script>
+</body>
+</html>
