@@ -236,6 +236,7 @@ function renderStatic(k) {
       <div class="tpanel" data-p="fm" hidden><table class="fm"><tr><th>Failure mode</th><th>What you see</th><th>Mitigation</th></tr>${(d.fails || []).map(f => `<tr><td><b>${esc(f.m)}</b></td><td>${esc(f.s)}</td><td>${esc(f.x)}</td></tr>`).join('')}</table></div>
       <div class="tpanel" data-p="w" hidden>${li(d.watch)}</div>`;
   } else $('#chTrade').innerHTML = '';
+  if (c.renderTrade) c.renderTrade(k, $('#chTrade'));
   const pv = c.phases[k - 1], nx = c.phases[k + 1];
   const pb = $('#prev'), nb = $('#nextB');
   pb.innerHTML = pv ? `<small>‹ Previous</small>${esc(pv.t)}` : ''; pb.style.visibility = pv ? '' : 'hidden';

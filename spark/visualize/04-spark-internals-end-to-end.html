@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Spark Internals End-to-End</title>
+<title>Spark Internals · Deploy on PROD</title>
 <link rel="stylesheet" href="../../assets/lab.css">
 <style>
 :root{--acc:#e25a1c;--acc2:#2f6fed}
@@ -20,14 +20,6 @@ input.sm{width:90px}
 .strip .tick{position:absolute;top:0;bottom:0;width:1px;background:var(--ink);opacity:.35}
 .strip .tick.h{background:var(--acc);opacity:1;width:2px}
 .strip .cut{position:absolute;top:-2px;bottom:-2px;width:3px;background:var(--bad);z-index:2}
-/* row groups */
-.rg{border:1.5px solid var(--line);border-radius:8px;padding:6px;margin:6px 0;transition:opacity .3s}
-.rg.skip{opacity:.55;border-style:dashed;border-color:var(--bad)}
-.rg.pend{opacity:.4}
-.rg .cs{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
-.cc{font-family:ui-monospace,monospace;font-size:10.5px;border-radius:4px;padding:1px 5px;border:1px solid var(--line)}
-.cc.rd{background:color-mix(in srgb,var(--ok) 22%,var(--card));border-color:var(--ok)}
-.cc.no{color:var(--mut);text-decoration:line-through}
 /* dag */
 .nd rect{fill:var(--card);stroke:var(--line);stroke-width:1.5;transition:fill .3s}
 .nd.cur rect{stroke:var(--acc);stroke-width:4}
@@ -63,6 +55,41 @@ input.sm{width:90px}
 @media(max-width:560px){.lane{grid-template-columns:28px 1fr;gap:6px}.track{padding:6px 4px}.nd2 .nm{font-size:10px}}
 .sim .ctl select,.ddb select{max-width:100%}
 #simScn{max-width:calc(100vw - 96px)}
+/* Production tuning and incident diagrams */
+#deploy-prod{scroll-margin-top:20px}
+.prod-panel{margin:18px 0;padding:22px}
+.prod-panel-heading{display:flex;gap:12px;align-items:flex-start;margin-bottom:20px}
+.prod-panel-heading>span{display:grid;place-items:center;width:34px;height:34px;flex:none;border-radius:10px;background:var(--acc);color:var(--on-brand,#fff);font-weight:700}
+.prod-panel-heading h3{font-size:20px;margin:2px 0 5px}.prod-panel-heading p{color:var(--mut);font-size:14px}
+.prod-layout{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.25fr);gap:24px}
+.prod-controls{display:grid;gap:16px;align-content:start}
+.prod-param{display:flex;align-items:stretch;flex-direction:column;gap:7px;border-bottom:1px solid var(--line);padding-bottom:16px;color:var(--ink);min-width:0}
+.prod-param:last-child{border:0;padding-bottom:0}
+.prod-param code{font-size:12px;overflow-wrap:anywhere;align-self:flex-start}
+.prod-input{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--mut)}
+.prod-input select{min-width:80px}.prod-input input{accent-color:var(--acc);width:20px;height:20px;flex:none}
+.prod-param small{font-size:13px;color:var(--mut);line-height:1.5}
+.prod-preview{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:18px;align-self:start;min-width:0;font-size:14px}
+.prod-preview h4{font-size:12px;line-height:1.5}.prod-preview p{margin:10px 0 0}.prod-preview .note{font-size:12px}
+.prod-executors{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.prod-executor{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:9px;font-size:11px}
+.prod-executor>div{display:flex;gap:3px;margin:6px 0}.prod-executor i{height:13px;flex:1;background:var(--acc2);border-radius:2px}.prod-executor small{color:var(--mut)}
+.prod-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:16px 0}
+.prod-metrics>div{border-top:2px solid var(--acc);padding-top:8px}.prod-metrics b{font-size:21px;display:block;line-height:1.3}.prod-metrics span{display:block;color:var(--mut);font-size:11px;line-height:1.4;margin-top:5px}
+.prod-memory-bar{display:flex;gap:2px;border-radius:6px;overflow:hidden;height:48px;margin:12px 0}
+.prod-memory-bar span{display:grid;place-items:center;min-width:0;background:var(--acc2);color:white;text-align:center;font-size:11px;padding:3px}.prod-memory-bar span+span{background:var(--soft);color:var(--ink)}
+.prod-partition-demo{display:flex;flex-wrap:wrap;gap:8px;align-items:center;border:1px dashed var(--line);padding:12px;border-radius:8px;font-size:13px}.prod-partition-demo b{color:var(--acc)}
+.prod-aqe-compare{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}.prod-aqe-compare>div{min-width:0}.prod-aqe-compare>div>b{font-size:12px}
+.prod-bars{display:grid;gap:5px;margin:12px 0}.prod-bar-row{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:5px;align-items:center;font-size:10px}.prod-bar-row>div{height:13px;background:var(--soft);border-radius:3px;overflow:hidden}.prod-bar-row i{display:block;height:100%;background:var(--bad);min-width:0}.prod-bar-row b{font-size:10px;font-weight:500;font-variant-numeric:tabular-nums}.prod-bar-row small{font-size:9px}.prod-aqe-compare>div+div i{background:var(--acc2)}
+.prod-case-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.prod-case-tabs button{font-size:12px;padding:6px 10px;border-radius:8px;text-align:left}.prod-case-tabs button[aria-pressed=true]{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 9%,var(--card));color:var(--ink);font-weight:600}
+.prod-incident{margin-top:18px}.prod-incident>h3{font-size:21px;margin-bottom:8px}.prod-incident>p{color:var(--mut)}
+.prod-compare{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin:20px 0}.prod-compare>div{min-width:0}.prod-compare h4{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:0 0 8px}.prod-compare p{font-size:14px;margin-bottom:16px}
+.prod-diagram{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px;align-self:start}.prod-diagram .prod-case-tabs{margin:0 0 14px}.prod-diagram .note{font-size:12px;margin:12px 0 0}.prod-diagram.fixed i{background:var(--ok)}
+.prod-flow{list-style:none;display:grid;gap:10px;padding:0;margin:0}.prod-flow li{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--bad);padding:10px;font-size:13px;border-radius:6px}.fixed .prod-flow li{border-left-color:var(--ok)}
+.prod-files{display:grid;grid-template-columns:repeat(8,1fr);gap:5px;margin:12px 0}.prod-files span{border:1px solid var(--bad);border-radius:3px;font-size:10px;text-align:center;padding:6px 0;background:color-mix(in srgb,var(--bad) 8%,var(--card))}.fixed .prod-files{grid-template-columns:repeat(4,1fr)}.fixed .prod-files span{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 8%,var(--card));padding:16px 0}
+.prod-evidence{padding:14px;border-radius:8px;background:var(--soft);font-size:13px}.prod-evidence p:last-child{margin:0}.prod-sources{font-size:12px;overflow-wrap:anywhere}
+@media(max-width:760px){.prod-layout,.prod-compare{grid-template-columns:1fr}.prod-panel{padding:16px}.prod-preview{padding:12px}.prod-metrics b{font-size:18px}.prod-aqe-compare{grid-template-columns:1fr}.prod-panel-heading h3{font-size:18px}}
+
 </style>
 </head>
 <body>
@@ -81,8 +108,7 @@ input.sm{width:90px}
   <div class="bar" style="margin-top:12px">
     <input type="file" id="file" accept=".csv,.json,.jsonl,.ndjson,.txt" aria-label="Load a file">
     <label>Storage format <select id="fmt">
-      <option value="auto">auto-detect (row file)</option><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="json">JSON array</option>
-      <option value="parquet">Parquet (simulated, columnar)</option></select></label>
+      <option value="auto">auto-detect (row file)</option><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="json">JSON array</option></select></label>
     <label>Source partitions <input type="range" id="P" min="1" max="6" value="3"> <b id="Pv">3</b></label>
   </div>
   <textarea id="src" rows="5" spellcheck="false" aria-label="Input data"></textarea>
@@ -122,7 +148,7 @@ const STORY={
     steps:['<b>Source descriptor.</b> Path, format and a list of splits <code>(start, end)</code>. Planning splits reads no data.',
      '<b>Line reader per split.</b> If <code>start &gt; 0</code>, skip to just after the first newline (the previous split owns that line). Then read whole lines while a line <i>starts</i> before <code>end</code>, even if it ends after it.',
      '<b>Decoder.</b> Turn each line into a row: CSV with its header, or one JSON object per line. A bad line becomes an error record, not a crash.',
-     '<b>Columnar files.</b> For Parquet the unit is a row group. Footer min/max statistics let a reader skip whole groups and every column the job does not need. Switch <i>Storage format</i> to Parquet to see it.'],
+     '<b>Pack and cap.</b> Real readers bin-pack many small files into one partition and cap a partition near <code>spark.sql.files.maxPartitionBytes</code> (128 MB), so a task never reads a sliver or a giant. Gzip is not splittable: one file is one task.'],
     code:'splits = [(i*size, min((i+1)*size, len)) for i in 0..N-1]\nreadSplit(start, end):\n  pos = start\n  if start > 0: pos = indexOf("\\n", start - 1) + 1   // previous split owns it\n  while pos < end:\n    line = readLineAt(pos)          // may run past end\n    emit(decode(line)); pos += line.length',
     rule:'<b>Every line is decoded exactly once</b>, whatever the number of splits.'}},
   {ask:'The user chains filter, map and reduceByKey. When should the 2 TB actually be read?',
@@ -205,23 +231,7 @@ const STORY={
     code:'post(e): e.seq = nextSeq++; bus.publish(e)\nsummary = events.reduce(fold, emptySummary)\nfold(s, TaskEnd(ok))     = s with ok + 1\nfold(s, TaskEnd(failed)) = s with failed + 1\nexplain(plan) = render(plan.stages)        // metadata only',
     rule:'<b>Every reported number is derived from the event stream</b>, so replaying it gives exactly the same summary.'}}
  ],
- milestones:[
-  {t:'Partitioned reader',test:'For 1 to 8 splits of the same file, the decoded rows equal a plain single-threaded parse: no line lost, none duplicated.'},
-  {t:'Lazy lineage',test:'Build <code>filter &rarr; map &rarr; reduceByKey</code> on a source that throws when opened: nothing fails until an action is called.'},
-  {t:'Stage planner',test:'<code>filter &rarr; map &rarr; reduceByKey</code> plans exactly 2 stages, a narrow-only job plans 1, and explain prints identical text on every run.'},
-  {t:'Local runtime with count and collect',test:'Results equal a single-machine reference with 1, 2 and 4 worker slots, and collect always returns partition order.'},
-  {t:'Shuffle and reduceByKey',test:'Each key appears in exactly one reduce partition; sums match the reference with combine on and off, and with a memory budget small enough to force spills.'},
-  {t:'Retries and executor loss',test:'Inject a failing task and a lost executor: the answer still matches the reference, and only the lost map outputs are recomputed.'},
-  {t:'Atomic writes and events',test:'Kill the job mid-write: no visible output and no <code>_SUCCESS</code>. On success, the summary folded from events equals the counters you observed.'}],
- capstone:{title:'Put it together: a live Spark application',lead:'A driver, a few executors and file storage, running jobs on a small table. Spark never edits a file: an INSERT writes a new file, UPDATE and DELETE rewrite a whole partition, and new files become visible only when the driver commits. Play a scenario, tap any event to see why it happened, then kill an executor and compare <code>cache()</code> on and off.'},
- extras:[
-  {id:'dd1b',title:'Parquet: column pruning &amp; predicate pushdown',sub:'chapter 1'},
-  {id:'dd2b',title:'HashPartitioner &amp; skew',sub:'chapter 6'},
-  {id:'dd3b',title:'Spill &amp; external merge sort',sub:'chapter 6'},
-  {id:'dd4b',title:'Join strategies &amp; AQE',sub:'beyond the tour'},
-  {id:'dd5b',title:'Cache &amp; BlockManager',sub:'chapters 2 and 4'},
-  {id:'dd6b',title:'DataFrame &rarr; optimizer &rarr; physical plan',sub:'chapters 2 and 3'},
-  {id:'dd7b',title:'coalesce vs repartition',sub:'chapter 3'}]
+
 };
 </script>
 <script>
@@ -281,17 +291,6 @@ function evalPred(row,p){
   const a=row[p.col];if(a==null)return false;const[x,y]=coerce(a,p.val);
   switch(p.op){case'>=':return x>=y;case'>':return x>y;case'<=':return x<=y;case'<':return x<y;case'=':return x===y;case'!=':return x!==y}return false;
 }
-function canMatch(ch,p){ // conservative: true when unsure
-  if(!ch||ch.min===undefined)return false;
-  const bn=Number(p.val),num=typeof ch.min==='number'&&typeof ch.max==='number'&&p.val!==''&&!isNaN(bn);
-  if(!num&&!(typeof ch.min==='string'&&typeof ch.max==='string'))return true;
-  const lo=ch.min,hi=ch.max,v=num?bn:String(p.val);
-  switch(p.op){case'>':return hi>v;case'>=':return hi>=v;case'<':return lo<v;case'<=':return lo<=v;case'=':return lo<=v&&v<=hi;case'!=':return!(lo===hi&&lo===v)}return true;
-}
-function skipReason(ch,p){
-  const v=p.val;
-  switch(p.op){case'>':return`max=${ch.max} ≤ ${v}`;case'>=':return`max=${ch.max} < ${v}`;case'<':return`min=${ch.min} ≥ ${v}`;case'<=':return`min=${ch.min} > ${v}`;case'=':return`${v} ∉ [${ch.min}, ${ch.max}]`;case'!=':return`all values = ${v}`}return'';
-}
 
 /* =========================================================
    CONFIG
@@ -315,50 +314,14 @@ function neededCols(c,cols){
 /* =========================================================
    READ (Feature 01 + 16)
    ========================================================= */
-function columnarLayout(rows,cols,P){
-  const N=rows.length,rgSize=Math.max(2,Math.ceil(N/(P*2))),G=Math.max(1,Math.ceil(N/rgSize)),rgs=[];
-  for(let g=0;g<G;g++){
-    const sl=rows.slice(g*rgSize,(g+1)*rgSize),chunks={};
-    cols.forEach(col=>{
-      const vals=sl.map(r=>r[col]).filter(v=>v!=null);
-      let min,max;
-      if(vals.length){const nums=vals.every(v=>typeof v==='number');const f=nums?vals:vals.map(String);min=f.reduce((a,b)=>b<a?b:a);max=f.reduce((a,b)=>b>a?b:a)}
-      chunks[col]={min,max,nulls:sl.length-vals.length,bytes:sl.reduce((s,r)=>s+J(r[col]).length,0)+8};
-    });
-    rgs.push({g,start:g*rgSize,end:g*rgSize+sl.length,rows:sl,chunks});
-  }
-  return{rgs,rgSize,footer:64+16*G};
-}
-function pushdown(layout,cols,pred,needed){
-  let read=layout.footer,total=layout.footer;
-  layout.rgs.forEach(rg=>{
-    rg.skip=false;rg.reason='';
-    if(pred&&!canMatch(rg.chunks[pred.col],pred)){rg.skip=true;rg.reason=skipReason(rg.chunks[pred.col],pred)}
-    cols.forEach(c=>{total+=rg.chunks[c].bytes;if(!rg.skip&&needed.includes(c))read+=rg.chunks[c].bytes});
-  });
-  return{readBytes:read,totalBytes:total};
-}
 function distribute(n,P){const base=Math.floor(n/P),ex=n%P,out=[];let s=0;for(let p=0;p<P;p++){const sz=base+(p<ex?1:0);out.push([s,s+sz]);s+=sz}return out}
 
 function buildRead(c){
   const text=c.text,P=c.P;
   if(!text.trim())return{error:'No data yet.'};
-  const pf=(c.fmt==='auto'||c.fmt==='parquet')?detect(text):c.fmt;
+  const pf=c.fmt==='auto'?detect(text):c.fmt;
   let whole;try{whole=parseWhole(text,pf)}catch(e){return{error:'Cannot parse input: '+e.message}}
   const r={P,pf,sel:c.fmt,error:null,columns:whole.columns,allRows:whole.rows,N:whole.rows.length,partitions:[]};
-  if(c.fmt==='parquet'){
-    r.mode='columnar';r.label='Parquet (simulated)';
-    const lay=columnarLayout(r.allRows,r.columns,P),needed=neededCols(c,r.columns);
-    const pd=pushdown(lay,r.columns,c.pred,needed);
-    r.rgs=lay.rgs;r.footer=lay.footer;r.rgSize=lay.rgSize;r.needed=needed;r.readBytes=pd.readBytes;r.totalBytes=pd.totalBytes;
-    const dist=distribute(lay.rgs.length,P);
-    for(let p=0;p<P;p++){
-      const mine=lay.rgs.slice(dist[p][0],dist[p][1]);mine.forEach(g=>g.part=p);
-      const rows=[];mine.filter(g=>!g.skip).forEach(g=>g.rows.forEach(rw=>{const o={};needed.forEach(k=>o[k]=rw[k]);rows.push(o)}));
-      r.partitions.push({index:p,rgs:mine,rows});
-    }
-    return r;
-  }
   if(pf==='json'){
     r.mode='memory';r.label='JSON array (memory source)';
     distribute(r.N,P).forEach(([a,b],p)=>r.partitions.push({index:p,rows:r.allRows.slice(a,b)}));
@@ -656,20 +619,6 @@ function dagSVG(nodes,o={}){
 function draw1(p){
   const r=S.read;let h='';
   const total=S.comp.metrics.srcRecords;
-  if(r.mode==='columnar'){
-    const G=r.rgs.length,decided=Math.ceil(p*G);
-    let readB=r.footer;
-    const dec_=r.rgs.slice(0,decided);dec_.forEach(g=>{if(!g.skip)r.needed.forEach(c=>readB+=g.chunks[c].bytes)});
-    if(p>=1)readB=r.readBytes;
-    h+=`<div class="note" style="margin:0 0 6px">Source descriptor: <b>${r.label}</b> · ${r.N} rows → ${G} row groups (~${r.rgSize} rows each) × ${r.columns.length} column chunks, footer holds min/max/null stats. Columns needed: <b>${r.needed.join(', ')}</b>${S.cfg.pred?` · pushed predicate: <b>${esc(S.cfg.pred.col+' '+S.cfg.pred.op+' '+S.cfg.pred.val)}</b>`:' · no predicate'}</div>`;
-    h+=`<div class="note" style="margin:0 0 4px">Bytes read: <b>${readB}</b> of ${r.totalBytes} (${Math.round(readB/r.totalBytes*100)}%)</div><div class="meter"><i style="width:${readB/r.totalBytes*100}%"></i></div>`;
-    h+=`<div class="grid">`+r.partitions.map(pt=>`<div class="part" style="background:${pc(pt.index)}"><h4>partition ${pt.index} · ${pt.rows.length} rows decoded</h4>`+pt.rgs.map(g=>{
-      const known=g.g<decided,cls=!known?'pend':g.skip?'skip':'';
-      return`<div class="rg ${cls}" style="background:var(--card)"><b style="font-size:12px">RG ${g.g}</b> <span class="mono" style="color:var(--mut)">rows ${g.start}–${g.end-1}</span>${known?(g.skip?` <span class="tag r">skipped: ${esc(g.reason)}</span>`:' <span class="tag g">read</span>'):' <span class="tag">pending</span>'}
-        <div class="cs">${r.columns.map(c=>{const ch=g.chunks[c],isN=r.needed.includes(c);return`<span class="cc ${known&&!g.skip&&isN?'rd':''} ${known&&!isN?'no':''}" title="bytes=${ch.bytes}">${esc(c)} ${ch.min===undefined?'∅':esc(ch.min+'..'+ch.max)}</span>`}).join('')}</div></div>`}).join('')+`</div>`).join('')+`</div>`;
-    h+=`<div class="note">Pushdown only decides what <i>not</i> to read. The Filter stays in the lineage as a residual filter, so rows in kept row groups are still checked.</div>`;
-    return h;
-  }
   let streamed=0;
   const cards=r.partitions.map(pt=>{
     const k=p>=1?pt.rows.length:Math.ceil(p*pt.rows.length);streamed+=k;
@@ -866,7 +815,7 @@ function draw8(p){
   else if(tab8==='summary'){
     const m=S.comp.metrics;
     body=`<div class="chips"><span class="chip">status: ${f.status}</span><span class="chip">stages completed: ${f.stages}/${S.plan.stages.length}</span><span class="chip">tasks started ${f.started}</span><span class="chip">succeeded ${f.ok}</span><span class="chip">failed ${f.failed}</span><span class="chip">retries ${f.retries}</span><span class="chip">executors lost ${f.lost}</span><span class="chip">duration ${Math.round(f.ms)} ms (simulated)</span></div>
-    <h3>Output metrics (counters only)</h3><div class="chips"><span class="chip">source records ${m.srcRecords}</span><span class="chip">filter calls ${m.filterCalls}</span><span class="chip">map calls ${m.mapCalls}</span>${S.comp.isAgg?`<span class="chip">shuffle records ${m.shuffleWritten}</span><span class="chip">shuffle bytes ${m.shuffleBytes}</span><span class="chip">spills ${m.spills}</span>`:''}${S.read.mode==='columnar'?`<span class="chip">bytes read ${S.read.readBytes}/${S.read.totalBytes}</span>`:''}</div>
+    <h3>Output metrics (counters only)</h3><div class="chips"><span class="chip">source records ${m.srcRecords}</span><span class="chip">filter calls ${m.filterCalls}</span><span class="chip">map calls ${m.mapCalls}</span>${S.comp.isAgg?`<span class="chip">shuffle records ${m.shuffleWritten}</span><span class="chip">shuffle bytes ${m.shuffleBytes}</span><span class="chip">spills ${m.spills}</span>`:''}</div>
     <div class="note">The summary is folded from the event stream (first ${k} of ${ev.length} events), so success and failure share one source of truth.</div>`;
   }else body=`<pre>${esc(explainText())}</pre>`;
   return`<div class="tabs">${tabs}</div>${body}`;
@@ -874,7 +823,7 @@ function draw8(p){
 
 const PHASES=[
  {t:'Read source',s:'file → partitions',f:'F01 · F16',dur:5200,draw:draw1,
-  b:'The source descriptor decides how the file is cut. Row files (CSV/JSONL) are cut into byte ranges and every complete line is decoded exactly once; Parquet is cut into row groups and can skip whole groups using min/max stats.'},
+  b:'The source descriptor decides how the file is cut. Files (CSV/JSONL) are cut into byte ranges and every complete line is decoded exactly once, whatever the number of splits.'},
  {t:'Build lineage',s:'lazy RDD graph',f:'F01 · F13/14',dur:3200,draw:draw2,
   b:'Transformations only create immutable child RDDs and record dependencies. No file is opened and no closure runs yet.'},
  {t:'Plan stages',s:'DAGScheduler',f:'F02',dur:7000,draw:draw3,
@@ -896,10 +845,10 @@ function ctlHTML(k){
   const sel=(key,opts,val)=>`<select data-opt="${key}">${opts.map(([v,l])=>`<option value="${v}" ${String(v)===String(val)?'selected':''}>${l}</option>`).join('')}</select>`;
   const px=(id,opts,val)=>`<select data-proxy="${id}">${opts.map(([v,l])=>`<option value="${v}" ${String(v)===String(val)?'selected':''}>${l}</option>`).join('')}</select>`;
   const tplK=`<label>Job ${px('#tpl',[['agg','group &amp; aggregate (shuffle)'],['narrow','filter &amp; project (narrow)']],$('#tpl').value)}</label>`;
-  if(k===0)return`<label>Source partitions ${px('#P',[1,2,3,4,5,6].map(x=>[x,x]),$('#P').value)}</label><label>Storage format ${px('#fmt',[['row','row file (CSV / JSONL / JSON)'],['parquet','Parquet (columnar)']],$('#fmt').value==='parquet'?'parquet':'row')}</label>`;
+  if(k===0)return`<label>Source partitions <small class="mut">(size ÷ files.maxPartitionBytes)</small> ${px('#P',[1,2,3,4,5,6].map(x=>[x,x]),$('#P').value)}</label>`;
   if(k===1||k===2||k===4)return tplK;
-  if(k===3)return`<label>Executors ${sel('W',[1,2,3,4].map(x=>[x,x]),OPT.W)}</label><label>Failure injection ${sel('fail',[['none','none'],['task','a task fails once → retry'],['executor','executor lost (map outputs invalidated)']],OPT.fail)}</label>`;
-  if(k===5)return($('#tpl').value==='narrow'?tplK:'')+`<label>Shuffle partitions R ${sel('R0',[1,2,3,4,5,6].map(x=>[x,x]),OPT.R0)}</label><label><input type="checkbox" data-opt="combine" ${OPT.combine?'checked':''}> map-side combine</label><label><input type="checkbox" data-opt="aqe" ${OPT.aqe?'checked':''}> AQE coalesce</label><label>Memory budget ${sel('budget',[[0,'unlimited'],[2,'2 records'],[3,'3 records'],[5,'5 records']],OPT.budget)}</label>`;
+  if(k===3)return`<label>Executors <small class="mut">(cluster size)</small> ${sel('W',[1,2,3,4].map(x=>[x,x]),OPT.W)}</label><label>Failure injection ${sel('fail',[['none','none'],['task','a task fails once → retry'],['executor','executor lost (map outputs invalidated)']],OPT.fail)}</label>`;
+  if(k===5)return($('#tpl').value==='narrow'?tplK:'')+`<label><code>spark.sql.shuffle.partitions</code> ${sel('R0',[1,2,3,4,5,6].map(x=>[x,x]),OPT.R0)}</label><label><input type="checkbox" data-opt="combine" ${OPT.combine?'checked':''}> map-side combine <small class="mut">(reduceByKey)</small></label><label><input type="checkbox" data-opt="aqe" ${OPT.aqe?'checked':''}> <code>spark.sql.adaptive.enabled</code> (coalesce)</label><label>Execution memory per task <small class="mut">(spark.memory.fraction)</small> ${sel('budget',[[0,'unlimited'],[2,'2 records'],[3,'3 records'],[5,'5 records']],OPT.budget)}</label>`;
   if(k===6)return`<label>Action ${px('#act',[['Count','count'],['Collect','collect'],['WriteJSONLines','writeJSONLines']],$('#act').value)}</label>${tplK}`;
   if(k===7)return`<label>Failure injection ${sel('fail',[['none','none'],['task','a task fails once → retry'],['executor','executor lost (map outputs invalidated)']],OPT.fail)}</label>`;
   return'';
@@ -908,7 +857,6 @@ function setCtl(k){$('#phCtl').innerHTML=ctlHTML(k)}
 $('#phCtl').addEventListener('change',e=>{
   const x=e.target.closest('[data-proxy]');
   if(x){const id=x.dataset.proxy,tg=$(id);stopAll();
-    if(id==='#fmt'){tg.value=x.value==='parquet'?'parquet':'auto';refresh(true,false);return}
     tg.value=x.value;if(id==='#P')$('#Pv').textContent=x.value;refresh(false);return}
   const t=e.target.closest('[data-opt]');if(!t)return;const key=t.dataset.opt;
   OPT[key]=t.type==='checkbox'?t.checked:(key==='fail'?t.value:+t.value);
@@ -932,7 +880,7 @@ function fillSelect(sel,opts,keep,fallback){
 }
 function onData(auto){
   const c=cfg();let ds;
-  try{const pf=(c.fmt==='auto'||c.fmt==='parquet')?detect(c.text):c.fmt;ds={...parseWhole(c.text,pf),pf}}catch(e){ds={rows:[],columns:[],pf:'?',err:e.message}}
+  try{const pf=c.fmt==='auto'?detect(c.text):c.fmt;ds={...parseWhole(c.text,pf),pf}}catch(e){ds={rows:[],columns:[],pf:'?',err:e.message}}
   DS=ds;const cols=ds.columns;
   $('#srcInfo').innerHTML=ds.err?`<span class="bad">${esc(ds.err)}</span>`:`${ds.rows.length} rows · ${cols.length} columns (${esc(cols.join(', '))}) · parsed as ${ds.pf}`;
   const numCols=cols.filter(k=>ds.rows.length&&ds.rows.every(r=>r[k]==null||typeof r[k]==='number'));
@@ -955,7 +903,7 @@ function onData(auto){
 }
 function jobCode(){
   const el=$('#jobLine');if(!el)return;const c=cfg(),r=S&&S.read;
-  const fm=c.fmt==='parquet'?'parquet':(r&&r.pf)||c.fmt,file='input.'+(fm==='parquet'?'parquet':fm==='jsonl'?'jsonl':fm==='json'?'json':'csv');
+  const fm=(r&&r.pf)||c.fmt,file='input.'+(fm==='jsonl'?'jsonl':fm==='json'?'json':'csv');
   const L=[`rdd = read("${file}", partitions = ${c.P})`];
   if(c.pred)L.push(`  .filter(row -> row.${c.pred.col} ${c.pred.op==='='?'==':c.pred.op} ${isNaN(Number(c.pred.val))?JSON.stringify(c.pred.val):c.pred.val})`);
   if(c.template==='agg'){L.push(`  .map(row -> (row.${c.key}, ${c.agg==='sum'?'row.'+c.valCol:'1'}))`);L.push(`  .reduceByKey((a, b) -> a + b, partitions = ${c.R0})`)}
@@ -970,7 +918,6 @@ function refresh(dataChanged,auto){
   syncJobUI();planBounds=null;
   S=build();jobCode();
   showPhase(cur);
-  refreshDeep();
 }
 ['#src','#fmt'].forEach(s=>$(s).addEventListener('input',()=>{stopAll();refresh(true,s==='#fmt'?false:false)}));
 $('#fmt').onchange=()=>{stopAll();refresh(true,false)};
@@ -980,189 +927,9 @@ $$('[data-sample]').forEach(b=>b.onclick=()=>{const sm=SAMPLES[b.dataset.sample]
 $('#file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$('#src').value=r.result;const n=f.name.toLowerCase();$('#fmt').value=n.endsWith('.csv')?'csv':(n.endsWith('.jsonl')||n.endsWith('.ndjson'))?'jsonl':n.endsWith('.json')?'json':'auto';stopAll();refresh(true,true)};r.readAsText(f)};
 
 /* =========================================================
-   DEEP DIVES
-   ========================================================= */
-const D={cache:null,dd6step:0,d3gen:0};
-function pairsForDD(){
-  if(!S||S.error)return[];
-  const c=S.cfg,rows=S.read.allRows,cols=S.read.columns;
-  const kc=cols.includes(c.key)?c.key:cols[0],vc=cols.includes(c.valCol)?c.valCol:cols[0];
-  return rows.map(r=>[String(r[kc]),(Number(r[vc])||0)]);
-}
-function refreshDeep(){dd1();dd2();dd3();dd4();dd5(true);dd6();dd7()}
-
-/* DD1 */
-function dd1(){
-  const el=$('#dd1b');if(!S||S.error){el.innerHTML='';return}
-  const cols=S.read.columns,old=el.querySelector('#d1c')?{c:el.querySelector('#d1c').value,o:el.querySelector('#d1o').value,v:el.querySelector('#d1v').value,p:[...el.querySelectorAll('.d1p:checked')].map(x=>x.value)}:null;
-  const st=old||{c:S.cfg.pred?S.cfg.pred.col:cols[0],o:S.cfg.pred?S.cfg.pred.op:'>=',v:S.cfg.pred?S.cfg.pred.val:'',p:neededCols({...S.cfg,pred:null},cols).slice(0,2)};
-  el.innerHTML=`<div class="bar"><label>WHERE <select id="d1c">${cols.map(c=>`<option ${c===st.c?'selected':''}>${esc(c)}</option>`).join('')}</select><select id="d1o">${['>=','>','<=','<','=','!='].map(o=>`<option ${o===st.o?'selected':''}>${o}</option>`).join('')}</select><input id="d1v" type="text" class="sm" value="${esc(st.v)}"></label>
-    <label>SELECT ${cols.map(c=>`<label><input type="checkbox" class="d1p" value="${esc(c)}" ${st.p.includes(c)?'checked':''}> ${esc(c)}</label>`).join(' ')}</label></div><div id="d1out"></div>`;
-  const run=()=>{
-    const pr=el.querySelector('#d1v').value.trim()===''?null:{col:el.querySelector('#d1c').value,op:el.querySelector('#d1o').value,val:el.querySelector('#d1v').value.trim()};
-    const proj=[...el.querySelectorAll('.d1p:checked')].map(x=>x.value);const needed=[...new Set([...proj,...(pr?[pr.col]:[])])];
-    const lay=columnarLayout(S.read.allRows,cols,S.cfg.P),pd=pushdown(lay,cols,pr,needed.length?needed:cols);
-    const kept=lay.rgs.filter(g=>!g.skip),resWith=kept.flatMap(g=>g.rows).filter(r=>!pr||evalPred(r,pr)).length,resAll=S.read.allRows.filter(r=>!pr||evalPred(r,pr)).length;
-    el.querySelector('#d1out').innerHTML=`<table><tr><th>row group</th><th>rows</th>${cols.map(c=>`<th>${esc(c)} min..max</th>`).join('')}<th>decision</th></tr>${lay.rgs.map(g=>`<tr style="${g.skip?'opacity:.6':''}"><td>RG ${g.g}</td><td>${g.start}–${g.end-1}</td>${cols.map(c=>{const ch=g.chunks[c],rd=!g.skip&&needed.includes(c);return`<td class="mono ${rd?'ok':''}" style="${needed.includes(c)?'':'color:var(--mut);text-decoration:line-through'}">${ch.min===undefined?'∅':esc(ch.min+'..'+ch.max)}</td>`}).join('')}<td>${g.skip?`<span class="bad">SKIP</span> ${esc(g.reason)}`:'<span class="ok">read</span>'}</td></tr>`).join('')}</table>
-     <div class="chips" style="margin-top:8px"><span class="chip">row groups skipped ${lay.rgs.length-kept.length}/${lay.rgs.length}</span><span class="chip">columns read ${(needed.length?needed:cols).length}/${cols.length}</span><span class="chip">bytes read ${pd.readBytes}/${pd.totalBytes} (${Math.round(pd.readBytes/pd.totalBytes*100)}%)</span></div>
-     <div class="note">Correctness contract: result rows with pushdown = <b>${resWith}</b>, without = <b>${resAll}</b> ${resWith===resAll?'<span class="ok">✔ identical</span>':'<span class="bad">✘</span>'}. Skipping needs proof from statistics; when unsure, the group is kept and the residual filter decides.</div>`;
-  };
-  el.querySelectorAll('input,select').forEach(x=>x.oninput=run);run();
-}
-
-/* DD2 */
-function dd2(){
-  const el=$('#dd2b');if(!S||S.error){el.innerHTML='';return}
-  const old=el.querySelector('#d2r')?+el.querySelector('#d2r').value:S.cfg.R0;
-  el.innerHTML=`<div class="bar"><label>Reduce partitions R <input type="range" id="d2r" min="1" max="8" value="${old}"> <b id="d2v">${old}</b></label></div><div id="d2out"></div>`;
-  const run=()=>{
-    const R=+el.querySelector('#d2r').value;el.querySelector('#d2v').textContent=R;
-    const pairs=pairsForDD(),cnt=new Map();pairs.forEach(([k])=>cnt.set(k,(cnt.get(k)||0)+1));
-    const sizes=Array(R).fill(0),keys=Array.from({length:R},()=>[]);
-    [...cnt.entries()].forEach(([k,c])=>{const d=floorMod(hashCode(k),R);sizes[d]+=c;keys[d].push(k+'×'+c)});
-    const max=Math.max(1,...sizes),avg=pairs.length/R,skew=Math.max(...sizes)>2*avg&&R>1;
-    el.querySelector('#d2out').innerHTML=sizes.map((s,d)=>`<div style="display:flex;gap:8px;align-items:center;margin:4px 0"><span class="cell" style="background:${pc(d)};min-width:70px">dest ${d}</span><span class="bar2" style="width:${s/max*55}%;background:${tc(d)}"></span><b>${s}</b><span class="mono" style="color:var(--mut)">${esc(keys[d].join('  '))}</span></div>`).join('')+
-      `<div class="note">${pairs.length} records over ${cnt.size} distinct keys. ${skew?'<span class="bad">Skew: one partition holds more than 2× the average.</span> A single hot key cannot be split by hashing: AQE skew handling or salting is needed.':'Reasonably balanced.'} Each key maps to exactly one partition: floorMod(hashCode(key), R).</div>`;
-  };
-  el.querySelector('#d2r').oninput=run;run();
-}
-
-/* DD3 */
-function dd3(){
-  const el=$('#dd3b');if(!S||S.error){el.innerHTML='';return}
-  const oldB=el.querySelector('#d3b')?+el.querySelector('#d3b').value:4,oldF=el.querySelector('#d3f')?+el.querySelector('#d3f').value:2;
-  el.innerHTML=`<div class="bar"><label>Memory budget (records) <input type="range" id="d3b" min="2" max="12" value="${oldB}"> <b id="d3bv">${oldB}</b></label><label>Merge fan-in <input type="range" id="d3f" min="2" max="4" value="${oldF}"> <b id="d3fv">${oldF}</b></label><button id="d3a" class="primary">▶ Animate</button></div><div id="d3out"></div>`;
-  const draw=(p)=>{
-    const B=+el.querySelector('#d3b').value,F=+el.querySelector('#d3f').value;el.querySelector('#d3bv').textContent=B;el.querySelector('#d3fv').textContent=F;
-    const recs=pairsForDD().map(r=>r[0]).slice(0,40),N=recs.length;
-    const spillP=Math.min(1,p/0.6),used=p>=1?N:Math.ceil(spillP*N);
-    const runs=[];let buf=[];
-    for(let i=0;i<used;i++){buf.push(recs[i]);if(buf.length>=B){runs.push(buf.slice().sort());buf=[]}}
-    const final=used>=N;if(final&&buf.length){runs.push(buf.slice().sort());buf=[]}
-    let h=`<div class="note" style="margin:0 0 4px">① records stream into a bounded buffer; when it reaches the budget it is sorted and spilled as a run (${used}/${N} consumed)</div>
-      <div class="chips" style="margin-bottom:4px"><b style="font-size:12px">buffer:</b>${buf.map(k=>`<span class="chip">${esc(k)}</span>`).join('')||'<span class="note">empty</span>'}</div>`;
-    h+=runs.map((r,i)=>`<div class="chips" style="margin:3px 0"><span class="chip" style="background:${pc(i)}">run ${i}</span>${r.map(k=>`<span class="chip">${esc(k)}</span>`).join('')}</div>`).join('');
-    if(p>0.6||p>=1){
-      let level=runs.map(r=>r),passes=0;
-      const mp=p>=1?1:(p-0.6)/0.4;
-      let steps=0;const log=[];
-      while(level.length>1){passes++;const nx=[];for(let i=0;i<level.length;i+=F){const grp=level.slice(i,i+F);nx.push(grp.flat().sort());log.push(`pass ${passes}: merge ${grp.length} runs`)}level=nx}
-      const merged=level[0]||[];const shown=Math.ceil(mp*merged.length);
-      const expect=recs.slice().sort();
-      h+=`<div class="note" style="margin:8px 0 4px">② k-way merge with fan-in ${F}: ${runs.length} run(s) → ${passes} pass(es)${passes?' ('+log.join(', ')+')':''}</div><div class="chips">${merged.slice(0,shown).map(k=>`<span class="chip" style="border-color:var(--ok)">${esc(k)}</span>`).join('')}</div>`;
-      if(p>=1)h+=`<div class="note">Spilled runs: <b>${runs.length}</b> · output equals in-memory sort ${J(merged)===J(expect)?'<span class="ok">✔</span>':'<span class="bad">✘</span>'}. Spill files are never visible as final output; they are deleted only after a verified merge.</div>`;
-    }
-    Lab.morph(el.querySelector('#d3out'),h);
-  };
-  el.querySelector('#d3b').oninput=()=>draw(1);el.querySelector('#d3f').oninput=()=>draw(1);
-  el.querySelector('#d3a').onclick=()=>{const g0=++D.d3gen;let t0=null;const f=now=>{if(g0!==D.d3gen)return;if(t0===null)t0=now;const p=Math.min(1,(now-t0)/5000);draw(p);if(p<1)requestAnimationFrame(f)};requestAnimationFrame(f)};draw(1);
-}
-
-/* DD4 */
-function dd4(){
-  const el=$('#dd4b');if(!S||S.error){el.innerHTML='';return}
-  const g=id=>el.querySelector(id),keep=g('#d4r')?{r:+g('#d4r').value,a:+g('#d4a').value,t:+g('#d4t').value,sk:g('#d4s').checked}:{r:200,a:30,t:100,sk:false};
-  const N=S.read.N;
-  el.innerHTML=`<div class="bar"><label>Left (large) rows = <b>${N}×100</b> ≈ ${N*100}</label><label>Right (lookup) rows estimate <input type="range" id="d4r" min="5" max="5000" value="${keep.r}"> <b id="d4rv"></b></label><label>…actual after filter <input type="range" id="d4a" min="1" max="5000" value="${keep.a}"> <b id="d4av"></b></label>
-    <label>Broadcast threshold <input type="range" id="d4t" min="10" max="1000" value="${keep.t}"> <b id="d4tv"></b></label><label><input type="checkbox" id="d4s" ${keep.sk?'checked':''}> skewed partition</label></div><div id="d4out"></div>`;
-  const run=()=>{
-    const left=N*100,r=+g('#d4r').value,a=+g('#d4a').value,t=+g('#d4t').value,sk=g('#d4s').checked,R=S.cfg.R0;
-    g('#d4rv').textContent=r;g('#d4av').textContent=a;g('#d4tv').textContent=t;
-    const pick=x=>x<=t?'BroadcastHashJoin':(x/R<=t*1.5?'ShuffleHashJoin':'SortMergeJoin');
-    const init=pick(r),fin=a<=t&&init!=='BroadcastHashJoin'?'BroadcastHashJoin':init,replanned=fin!==init;
-    const need={BroadcastHashJoin:'build side fits the broadcast budget; large side keeps its partitioning',ShuffleHashJoin:'both sides hash-partitioned on the join key; build side per partition fits in memory',SortMergeJoin:'both sides distributed + externally sorted on the key, then merged'};
-    const shuffled=s=>s==='BroadcastHashJoin'?r:left+r,saved=replanned?left:0;
-    const diag=s=>{const bh=s==='BroadcastHashJoin';
-      return`<svg viewBox="0 0 640 150" style="max-height:170px"><rect x="10" y="10" width="120" height="50" rx="8" fill="var(--p0)" stroke="var(--line)"/><text x="20" y="32">large side</text><text x="20" y="48" style="fill:var(--mut)">${left} rows</text>
-        <rect x="10" y="90" width="120" height="40" rx="8" fill="var(--p1)" stroke="var(--line)"/><text x="20" y="114">lookup ${r}</text>
-        ${bh?`<path class="flow" d="M130,115 C300,115 300,40 420,40" fill="none" stroke="var(--acc)" stroke-width="3"/><text x="260" y="95" style="fill:var(--acc)">broadcast index</text><path d="M130,35 L420,35" stroke="var(--ok)" stroke-width="3" fill="none"/><text x="200" y="28" style="fill:var(--ok)">stays local (no shuffle)</text>`
-        :`<rect x="250" y="40" width="80" height="60" rx="8" fill="var(--p5)" stroke="var(--bad)"/><text x="262" y="75">Exchange</text><path class="flow" d="M130,35 C190,35 200,60 250,65" fill="none" stroke="var(--bad)" stroke-width="3"/><path class="flow" d="M130,115 C190,115 200,85 250,85" fill="none" stroke="var(--bad)" stroke-width="2"/><path class="flow" d="M330,70 L420,45" fill="none" stroke="var(--bad)" stroke-width="3"/>${s==='SortMergeJoin'?'<text x="262" y="92" style="font-size:10px">+ sort</text>':'<text x="262" y="92" style="font-size:10px">+ hash</text>'}`}
-        <rect x="420" y="15" width="150" height="55" rx="8" fill="var(--p2)" stroke="var(--line)"/><text x="430" y="40">${s.replace('Join','')}</text><text x="430" y="57" style="fill:var(--mut)">joined output</text></svg>`};
-    g('#d4out').innerHTML=`<div class="g2"><div class="box"><b>Initial plan (estimates)</b><div class="big" style="font-size:20px;margin:4px 0">${init}</div><div class="note">${need[init]}</div>${diag(init)}<div class="chips"><span class="chip">shuffled records ≈ ${shuffled(init)}</span></div></div>
-      <div class="box"><b>After runtime stats (AQE)</b><div class="big" style="font-size:20px;margin:4px 0">${fin}${replanned?' <span class="tag g">replanned</span>':''}</div><div class="note">${replanned?`Completed map stage reports only ${a} rows (≤ ${t}). The not-yet-started join stage is replaced with a broadcast join: avoids shuffling ~${saved} large-side rows.`:'No safe adaptive improvement: keep the original strategy (AQE never mutates already running work).'}</div>${diag(fin)}</div></div>
-      ${sk?`<div class="note"><b class="bad">Skew detected:</b> one shuffle partition is far above the median. For an eligible inner join AQE splits it into sub-partitions and replicates the matching build rows; otherwise it falls back safely.</div>`:''}
-      <div class="note">Every strategy declares its distribution/ordering requirements; unmet requirements become Exchange operators (which are stage boundaries).</div>`;
-  };
-  el.querySelectorAll('input').forEach(x=>x.oninput=run);run();
-}
-
-/* DD5 */
-function dd5(reset){
-  const el=$('#dd5b');if(!S||S.error){el.innerHTML='';return}
-  if(reset||!D.cache){
-    D.cache={cap:Math.max(...S.comp.parts.map(p=>Math.max(1,p.kept)),1)*2,blocks:S.comp.parts.map(p=>({p:p.index,size:Math.max(1,p.kept),state:'none',last:0})),hits:0,miss:0,rec:0,tick:0,log:['(empty cache)']};
-  }
-  const C=D.cache,used=()=>C.blocks.filter(b=>b.state==='cached').reduce((s,b)=>s+b.size,0);
-  const draw=()=>{
-    el.innerHTML=`<div class="bar"><label>Storage capacity (records) <input type="range" id="d5c" min="1" max="${C.blocks.reduce((s,b)=>s+b.size,0)+2}" value="${C.cap}"> <b>${C.cap}</b></label><button id="d5r" class="primary">▶ Run action (read-through)</button><button id="d5l">Lose a cached block</button><button id="d5x">Clear</button></div>
-      <div>${C.blocks.map(b=>`<div class="blk ${b.state}"><b>rdd_p${b.p}</b><br>${b.size} records<br><small>${b.state==='none'?'not cached':b.state}</small></div>`).join('')}</div>
-      <div class="chips"><span class="chip">used ${used()}/${C.cap}</span><span class="chip ${C.hits?'ok':''}">hits ${C.hits}</span><span class="chip">misses ${C.miss}</span><span class="chip">recomputed partitions ${C.rec}</span></div>
-      <div class="box mono" style="margin-top:8px;max-height:140px;overflow:auto">${C.log.slice(-8).map(esc).join('<br>')}</div>
-      <div class="note">Cache is an optimization only: a miss, an evicted block, or a lost block falls back to lineage recomputation with an identical result. A block becomes visible only after it is complete and published atomically.</div>`;
-    el.querySelector('#d5c').oninput=e=>{C.cap=+e.target.value;draw()};
-    el.querySelector('#d5r').onclick=()=>{
-      C.log.push(`— action #${++C.tick}`);
-      C.blocks.forEach(b=>{
-        if(b.state==='cached'){C.hits++;b.last=C.tick;C.log.push(`p${b.p}: HIT, read immutable block (no source I/O)`)}
-        else{C.miss++;C.rec++;C.log.push(`p${b.p}: MISS (${b.state==='none'?'never cached':b.state}) → recompute from lineage`);
-          if(b.size>C.cap){C.log.push(`p${b.p}: block larger than capacity, not cached`);return}
-          while(used()+b.size>C.cap){const v=C.blocks.filter(x=>x.state==='cached').sort((x,y)=>x.last-y.last)[0];if(!v)break;v.state='evicted';C.log.push(`evict p${v.p} (LRU)`)}
-          b.state='cached';b.last=C.tick;C.log.push(`p${b.p}: published atomically`)}
-      });draw();
-    };
-    el.querySelector('#d5l').onclick=()=>{const b=C.blocks.find(x=>x.state==='cached');if(b){b.state='lost';C.log.push(`p${b.p}: block LOST (executor/disk) → next read recomputes it`)}draw()};
-    el.querySelector('#d5x').onclick=()=>dd5(true);
-  };
-  draw();
-}
-
-/* DD6 */
-function dd6(){
-  const el=$('#dd6b');if(!S||S.error){el.innerHTML='';return}
-  const c=S.cfg,cols=S.read.columns,id=n=>cols.indexOf(n),isAgg=c.template==='agg',col=S.read.mode==='columnar';
-  const pred=c.pred?`${c.pred.col} ${c.pred.op} ${c.pred.val}`:null,need=S.read.needed||neededCols(c,cols);
-  const sel=isAgg?[c.key,...(c.agg==='sum'?[c.valCol]:[])]:neededCols({...c,pred:null},cols);
-  const aggS=c.agg==='sum'?`sum(${c.valCol})`:'count(1)';
-  const plans=[
-   {n:'1 · Unresolved logical plan',note:'Built lazily from the DataFrame calls. Names are just strings; nothing is validated yet.',
-    t:[isAgg?`Aggregate [${c.key}], [${c.key}, ${aggS}]`:`Project [${sel.join(', ')}]`,...(pred?[`+- Filter (${pred})`]:[]),`   +- UnresolvedRelation [${S.read.label}]`]},
-   {n:'2 · Analyzed logical plan',note:'Attributes resolve to stable field IDs and types; missing/ambiguous names fail here, before any execution.',
-    t:[isAgg?`Aggregate [${c.key}#${id(c.key)}], [${c.key}#${id(c.key)}, ${aggS.replace(c.valCol,c.valCol+'#'+id(c.valCol))}]`:`Project [${sel.map(x=>x+'#'+id(x)).join(', ')}]`,...(pred?[`+- Filter (${c.pred.col}#${id(c.pred.col)} ${c.pred.op} ${c.pred.val})`]:[]),`   +- Relation [${cols.map(x=>x+'#'+id(x)).join(', ')}] ${S.read.label}`]},
-   {n:'3 · Optimized logical plan',note:`Rule batches run to a fixed point. Applied: ColumnPruning (read only ${need.join(', ')})${pred?`, PushDownPredicate (${col?'into the Parquet scan':'filter stays above a row-file scan: nothing to skip'})`:''}, CollapseProject.`,
-    t:[isAgg?`Aggregate [${c.key}], [${c.key}, ${aggS}]`:`Project [${sel.join(', ')}]`,...(pred&&!col?[`+- Filter (${pred})`]:[]),`   +- Relation [${need.join(', ')}] ${S.read.label}${pred&&col?`  PushedFilters: [${c.pred.col} ${c.pred.op} ${c.pred.val}]`:''}`]},
-   {n:'4 · Physical plan',note:`Physical operators declare required distribution. HashAggregate needs rows clustered by key, so an <b>Exchange</b> is inserted: that is the ShuffleDependency and the stage boundary from chapter 3.`,
-    t:isAgg?[`HashAggregate(keys=[${c.key}], functions=[${aggS}])        ← ResultStage (reduce)`,`+- Exchange hashpartitioning(${c.key}, ${c.R0})          ← shuffle = stage cut`,`   +- HashAggregate(keys=[${c.key}], functions=[partial_${aggS}])   ← map-side combine`,...(pred&&!col?[`      +- Filter (${pred})`]:[]),`      +- Scan ${col?'parquet':S.read.pf} [${need.join(', ')}]${pred&&col?` PushedFilters:[${pred}] + residual Filter`:''}   ← source RDD`]
-     :[`Project [${sel.join(', ')}]                    ← narrow Map`,...(pred?[`+- Filter (${pred})                       ← narrow Filter`]:[]),`   +- Scan ${col?'parquet':S.read.pf} [${need.join(', ')}]   ← source RDD`]}
-  ];
-  const st=Math.min(D.dd6step,plans.length-1);
-  el.innerHTML=`<div class="bar">${plans.map((p,i)=>`<button data-s="${i}" class="${i===st?'on':''}">${p.n}</button>`).join('')}</div><pre>${esc(plans[st].t.join('\n'))}</pre><div class="note">${plans[st].note}</div>
-    <div class="note">A DataFrame is schema + logical plan with expression trees (no opaque closures), which is what makes rules like pruning and pushdown possible. The RDD engine underneath is exactly what chapters 1–8 just ran.</div>`;
-  el.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{D.dd6step=+b.dataset.s;dd6()});
-}
-
-/* DD7 */
-function dd7(){
-  const el=$('#dd7b');if(!S||S.error){el.innerHTML='';return}
-  const P=S.cfg.P,old=el.querySelector('#d7t')?+el.querySelector('#d7t').value:Math.max(1,P-1);
-  el.innerHTML=`<div class="bar"><label>Target partitions <input type="range" id="d7t" min="1" max="8" value="${old}"> <b id="d7v">${old}</b></label></div><div id="d7out"></div>`;
-  const run=()=>{
-    const T=+el.querySelector('#d7t').value;el.querySelector('#d7v').textContent=T;
-    const narrow=T<P,rowH=34,H=Math.max(P,T)*rowH+10;
-    let s=`<svg viewBox="0 0 520 ${H}" style="max-height:${H+10}px">`;
-    const grp=distribute(P,Math.min(T,P));
-    for(let i=0;i<P;i++){s+=`<rect x="20" y="${8+i*rowH}" width="80" height="24" rx="5" fill="${pc(i)}" stroke="var(--line)"/><text x="30" y="${25+i*rowH}">old p${i}</text>`}
-    for(let j=0;j<T;j++){s+=`<rect x="420" y="${8+j*rowH}" width="80" height="24" rx="5" fill="${pc(j)}" stroke="var(--line)"/><text x="430" y="${25+j*rowH}">new p${j}</text>`}
-    if(narrow){grp.forEach(([a,b],j)=>{for(let i=a;i<b;i++)s+=`<path d="M100,${20+i*rowH} L420,${20+j*rowH}" stroke="var(--ok)" stroke-width="2" fill="none"/>`})}
-    else for(let i=0;i<P;i++)for(let j=0;j<T;j++)s+=`<path class="flow" d="M100,${20+i*rowH} L420,${20+j*rowH}" stroke="var(--bad)" stroke-width="1.2" fill="none" opacity=".6"/>`;
-    el.querySelector('#d7out').innerHTML=s+`</svg><div class="note">${T===P?'Same count: nothing to do.':narrow?`<b>coalesce(${T})</b>: merges contiguous parent partitions, a <span class="ok">narrow</span> dependency, no shuffle, record order inside each parent preserved.`:`<b>repartition(${T})</b>: increasing (or evenly redistributing) needs a full <span class="bad">shuffle</span>: every new partition may read from every old one, so the planner adds a stage boundary.`}</div>`;
-  };
-  el.querySelector('#d7t').oninput=run;run();
-}
-
-/* =========================================================
    ARCHITECTURE OVERVIEW (components + relationships)
    ========================================================= */
-const OVS={"w": 1000, "h": 400, "groups": [{"x": 185, "y": 50, "w": 590, "h": 130, "label": "Driver"}, {"x": 790, "y": 50, "w": 200, "h": 340, "label": "Executors"}], "nodes": [{"id": "source", "x": 10, "y": 85, "w": 150, "h": 64, "label": "Source file", "sub": "CSV \u00b7 JSON \u00b7 Parquet", "desc": "Files are cut into partitions: byte ranges for row files, row groups for columnar files.", "phase": 0}, {"id": "lineage", "x": 205, "y": 85, "w": 150, "h": 64, "label": "RDD lineage", "sub": "lazy, immutable", "desc": "Each transformation creates a child RDD that remembers its parent and a closure. Nothing runs yet.", "phase": 1}, {"id": "planner", "x": 395, "y": 85, "w": 150, "h": 64, "label": "DAGScheduler", "sub": "stages at shuffles", "desc": "On an action, walks the lineage backward and cuts stages at shuffle dependencies.", "phase": 2}, {"id": "sched", "x": 585, "y": 85, "w": 170, "h": 64, "label": "Task scheduler", "sub": "tasks \u00b7 retries \u00b7 slots", "desc": "Turns each stage into one task per partition and runs them with a bounded number of slots, retrying failures.", "phase": 3}, {"id": "narrow", "x": 815, "y": 85, "w": 150, "h": 64, "label": "Narrow tasks", "sub": "filter \u2192 map", "desc": "A task reads one partition and streams rows through the fused narrow closures.", "phase": 4}, {"id": "shuffle", "x": 815, "y": 215, "w": 150, "h": 64, "label": "Shuffle", "sub": "hash \u2192 reduce", "desc": "Map tasks hash keys into shards; reduce tasks fetch their shards and combine values per key.", "phase": 5}, {"id": "action", "x": 585, "y": 300, "w": 170, "h": 64, "label": "Action result", "sub": "count \u00b7 collect \u00b7 write", "desc": "Merges task results deterministically, or writes outputs atomically.", "phase": 6}, {"id": "events", "x": 290, "y": 300, "w": 170, "h": 64, "label": "Events & explain", "sub": "job summary", "desc": "Every lifecycle change is an ordered event; the summary is folded from them.", "phase": 7}], "edges": [{"from": "source", "to": "lineage", "label": "partitions", "kind": "data"}, {"from": "lineage", "to": "planner", "label": "dependencies", "kind": "ctl"}, {"from": "planner", "to": "sched", "label": "stages \u2192 task sets", "kind": "ctl"}, {"from": "sched", "to": "narrow", "label": "launch tasks", "kind": "ctl"}, {"from": "source", "to": "narrow", "label": "read one partition", "kind": "data", "bend": -95}, {"from": "narrow", "to": "shuffle", "label": "map output shards", "kind": "data"}, {"from": "shuffle", "to": "action", "label": "reduced rows", "kind": "data"}, {"from": "narrow", "to": "action", "label": "narrow-only result", "kind": "data"}, {"from": "sched", "to": "events", "label": "lifecycle events", "kind": "async"}, {"from": "action", "to": "events", "label": "terminal status", "kind": "async"}], "flow": [{"n": "source", "t": "The file is cut into partitions."}, {"n": "lineage", "t": "Transformations build a lazy lineage; nothing is read yet."}, {"n": "planner", "t": "An action walks the lineage backward and cuts stages at shuffles."}, {"n": "sched", "t": "Each stage becomes a task set: one task per partition."}, {"n": "narrow", "t": "Tasks stream their partition through filter and map."}, {"n": "shuffle", "t": "A shuffle regroups records by key."}, {"n": "action", "t": "The action merges the task results."}, {"n": "events", "t": "Events summarize the whole job."}]};
+const OVS={"w": 1000, "h": 400, "groups": [{"x": 185, "y": 50, "w": 590, "h": 130, "label": "Driver"}, {"x": 790, "y": 50, "w": 200, "h": 340, "label": "Executors"}], "nodes": [{"id": "source", "x": 10, "y": 85, "w": 150, "h": 64, "label": "Source file", "sub": "CSV \u00b7 JSON lines", "desc": "Files are cut into partitions: byte ranges, each line owned by the partition where it starts.", "phase": 0}, {"id": "lineage", "x": 205, "y": 85, "w": 150, "h": 64, "label": "RDD lineage", "sub": "lazy, immutable", "desc": "Each transformation creates a child RDD that remembers its parent and a closure. Nothing runs yet.", "phase": 1}, {"id": "planner", "x": 395, "y": 85, "w": 150, "h": 64, "label": "DAGScheduler", "sub": "stages at shuffles", "desc": "On an action, walks the lineage backward and cuts stages at shuffle dependencies.", "phase": 2}, {"id": "sched", "x": 585, "y": 85, "w": 170, "h": 64, "label": "Task scheduler", "sub": "tasks \u00b7 retries \u00b7 slots", "desc": "Turns each stage into one task per partition and runs them with a bounded number of slots, retrying failures.", "phase": 3}, {"id": "narrow", "x": 815, "y": 85, "w": 150, "h": 64, "label": "Narrow tasks", "sub": "filter \u2192 map", "desc": "A task reads one partition and streams rows through the fused narrow closures.", "phase": 4}, {"id": "shuffle", "x": 815, "y": 215, "w": 150, "h": 64, "label": "Shuffle", "sub": "hash \u2192 reduce", "desc": "Map tasks hash keys into shards; reduce tasks fetch their shards and combine values per key.", "phase": 5}, {"id": "action", "x": 585, "y": 300, "w": 170, "h": 64, "label": "Action result", "sub": "count \u00b7 collect \u00b7 write", "desc": "Merges task results deterministically, or writes outputs atomically.", "phase": 6}, {"id": "events", "x": 290, "y": 300, "w": 170, "h": 64, "label": "Events & explain", "sub": "job summary", "desc": "Every lifecycle change is an ordered event; the summary is folded from them.", "phase": 7}], "edges": [{"from": "source", "to": "lineage", "label": "partitions", "kind": "data"}, {"from": "lineage", "to": "planner", "label": "dependencies", "kind": "ctl"}, {"from": "planner", "to": "sched", "label": "stages \u2192 task sets", "kind": "ctl"}, {"from": "sched", "to": "narrow", "label": "launch tasks", "kind": "ctl"}, {"from": "source", "to": "narrow", "label": "read one partition", "kind": "data", "bend": -95}, {"from": "narrow", "to": "shuffle", "label": "map output shards", "kind": "data"}, {"from": "shuffle", "to": "action", "label": "reduced rows", "kind": "data"}, {"from": "narrow", "to": "action", "label": "narrow-only result", "kind": "data"}, {"from": "sched", "to": "events", "label": "lifecycle events", "kind": "async"}, {"from": "action", "to": "events", "label": "terminal status", "kind": "async"}], "flow": [{"n": "source", "t": "The file is cut into partitions."}, {"n": "lineage", "t": "Transformations build a lazy lineage; nothing is read yet."}, {"n": "planner", "t": "An action walks the lineage backward and cuts stages at shuffles."}, {"n": "sched", "t": "Each stage becomes a task set: one task per partition."}, {"n": "narrow", "t": "Tasks stream their partition through filter and map."}, {"n": "shuffle", "t": "A shuffle regroups records by key."}, {"n": "action", "t": "The action merges the task results."}, {"n": "events", "t": "Events summarize the whole job."}]};
 
 /* =========================================================
    INIT
@@ -1170,174 +937,122 @@ const OVS={"w": 1000, "h": 400, "groups": [{"x": 185, "y": 50, "w": 590, "h": 13
 $('#src').value=SAMPLES.orders.text();$('#fmt').value='csv';
 $('#tpl').value='agg';
 onData(true);
-S=build();jobCode();showPhase(0);refreshDeep();
+S=build();jobCode();showPhase(0);
 
-/* ================= v2: live simulation, accordion, packets ================= */
-const DETAIL=[
-{how:'Spark SQL file sources (FileSourceScanExec) split files into partitions of up to spark.sql.files.maxPartitionBytes (128 MB), packing small files together (openCostInBytes). Line formats like CSV/JSON are read as byte ranges; a reader that starts mid-line skips to the next newline, so each line is decoded once. Parquet is split by row groups, and filter pushdown uses footer min/max statistics to skip groups, plus column pruning.',
- pros:['Splittable formats let many tasks read one big file in parallel','Parquet pruning and pushdown read fewer bytes and fewer columns','Byte-range splitting needs no coordination between readers','Small files are bin-packed so tasks are not wasted on tiny inputs'],
- cons:['Gzip and other non-splittable codecs force one task per file','Schema inference on CSV/JSON needs an extra pass over the data','Row groups that are too big or too small hurt skipping and parallelism','Min/max skipping only helps if data is clustered or sorted on the filter column'],
- fails:[{m:'Small files problem',s:'Thousands of tiny tasks, long listing time, driver memory pressure',x:'Compact upstream, raise maxPartitionBytes, or write fewer larger files (coalesce, Delta/Iceberg compaction)'},
-  {m:'Non-splittable input',s:'One straggler task reads a huge .gz file while the rest of the stage is idle',x:'Use splittable formats (Parquet, bzip2) or repartition right after the read'},
-  {m:'Corrupt or schema-drifted records',s:'Nulls appear in PERMISSIVE mode, or the job fails in FAILFAST mode',x:'Give an explicit schema, use mode and columnNameOfCorruptRecord, quarantine bad rows'},
-  {m:'Predicate not pushed down',s:'Scan reads far more bytes than expected',x:'Filter on raw columns, avoid casts or UDFs on the column, check PushedFilters in explain'}],
- watch:['SQL tab scan node: number of files read, size of files read, and PushedFilters','Stage tab: input size per task; many tasks under a few MB means a small-files problem','Task duration skew where one task has far more input bytes than the median']},
-{how:'RDD and DataFrame transformations such as map, filter and select are lazy: each returns a new immutable object holding a reference to its parent and the function to apply. For RDDs this builds the lineage graph of narrow and shuffle dependencies; for DataFrames Spark builds a logical plan that Catalyst optimizes later. Nothing is read or computed until an action is called.',
- pros:['Spark sees the whole pipeline before running, so it can optimize and fuse steps','Lineage gives fault tolerance: a lost partition is recomputed from its parents','Immutable nodes make reuse and caching safe and simple','Cheap to define, so building a long chain costs almost nothing'],
- cons:['Errors in closures or bad paths show up only at the action, far from the cause','Very long lineage (iterative jobs) slows planning and recovery and can overflow the stack','The same RDD used by two actions is recomputed unless cached','Non-deterministic or non-serializable closures cause surprising results'],
- fails:[{m:'Task not serializable',s:'SparkException: Task not serializable when the action starts',x:'Do not capture non-serializable objects (connections, the enclosing class); create them inside mapPartitions'},
-  {m:'Recomputation of shared lineage',s:'Same expensive source scanned or computed several times',x:'Use cache or persist for reused datasets, and unpersist when finished'},
-  {m:'Lineage grows too long',s:'StackOverflowError or slow job startup in iterative loops',x:'Call checkpoint or localCheckpoint to truncate the lineage'},
-  {m:'Non-deterministic closure',s:'Different results after a retry or recompute (random, time, unordered input)',x:'Make functions deterministic, set seeds, or materialize with checkpoint'}],
- watch:['rdd.toDebugString or df.explain(true) to inspect lineage and dependency types','Number of indentation levels in lineage output: deep chains are a warning sign','Storage tab: are reused datasets actually cached, and at what fraction']},
-{how:'On an action, SparkContext calls DAGScheduler.runJob. It walks the RDD graph backward from the final RDD, grouping narrow dependencies into one stage and cutting a new ShuffleMapStage at every ShuffleDependency. The last stage is a ResultStage. A stage runs only after its parent stages finish. With Spark SQL, AQE re-plans at these shuffle boundaries using real statistics.',
- pros:['Pipelining narrow operations avoids writing intermediate data','Stage boundaries are the natural points for fault recovery and retries','Independent stages can run concurrently','Completed shuffle outputs can be reused, so a skipped stage shows in the UI'],
- cons:['Every shuffle boundary costs a disk write, a network transfer and a barrier','Stage count and shuffle placement depend on how you write the query','A barrier means one slow task delays the whole next stage','Wide dependencies (joins, groupBy) multiply the data moved'],
- fails:[{m:'Too many shuffle stages',s:'Job has many stages, each adding latency and disk and network IO',x:'Combine groupBy or join steps, pre-partition by key, or broadcast the small side to avoid a shuffle'},
-  {m:'Cartesian or exploding join',s:'Plan shows CartesianProduct or BroadcastNestedLoopJoin and the job never finishes',x:'Add real join keys or conditions, check the join type in explain'},
-  {m:'Stage retry after fetch failure',s:'Stages appear as resubmitted or retried in the UI',x:'Fix the underlying executor or disk problem; see the shuffle phase for fetch failures'},
-  {m:'Unexpected plan from stale stats',s:'Wrong join strategy picked, huge shuffle where a broadcast was possible',x:'Run ANALYZE TABLE, enable AQE, or add a broadcast hint'}],
- watch:['Jobs tab DAG visualization and the Stages list: count of stages and skipped stages','SQL tab physical plan: Exchange nodes are the shuffle boundaries','Number of stage attempts: more than one attempt means upstream shuffle data was lost']},
-{how:'Each stage becomes a TaskSet with one task per partition, submitted to TaskSchedulerImpl. The driver offers executor slots (spark.executor.cores / spark.task.cpus) and places tasks by locality (PROCESS_LOCAL, NODE_LOCAL, ANY, with spark.locality.wait). Failed tasks are retried up to spark.task.maxFailures (4); a lost executor invalidates its map outputs and triggers recomputation.',
- pros:['Single driver owns all state, so scheduling and recovery logic is simple and consistent','Locality-aware placement moves compute to data instead of data to compute','Automatic task retry hides transient failures from the user','Dynamic allocation and speculation (spark.speculation) adapt to load and stragglers'],
- cons:['The driver is a single point of failure and a bottleneck with huge task counts','Locality waits can leave cores idle in exchange for local reads','Retrying a deterministic failure wastes time until maxFailures is hit','Speculation can duplicate work and is unsafe for non-idempotent sinks without care'],
- fails:[{m:'Executor lost',s:'ExecutorLostFailure, Container killed, or heartbeat timeout; tasks rerun and map outputs are recomputed',x:'Raise executor memory or overhead, fix OOM or preemption (spot nodes), enable external shuffle service or push-based shuffle'},
-  {m:'Task failed 4 times',s:'Job aborted: Task failed spark.task.maxFailures times',x:'Read the root cause in the failed task stack trace; fix bad data or code rather than only raising retries'},
-  {m:'Driver OOM or overload',s:'Driver GC pauses, OOM, or slow scheduling with very many tasks or large collect',x:'Raise spark.driver.memory, reduce partition count, avoid large collect, tune event queue size'},
-  {m:'Straggler task',s:'One task runs far longer than the rest and holds up the stage',x:'Find the cause (skew, bad node), enable speculation, or fix partitioning'}],
- watch:['Stage page: task time distribution (min, median, max) and a long tail of stragglers','Executors tab: failed tasks, GC time over about 10 percent of task time, and lost executors','Locality level column in the task table: mostly ANY on a cluster with data-local storage is a problem']},
-{how:'A task runs in an executor thread. It reads one input partition as an iterator and pulls rows through the chain of fused operators; with Spark SQL, whole-stage code generation compiles filter, project and similar steps into one tight Java loop. Rows flow one at a time (or in columnar batches for Parquet), so no intermediate collection is built between narrow steps.',
- pros:['Pipelining keeps memory use low and avoids materializing between steps','Whole-stage codegen removes virtual calls and boosts CPU efficiency','Tasks are independent, so they run in parallel and can be retried alone','Vectorized Parquet reads decode column batches efficiently'],
- cons:['A task must hold per-partition state in memory, so oversized partitions risk OOM','Python UDFs break fusion and add serialization cost between JVM and Python','A closure runs at least once per row, so side effects are repeated on retry','Very wide schemas can exceed the codegen method size and fall back to slower paths'],
- fails:[{m:'Executor OOM in a task',s:'java.lang.OutOfMemoryError or container killed by YARN or Kubernetes for exceeding memory',x:'Use smaller partitions (more of them), raise spark.executor.memory and memoryOverhead, avoid huge per-row objects'},
-  {m:'Slow Python UDF',s:'Stage is CPU bound and far slower than equivalent SQL',x:'Prefer built-in functions or pandas UDFs with Arrow, enable spark.sql.execution.arrow.pyspark.enabled'},
-  {m:'Side effects repeated',s:'Duplicate writes or API calls after task retry or speculation',x:'Make closures idempotent; use accumulators only in actions and write through committers'},
-  {m:'Data skew inside a partition',s:'One task processes far more rows than its siblings',x:'Repartition on a better key, salt hot keys, or let AQE split skewed partitions'}],
- watch:['Stage page: input records and size per task, and the spread between median and max','GC time and peak execution memory columns in the task table','SQL tab: codegen stage numbers in the plan (WholeStageCodegen); missing ones suggest fusion was broken']},
-{how:'Map tasks write shuffle data through a ShuffleWriter: records are partitioned by hash of the key into R reduce partitions, optionally combined map-side (reduceByKey, partial HashAggregate), buffered in memory and spilled to disk when execution memory runs out, then merged into one data file plus an index file. Reduce tasks fetch their blocks via the BlockManager or shuffle service, then aggregate or join. AQE (spark.sql.adaptive.enabled) coalesces small reduce partitions and splits skewed ones.',
- pros:['Hash partitioning co-locates equal keys so aggregations and joins are correct','Map-side combine shrinks the data sent across the network','Spilling lets a task finish with bounded memory instead of failing','AQE picks partition counts from real sizes instead of a fixed guess'],
- cons:['Shuffle is the most expensive step: disk write, network transfer and sort or hash','spark.sql.shuffle.partitions defaults to 200, which is rarely right without AQE','A hot key sends all its rows to one reducer, creating skew','Shuffle files live on executor local disk and are lost with the executor unless a shuffle service is used'],
- fails:[{m:'Data skew',s:'A few reduce tasks run for a long time and read far more shuffle bytes than the median',x:'Enable AQE skew join (spark.sql.adaptive.skewJoin.enabled), salt hot keys, or broadcast the small side'},
-  {m:'FetchFailedException',s:'Reduce stage fails with Fetch failed or missing shuffle output; the map stage is resubmitted',x:'Fix executor loss or disk issues, add the external shuffle service or push-based shuffle, raise spark.network.timeout and io retries'},
-  {m:'Spill and shuffle OOM',s:'Large spill to disk or OOM in reduce tasks that aggregate big groups',x:'Increase partitions, raise executor memory, reduce per-key state, or pre-aggregate'},
-  {m:'Too many or too few partitions',s:'Thousands of tiny reduce tasks, or a few huge tasks with heavy spill',x:'Turn on AQE coalescing and set advisoryPartitionSizeInBytes, or tune spark.sql.shuffle.partitions'}],
- watch:['Stage page: shuffle read and write size, shuffle spill (memory and disk), and per-task max versus median','SQL tab Exchange node: data size, partition count, and AQE coalesced or skew-split annotations','Executors tab: shuffle read and write totals and failed fetches; disk usage on shuffle local dirs']},
-{how:'The action decides what returns to the driver. count aggregates partial counts per task, collect and take send rows to the driver, and write actions go through the Hadoop-style committer (FileOutputCommitter or the Spark commit protocol): each task attempt writes to a temporary location, and commitTask then commitJob publish files by rename. Only successful attempts are published, so retried or speculative attempts do not duplicate output.',
- pros:['Per-attempt temporary files make retries and speculation safe for file output','Atomic publish at job commit avoids exposing half-written output on HDFS-like stores','Merging per-partition results in the driver keeps count and similar actions cheap','The result is deterministic regardless of task finishing order'],
- cons:['collect pulls all data to the driver, which does not scale','Rename-based commit is slow and not atomic on plain object stores like S3 without a special committer','The commit phase is serial work in the driver and can be slow with many files','Output file count equals partition count, which may not be what downstream wants'],
- fails:[{m:'Driver OOM on collect',s:'OutOfMemoryError or spark.driver.maxResultSize exceeded',x:'Write to storage instead, use take or limit, raise maxResultSize only if the result is truly small'},
-  {m:'Small output files',s:'Thousands of tiny output files after a wide stage or high shuffle partitions',x:'coalesce or repartition before write, enable AQE coalescing, or compact with a table format'},
-  {m:'Partial or duplicate output',s:'Leftover _temporary directories, missing or doubled data after a failed job',x:'Use a committer that is safe for your store (S3A magic or Iceberg and Delta commits), and clean up failed runs'},
-  {m:'Slow job commit',s:'Job finishes computing but sits for a long time at the end',x:'Use a cloud-optimized committer or algorithm version 2 with care, and reduce the number of output files'}],
- watch:['Jobs tab: time gap between last task end and job end points to commit cost','Output size and number of files written per task in the stage page and SQL tab write node','Driver memory and result size in logs when using collect or toPandas']},
-{how:'The driver posts lifecycle changes (SparkListenerJobStart, StageCompleted, TaskStart, TaskEnd, ExecutorRemoved and others) onto the LiveListenerBus. Listeners consume them to build the Web UI, the event log (spark.eventLog.enabled) for the History Server, and metrics. The UI numbers are folded from these events. explain() shows the parsed, analyzed, optimized and physical plans as metadata only, not row data.',
- pros:['One ordered event stream gives a single source of truth for UI, history and metrics','Event logs allow post-mortem debugging after the application ends','Custom SparkListener or metrics sinks plug in without touching the job','explain exposes join strategy, pushed filters and partition counts without running the query'],
- cons:['Event logs can be very large for jobs with many tasks and need rolling or compaction','The listener bus queue can overflow and drop events, making the UI inaccurate','The live UI disappears with the application unless the History Server is set up','Plan text shows what Spark intends, and AQE can change it at runtime'],
- fails:[{m:'Listener bus drops events',s:'Log says Dropping SparkListenerEvent because no remaining room in event queue; UI shows wrong counts',x:'Raise spark.scheduler.listenerbus.eventqueue.capacity and make custom listeners fast'},
-  {m:'Missing history after crash',s:'Application not visible in History Server, or logs unreadable',x:'Enable eventLog with a durable shared path and rolling logs, and check History Server permissions'},
-  {m:'UI memory pressure',s:'Driver memory grows from retained jobs, stages and tasks',x:'Lower spark.ui.retainedJobs, retainedStages and retainedTasks, or use rolling event logs'},
-  {m:'Plan misread',s:'Explain output differs from what actually ran under AQE',x:'Use the final plan in the SQL tab after execution, or explain with the formatted mode after adaptive changes'}],
- watch:['Spark UI: Jobs, Stages, SQL and Executors tabs; look for failed tasks, retries, and lost executors','Driver log lines about dropped listener events or slow listeners','Event log size and History Server load time; explain(mode=formatted) for plans before running costly queries']}
-];
-
-(function(){
-const SP_P=4,spPart=k=>sHash(k)%SP_P;
-const SIMM={
- id:'spark',nodeLabel:'executors',nodeRange:[2,4,3],
- settings:[{id:'cache',label:'cache()',opts:['off','on'],def:'on'}],
- menu:[{op:'I',label:'INSERT row (append file)',args:[{n:'key',d:'u1',w:60},{n:'value',d:'alice',w:70}]},{op:'U',label:'UPDATE (rewrite partition)',args:[{n:'key',d:'u1',w:60},{n:'value',d:'alice2',w:70}]},{op:'D',label:'DELETE (filter + rewrite)',args:[{n:'key',d:'u1',w:60}]},{op:'R',label:'SELECT key (1 task)',args:[{n:'key',d:'u1',w:60}]},{op:'A',label:'SCAN all (count)',args:[]},{op:'K',label:'kill executor',args:[{n:'#',d:'1',w:40}]},{op:'H',label:'restart executor',args:[{n:'#',d:'1',w:40}]}],
- scenarios:[
-  {name:'insert, update, delete',desc:'Spark never edits a file. INSERT writes a new small file; UPDATE and DELETE read the whole partition, transform it, and write a replacement file. Output is staged first and only becomes visible when the driver commits, so readers always see a consistent snapshot. Key uniqueness is not enforced.',acts:['0 I u1 alice','1800 I u2 bob','3600 U u1 alice2','5600 R u1','7400 D u2','9200 A']},
-  {name:'executor lost mid-job',desc:'Kill an executor while a scan is running. Its in-flight task fails, the driver reschedules it on another executor, and the lost data is recomputed from the immutable source files (lineage). Cached partitions on the dead executor are gone. Try cache off/on.',acts:['0 I u1 a','1500 I u2 b','3000 I u3 c','4500 I u4 d','6000 A','7900 K 1','11500 A']},
- ],
- topo(n){
-  const nodes=[{id:'cli',x:14,y:160,w:90,h:70,label:'spark-submit'},{id:'drv',x:170,y:150,w:150,h:110,label:'Driver',badge:'DAG scheduler'},{id:'sto',x:700,y:150,w:180,h:190,label:'Storage (files)',badge:'S3 / HDFS'}];
-  const bh=Math.min(110,Math.floor(380/n)-10),y0=40+(380-n*(bh+10))/2;
-  for(let i=0;i<n;i++)nodes.push({id:'e'+i,x:440,y:y0+i*(bh+10),w:190,h:bh,label:'executor '+i,badge:'tasks'});
-  const edges=[['cli','drv']];for(let i=0;i<n;i++){edges.push(['drv','e'+i],['e'+i,'sto'])}edges.push(['drv','sto']);
-  return{nodes,edges,w:900,h:430,zones:[{x:428,y:y0-22,w:214,h:n*(bh+10)+30,label:'cluster · executors run tasks'}]};
- },
- init(n){const st={status:{cli:'up',drv:'up',sto:'up'},files:[],stg:[],cache:[],ver:0,jobs:0,done:{},n};for(let p=0;p<SP_P;p++){st.files.push([]);st.stg.push(null)}for(let i=0;i<n;i++){st.status['e'+i]='up';st.cache.push({});st.done['e'+i]=0}return st},
- apply(st,f){switch(f.op){
-   case'stage':st.stg[f.p]=f.files;break;
-   case'commit':if(st.stg[f.p]){st.files[f.p]=st.stg[f.p];st.stg[f.p]=null;st.ver++}break;
-   case'cache':st.cache[f.e][f.p]=f.ver;break;
-   case'task':st.done['e'+f.e]++;break;
-   case'down':st.status['e'+f.e]='down';st.cache[f.e]={};break;
-   case'up':st.status['e'+f.e]='up';break;
-   case'job':st.jobs++;break}},
- fxText(f){return{stage:`partition ${f.p}: staged ${f.files&&f.files.length} file(s) (not visible yet)`,commit:`partition ${f.p}: commit → new files visible`,cache:`executor ${f.e}: cached partition ${f.p}`,task:`executor ${f.e}: task done`,down:`executor ${f.e} lost (cache gone)`,up:`executor ${f.e} up`,job:'job submitted'}[f.op]||f.op},
- run(acts,n,set){
-  const W=SIMM.init(n),ev=[],pend=[],ap=f=>SIMM.apply(W,f),cacheOn=set.cache==='on';
-  const push=e=>{ev.push(e);if(e.fx.length)pend.push({at:e.t+e.d,e});return e};
-  const flush=t=>{pend.sort((x,y)=>x.at-y.at);while(pend.length&&pend[0].at<=t){pend.shift().e.fx.forEach(ap)}};
-  const jobs=[];let seq=0;
-  const ups=()=>[...Array(n).keys()].filter(i=>W.status['e'+i]==='up');
-  const rows=p=>W.files[p].flatMap(f=>f.rows);
-  // one task = launch -> (cache | read) -> compute [-> write staged] -> done
-  function runTask(job,p,e,start){
-   const te=[],ex='e'+e,add=x=>{te.push(x);return push(x)};
-   let t=start;const hit=job.kind==='R'||job.kind==='A'?(cacheOn&&W.cache[e][p]===W.ver):false;
-   add(E(t,500,'drv',ex,`task: partition ${p}`,'sched',[],'The driver sends one task per partition to an executor. A task is the unit of work: it processes exactly one partition.'));t+=500;
-   const fxs=[];
-   if(job.kind==='I'){add(E(t,400,ex,ex,'build 1 new row','info',[],'INSERT only needs to produce the new row; no existing data is read.'));t+=400}
-   else if(hit){add(E(t,400,ex,ex,`cache hit: partition ${p}`,'info',[],'cache() kept this partition in executor memory, so storage is not read again.'));t+=400}
-   else{const nf=W.files[p].length;add(E(t,500,ex,'sto',`read ${nf} file(s) of partition ${p}`,'read',[],'Reading a partition means opening every file that belongs to it (small files hurt).'));add(E(t+500,500,'sto',ex,`${rows(p).length} row(s)`,'data',[],'Rows come back from storage.'));t+=1000;
-     add(E(t,400,ex,ex,job.kind==='R'||job.kind==='A'?'filter / count':'apply '+(job.kind==='U'?'update':'delete'),'info',cacheOn&&(job.kind==='R'||job.kind==='A')?[{op:'cache',e,p,ver:W.ver}]:[],job.kind==='D'?'DELETE is a filter that drops the matching rows; the surviving rows are rewritten.':job.kind==='U'?'UPDATE maps matching rows to new values; every other row in the partition is copied unchanged (copy-on-write).':'The transformation runs lazily inside this task on the partition.'));t+=400}
-   if(job.kind==='I'||job.kind==='U'||job.kind==='D'){
-    let nf;const cur=W.files[p].flatMap(f=>f.rows);
-    if(job.kind==='I')nf=W.files[p].concat([{name:`part-${p}-${++seq}`,rows:[{k:job.key,v:job.val}]}]);
-    else{const r=cur.filter(x=>job.kind==='D'?x.k!==job.key:true).map(x=>job.kind==='U'&&x.k===job.key?{k:x.k,v:job.val}:x);nf=r.length?[{name:`part-${p}-${++seq}`,rows:r}]:[]}
-    add(E(t,600,ex,'sto',`write part-${p}-${seq} (staged)`,'write',[{op:'stage',p,files:nf}],job.kind==='I'?'A new immutable file is written next to the existing ones. Not visible to readers until the driver commits.':'The full replacement partition is written as a NEW file; old files are untouched until commit. This is why updates are expensive.'));t+=600}
-   add(E(t,400,ex,'drv','task finished','ack',[{op:'task',e}],'The executor reports success.'));t+=400;
-   const task={p,e,doneAt:t,events:te,job};job.tasks.push(task);return task}
-  function submit(t,kind,key,val,label,why){
-   const job={kind,key,val,tasks:[],fin:false,label};jobs.push(job);
-   push(E(t,400,'cli','drv',label,'write',[{op:'job'}],why||'The application calls an action; the driver turns it into a job.'));
-   const p=key?spPart(key):0,up=ups();
-   if(!up.length){push(E(t+400,300,'drv','cli','no executors available','fail',[],'All executors are down.'));job.fin=true;return}
-   push(E(t+400,300,'drv','drv',kind==='A'?`plan: scan → ${SP_P} tasks`:`plan: partition ${p} only (1 task)`,'info',[],kind==='A'?'A full scan needs one task for each partition.':'The key maps to one partition, so the other partitions are pruned: only one task runs.'));
-   const start=t+700;
-   if(kind==='A')for(let q=0;q<SP_P;q++)runTask(job,q,up[q%up.length],start);else runTask(job,p,up[p%up.length],start);
-  }
-  function finalize(job){
-   job.fin=true;const done=Math.max(...job.tasks.map(x=>x.doneAt));flush(done);
-   if(job.kind==='I'||job.kind==='U'||job.kind==='D'){const p=job.tasks[0].p;
-    push(E(done,500,'drv','sto',`commit partition ${p}`,'write',[{op:'commit',p}],'The driver commits atomically: only now does the new file set replace the old one. If it had crashed earlier, nothing would have changed.'));
-    const w=W.stg[p];push(E(done+500,400,'drv','cli',`OK · ${job.kind==='I'?'1 row appended':job.kind==='U'?'partition rewritten':'rows removed, partition rewritten'}`,'ack',[],'Job finished. Files per partition can be seen on the Storage node.'));flush(done+500)}
-   else if(job.kind==='R'){const p=job.tasks[0].p,m=rows(p).filter(x=>x.k===job.key);push(E(done,450,'drv','cli',m.length?m.map(x=>`"${x.v}"`).join(', ')+(m.length>1?'  ← DUPLICATE rows':''):'(no row)',m.length>1?'fail':'ack',[],m.length>1?'Spark does not enforce unique keys, so inserting the same key twice stores two rows.':'The task result goes back to the driver, then to the application.'))}
-   else{let c=0;for(let p=0;p<SP_P;p++)c+=rows(p).length;push(E(done,450,'drv','cli',`count = ${c}`,'ack',[],'Partial counts from every partition are combined by the driver.'))}
-  }
-  const finalizeDue=t=>{jobs.filter(j=>!j.fin&&j.tasks.length&&Math.max(...j.tasks.map(x=>x.doneAt))<=t).forEach(finalize)};
-  for(const a of acts){const t=a.t;flush(t);finalizeDue(t);flush(t);
-   const k=a.args[0]||'k',v=a.args[1]||'v';
-   if(a.op==='I')submit(t,'I',k,v,`INSERT ${k}=${v}`,'The application appends a row. Spark has no INSERT statement on files: it writes a new file.');
-   if(a.op==='U')submit(t,'U',k,v,`UPDATE ${k}=${v}`,'Files are immutable: an update is a job that rewrites the whole partition.');
-   if(a.op==='D')submit(t,'D',k,null,`DELETE ${k}`,'A delete is a filter + rewrite of the partition.');
-   if(a.op==='R')submit(t,'R',k,null,`SELECT ${k}`,'A point lookup is still a job: Spark prunes to one partition, but there is no index.');
-   if(a.op==='A')submit(t,'A',null,null,'SCAN count(*)','An action (count) triggers a job over all partitions.');
-   if(a.op==='K'){const i=+a.args[0]||0;if(i>=n||W.status['e'+i]!=='up')continue;
-    for(let q=pend.length-1;q>=0;q--){const e=pend[q].e;if((e.from==='e'+i||e.to==='e'+i)&&pend[q].at>t&&e.kind!=='fail'){e.fx=[];e.kind='fail';e.msg+=' ✕ lost';e.cause='The executor died before this completed.';pend.splice(q,1)}}
-    push(E(t,0,'drv','e'+i,`executor ${i} LOST`,'fail',[{op:'down',e:i}],'The driver notices the missed heartbeat. Everything running on it and everything it cached is gone.'));flush(t);
-    const orphan=[];jobs.forEach(j=>{if(j.fin)return;j.tasks.forEach(x=>{if(x.e===i&&x.doneAt>t)orphan.push(x)})});
-    const up=ups();let at=t+800;
-    orphan.forEach(x=>{const j=x.job;j.tasks=j.tasks.filter(y=>y!==x);
-     if(!up.length){push(E(t+800,0,'drv','drv','job fails: no executors left','fail',[],'Every executor is lost.'));j.fin=true;return}
-     const e2=up[x.p%up.length];push(E(at,500,'drv','drv',`retry partition ${x.p} on executor ${e2} (attempt 2)`,'sched',[],'Lineage: the partition is recomputed from the immutable source files. No data is lost, only time.'));runTask(j,x.p,e2,at+500)})}
-   if(a.op==='H'){const i=+a.args[0]||0;if(i>=n)continue;push(E(t,0,'drv','e'+i,`executor ${i} registers again`,'info',[{op:'up',e:i}],'A fresh executor joins with an empty cache.'));flush(t)}
-  }
-  jobs.filter(j=>!j.fin&&j.tasks.length).forEach(finalize);
-  return{events:ev};
- },
- lines(id,st){if(id==='cli'||id==='drv')return id==='drv'?[`jobs ${st.jobs}`,`committed versions ${st.ver}`]:[];
-  if(id==='sto')return st.files.map((fs,p)=>`p${p}: ${fs.length} file(s), ${fs.reduce((c,f)=>c+f.rows.length,0)} row(s)${st.stg[p]?' +staged':''}`);
-  const i=+id.slice(1);return[`tasks done ${st.done[id]}`,`cached: ${Object.keys(st.cache[i]).map(p=>'p'+p).join(' ')||'—'}`]},
- detail(id,st){if(id==='sto')return st.files.flatMap((fs,p)=>fs.length?fs.map(f=>`p${p} ${f.name}: ${f.rows.map(r=>r.k+'='+r.v).join(', ')}`):[`p${p}: (empty)`]).concat(st.stg.map((s,p)=>s?`p${p} STAGED (uncommitted): ${s.length} file(s)`:null).filter(Boolean));return SIMM.lines(id,st)}
+/* Production incidents: examples are illustrative, independent of the sample dataset. */
+const INCIDENTS = {
+  0: [
+    {title:'Too many small files',symptom:'The job spends ages listing files and launching tiny tasks.',cause:'Per-file metadata and open costs dominate the useful scan work.',kind:'blocks',before:[24,'tiny files'],after:[4,'compacted files'],beforeText:'Many file opens for very little data',afterText:'Fewer opens; larger useful reads',fix:'Compact upstream into larger columnar files. Spark can pack small files into scan tasks, but still has to list and open the original files.',cost:'Compaction is another write job. Keep enough files and splits to use the cluster.',watch:'SQL scan: file count and scan time. Stages: input bytes per task.'},
+    {title:'One huge gzip file',symptom:'One scan task runs while most cores sit idle.',cause:'A single gzip stream cannot be split into independently readable byte ranges.',kind:'bars',before:[1024,0,0,0],after:[256,256,256,256],unit:'MiB input',beforeText:'One reader owns the entire gzip stream',afterText:'Four readable files or splits',fix:'Rewrite upstream as several files or a splittable format such as Parquet. Repartitioning after the read only parallelizes later work.',cost:'Changing downstream shuffle partitions does not accelerate this initial scan.',watch:'Stage input bytes: one task has nearly all the data.'}
+  ],
+  1: [
+    {title:'The same source is scanned again',symptom:'Two actions repeat an expensive scan and transformation.',cause:'Lazy lineage is a recipe. Without persistence, each action can run that recipe again.',kind:'flow',before:['Read → transform → action A','Read → transform → action B'],after:['Read → transform → cache','Cached partitions → A + B'],beforeText:'Two actions repeat the expensive work',afterText:'Materialize once, then reuse',fix:'Persist the expensive shared result before the first action. Unpersist after the last consumer.',cost:'Caching consumes storage memory; evicted or lost blocks still need recomputation. Cache only data worth reusing.',watch:'Storage tab: cached fraction. SQL / Stages: repeated source scans.'}
+  ],
+  3: [
+    {title:'Executor lost → shuffle fetch fails',symptom:'ExecutorLostFailure, FetchFailed, then repeated map stages.',cause:'A reducer needs shuffle blocks on an executor or host that disappeared.',kind:'flow',before:['Map → executor local disk','Executor lost ✕ blocks unavailable','Reducer fetch ✕ → retry'],after:['Find OOM / eviction / disk cause','Recover missing map outputs','Reducer fetch ✓ → continue'],beforeText:'Retrying the reducer cannot recreate a missing block',afterText:'Recover the data and fix the source of loss',fix:'Check executor and cluster logs first. Fix heap or overhead pressure, failed disks, or preemption. Use supported shuffle preservation and graceful decommissioning for planned removals.',cost:'An external shuffle service can survive executor process loss, but not loss of its host or disk. More retries do not fix persistent loss.',watch:'Executors: removal reason. Stages: failed fetches and repeated attempts.'}
+  ],
+  5: [
+    {title:'One hot key holds the stage open',symptom:'Most tasks finish, but one reducer reads far more bytes and keeps running.',cause:'Hash partitioning sends every row of the same key to the same destination.',kind:'bars',before:[128,128,128,1024],after:[128,128,128,128,128,128,128,128,128,128,128],unit:'MiB shuffle',beforeText:'One 1 GiB partition dominates the tail',afterText:'Eligible SQL join: split the hot partition into eight reads',fix:'For eligible SQL joins, enable AQE and skewJoin. For a hot aggregation key, pre-aggregate or use salting plus a second aggregation where mathematically valid.',cost:'Skew joins may replicate the matching side. More hash partitions alone cannot split one hot key; AQE skewJoin does not solve every groupBy.',watch:'Stages: max vs median shuffle read and task duration. SQL: final adaptive plan.'},
+    {title:'Large partitions → spill or OOM',symptom:'Heavy disk spill, long GC pauses, or an executor out-of-memory error.',cause:'Several concurrent tasks compete for the same executor heap; their working sets are too large.',kind:'bars',before:[2048,2048],after:[512,512,512,512,512,512,512,512],unit:'MiB shuffle',beforeText:'Two tasks each handle 2 GiB',afterText:'Eight smaller tasks each handle 512 MiB',fix:'Increase shuffle partitions, reduce rows and columns before shuffling, or reduce concurrent tasks per executor. Add memory when the working set justifies it.',cost:'More partitions add scheduling and file overhead. Spill is a normal fallback, not automatically a failure; byte size is not the same as in-memory state size.',watch:'Stages: disk spill, peak execution memory and GC time. Logs distinguish JVM heap OOM from container overhead limits.'},
+    {title:'A large shuffle for a small join side',symptom:'Both sides are shuffled even though the filtered dimension is small.',cause:'The plan uses a shuffle join; estimates or join conditions may prevent a better strategy.',kind:'flow',before:['Large table → Exchange','Small dimension → Exchange','Sort + join both shuffled sides'],after:['Small dimension → broadcast','Large table → local join','No large-table join shuffle'],beforeText:'Both inputs cross the network by join key',afterText:'Broadcast a genuinely small, eligible join side',fix:'Inspect the physical plan and refresh statistics. Let AQE convert an eligible join, or test a broadcast hint when the build side safely fits.',cost:'Every executor stores the broadcast relation; the driver also prepares it. An oversized broadcast can fail, and not all join types support this strategy.',watch:'SQL: SortMergeJoin vs BroadcastHashJoin, broadcast size, and the final adaptive plan.'}
+  ],
+  6: [
+    {title:'collect() overwhelms the driver',symptom:'Driver OOM or spark.driver.maxResultSize exceeded.',cause:'The entire result converges on one process even though executors computed it in parallel.',kind:'flow',before:['Executor 1 + 2 + 3 + 4','All result rows → one driver','Result limit / driver heap exceeded'],after:['Executor 1 + 2 + 3 + 4','Distributed write → storage','Driver receives completion metadata'],beforeText:'More executors do not increase driver capacity',afterText:'Keep the large result distributed',fix:'Write large results to storage. Use take or limit for inspection. Increase driver memory only for a bounded result that must fit there.',cost:'Serialized result size understates expanded JVM or Python objects. Increasing maxResultSize alone removes a guardrail without adding memory.',watch:'Driver logs and heap / GC metrics; result size in failed task or action messages.'},
+    {title:'Thousands of tiny output files',symptom:'The write succeeds, but subsequent reads spend time opening small files.',cause:'Too many output tasks or high-cardinality partitionBy creates a fragmented dataset.',kind:'blocks',before:[24,'small output files'],after:[4,'larger output files'],beforeText:'Many writers produce many tiny files',afterText:'Choose a useful output partition count',fix:'Use AQE coalescing or coalesce before writing when partitions are already balanced. Use repartition when redistribution is needed; compact partitioned tables when appropriate.',cost:'coalesce avoids a full shuffle but can leave uneven work. repartition costs a shuffle. coalesce(1) creates a single-writer bottleneck; files do not always equal task count.',watch:'Output file sizes and counts, write task durations, and commit latency.'}
+  ]
 };
+function prodBars(values, unit, max=Math.max(...values)) {
+  return `<div class="prod-bars" role="img" aria-label="${esc(values.join(', ')+' '+unit)}">${values.map((v,i)=>`<div class="prod-bar-row"><span>P${i+1}</span><div><i style="width:${v/max*100}%"></i></div><b>${v} <small>${unit}</small></b></div>`).join('')}</div>`;
+}
+function incidentVisual(c, fixed) {
+  const values=fixed?c.after:c.before;
+  if(c.kind==='bars') return prodBars(values,c.unit,Math.max(...c.before,...c.after));
+  if(c.kind==='blocks') return `<div class="prod-files" role="img" aria-label="${values[0]} ${values[1]}">${Array.from({length:values[0]},(_,i)=>`<span>${i+1}</span>`).join('')}</div><b>${values[0]} ${values[1]}</b>`;
+  return `<ol class="prod-flow">${values.map(v=>`<li>${esc(v)}</li>`).join('')}</ol>`;
+}
+const incidentState={};
+function renderProdFailures(k,host) {
+  const cases=INCIDENTS[k],box=host.parentElement;
+  box.hidden=!cases;
+  if(!cases) return;
+  box.querySelector('.stepno').innerHTML='<i>6</i>PROD failure modes · see the cause, try the fix';
+  const state=incidentState[k]||(incidentState[k]={index:0,fixed:false}),c=cases[state.index];
+  host.innerHTML=`<p class="mut">Common incidents for this chapter. These diagrams use illustrative data.</p>
+    <div class="prod-case-tabs" aria-label="Production incidents">${cases.map((v,i)=>`<button data-case="${i}" aria-pressed="${state.index===i}">${v.title}</button>`).join('')}</div>
+    <article class="prod-incident"><h3>${c.title}</h3><p>${c.symptom}</p>
+      <div class="prod-compare"><div><h4>Why it happens</h4><p>${c.cause}</p><h4>Try this fix</h4><p>${c.fix}</p></div>
+      <div class="prod-diagram ${state.fixed?'fixed':''}"><div class="prod-case-tabs" aria-label="Compare failure and mitigation"><button data-fixed="false" aria-pressed="${!state.fixed}">Failure</button><button data-fixed="true" aria-pressed="${state.fixed}">After mitigation</button></div>
+      <div aria-live="polite">${incidentVisual(c,state.fixed)}<p class="note">${state.fixed?c.afterText:c.beforeText}</p></div></div></div>
+      <div class="prod-evidence"><p><b>Trade-off.</b> ${c.cost}</p><p><b>Verify in Spark UI.</b> ${c.watch}</p></div>
+    </article>`;
+}
 
-Lab.sim(SIMM);})();
+/* Deploy on PROD: transparent arithmetic, not a runtime predictor. */
+const PROD_DEFAULTS={instances:4,cores:4,memory:16,driver:4,fraction:0.6,partitions:200,parallelism:48,aqe:true,coalesce:true,skew:true};
+const prod={...PROD_DEFAULTS};
+const PARAMS={
+ resources:[
+  ['instances','spark.executor.instances',[2,4,8,16],'executors','More executors → more task slots and more total resource requests. With dynamic allocation enabled, the count can change.'],
+  ['cores','spark.executor.cores',[1,2,4,5,8],'cores / executor','More cores → more simultaneous tasks sharing one heap and I/O path. Start by testing 4–5; there is no universal 5-core limit.'],
+  ['memory','spark.executor.memory',[4,8,16,32],'GiB heap / executor','More heap → more room for task state and cache, but fewer executors may fit on the same nodes. Container memory also needs overhead.'],
+  ['driver','spark.driver.memory',[1,2,4,8,16],'GiB driver heap','More driver heap → more room for planning and bounded results. Prefer distributed writes over a massive collect().']
+ ],
+ memory:[
+  ['fraction','spark.memory.fraction',[0.4,0.5,0.6,0.7,0.8],'fraction · default 0.6','Higher → a larger shared execution + storage pool, less heap left for user objects. Usually keep the default.'],
+  ['partitions','spark.sql.shuffle.partitions',[50,200,512,1024,4096],'partitions · default 200','Higher → smaller SQL shuffle partitions and more tasks. Too low risks spill; too high adds overhead. AQE may adjust the final count.'],
+  ['parallelism','spark.default.parallelism',[8,16,32,48,64,128],'RDD partitions','Used by RDD operations when a count is not supplied; its default depends on context. It does not set SQL shuffle partitions.']
+ ],
+ aqe:[
+  ['aqe','spark.sql.adaptive.enabled',null,'default true since Spark 3.2','The master switch: adapt eligible SQL query plans using runtime statistics, including possible join conversion.'],
+  ['coalesce','spark.sql.adaptive.coalescePartitions.enabled',null,'default true','Merge small post-shuffle partitions → fewer tiny tasks. Requires AQE.'],
+  ['skew','spark.sql.adaptive.skewJoin.enabled',null,'default true','Split eligible skewed join partitions → less straggler work. Requires AQE; not a general groupBy fix.']
+ ]
+};
+function prodControls(group) {
+  return PARAMS[group].map(([id,key,opts,unit,help])=>`<label class="prod-param" for="prod-${id}"><code>${key}</code><span class="prod-input">${opts?`<select id="prod-${id}" data-prod="${id}">${opts.map(v=>`<option value="${v}" ${v===prod[id]?'selected':''}>${v}</option>`).join('')}</select>`:`<input id="prod-${id}" data-prod="${id}" type="checkbox" ${prod[id]?'checked':''}>`}<span>${unit}</span></span><small>${help}</small></label>`).join('');
+}
+function prodMetric(value,label) {return `<div><b>${value}</b><span>${label}</span></div>`;}
+function renderProd() {
+  const slots=prod.instances*prod.cores, pool=(prod.memory-300/1024)*prod.fraction;
+  const perTask=pool/prod.cores, partitionMiB=65536/prod.partitions;
+  $('#prod-resources-out').innerHTML=`<h4>How work is spread</h4><div class="prod-executors">${Array.from({length:prod.instances},(_,i)=>`<div class="prod-executor"><b>Executor ${i+1}</b><div>${Array.from({length:prod.cores},()=>'<i title="One task slot"></i>').join('')}</div><small>${prod.memory} GiB heap</small></div>`).join('')}</div>
+    <div class="prod-metrics">${prodMetric(slots,'concurrent task slots')}${prodMetric(prod.instances*prod.memory+' GiB','total executor heap')}${prodMetric(prod.driver+' GiB','separate driver heap')}</div>
+    <p><b>${slots} tasks can run at once</b> if each needs one CPU and enough partitions and cluster capacity exist. More slots help until CPU, disk, network or available work becomes the bottleneck.</p>
+    <p class="note">Static allocation example; one executor is one process, not one machine. YARN / Kubernetes containers need heap + memoryOverhead + any separately configured off-heap / PySpark allocation. Increasing heap without headroom can leave executors pending.</p>
+    <p class="note">Driver memory is separate from executor memory. Set deployment properties at application launch, e.g. via spark-submit; changing this page does not resize a running application.</p>`;
+  $('#prod-memory-out').innerHTML=`<h4>Inside each ${prod.memory} GiB executor heap</h4><div class="prod-memory-bar" role="img" aria-label="${pool.toFixed(1)} GiB execution and storage; ${((prod.memory-300/1024)*(1-prod.fraction)).toFixed(1)} GiB user heap; 300 MiB reserved"><span style="flex:${prod.fraction}">Execution + storage</span><span style="flex:${1-prod.fraction}">User</span></div>
+    <p class="note">(${prod.memory} GiB − 300 MiB reserved) × ${prod.fraction} = <b>${pool.toFixed(1)} GiB</b> shared pool. Execution and storage share this pool dynamically; it is not a fixed per-task allocation.</p>
+    <div class="prod-metrics">${prodMetric(perTask.toFixed(2)+' GiB','pool ÷ concurrent tasks (illustration)')}${prodMetric(partitionMiB.toFixed(0)+' MiB','average SQL shuffle partition')}${prodMetric(Math.ceil(prod.parallelism/slots),'waves for the example RDD stage')}</div>
+    <div class="prod-partition-demo"><span>Fixed 64 GiB shuffle</span><b>÷ ${prod.partitions} partitions</b><span>≈ ${partitionMiB.toFixed(0)} MiB each</span></div>
+    <p>${partitionMiB>1024?'Few large partitions: each task must process more bytes; inspect spill and memory pressure.':partitionMiB<128?'Many small partitions: more scheduling overhead; AQE coalescing can merge small outputs.':'A reasonable size to test for this example; verify actual task sizes, spill and duration.'}</p>
+    <p class="note">128 MiB–1 GiB is a workload-dependent starting range, not a guarantee. Use shuffle bytes, not source size, to estimate. Skew and in-memory expansion can make the average misleading. AQE advisory size is a separate setting (default 64 MiB).</p>
+    <p><b>RDD example:</b> ${prod.parallelism} partitions on ${slots} slots → ${Math.ceil(prod.parallelism/slots)} scheduling waves. A common starting experiment is 2–3 tasks per available core (${slots*2}–${slots*3} here); measure rather than treating it as a rule.</p>`;
+  const before=[16,16,16,16,16,16,16,1024];
+  const small=prod.aqe&&prod.coalesce?[112]:before.slice(0,7);
+  const hot=prod.aqe&&prod.skew?Array(8).fill(128):[1024];
+  const after=[...small,...hot];
+  $('#prod-aqe-out').innerHTML=`<h4>One eligible skewed SQL join</h4><p class="note">Illustration: seven 16 MiB partitions + one 1 GiB hot partition. Advisory size is set to 128 MiB and coalescePartitions.parallelismFirst=false for this example. Exact grouping depends on the plan and runtime statistics.</p>
+    <div class="prod-aqe-compare"><div><b>Before · 8 partitions</b>${prodBars(before,'MiB',1024)}</div><div><b>After · ${after.length} partitions</b>${prodBars(after,'MiB',1024)}</div></div>
+    <div class="prod-metrics">${prodMetric(prod.aqe?'ON':'OFF','AQE master switch')}${prodMetric(prod.aqe&&prod.coalesce?'7 → 1':'7 → 7','small partitions')}${prodMetric(prod.aqe&&prod.skew?'1 → 8':'1 → 1','hot partition')}</div>
+    <p>${!prod.aqe?'AQE is off: both child settings have no effect, even when checked.':`${prod.coalesce?'Small outputs merge, reducing task-launch overhead.':'Small outputs stay separate.'} ${prod.skew?'The hot join partition splits into parallel reads; matching-side data may be replicated.':'The hot join partition remains a straggler.'}`}</p>
+    <p class="note">With default skew detection thresholds, a partition must exceed both 256 MiB and 5× the median. This hot partition qualifies. Check the final adaptive plan in the SQL tab; AQE does not make every query or hot-key aggregation faster.</p>`;
+}
+function mountProd() {
+  $('#build').remove(); $('#capstone').remove(); $('#chDeepBox')?.remove(); $('#deepStore')?.remove();
+  $('nav a[href="#build"]').remove();
+  const link=$('nav a[href="#capstone"]');link.href='#deploy-prod';link.textContent='Deploy on PROD';
+  $('.foot').insertAdjacentHTML('beforebegin',`<section class="sec" id="deploy-prod"><div class="sec-h"><div class="kick">Deploy on PROD</div><h2>Change a setting. See what changes.</h2><p>Start with the bottleneck in Spark UI, change one setting, then compare. These small models explain resource shape and partition sizes; they do not predict job runtime.</p></div>
+    <div class="bar"><button id="prod-reset">Reset all settings</button><span class="note">Example values, not a production sizing prescription · defaults reference Spark 3.5.7</span></div>
+    ${[['resources','1','Cluster & Resource Allocation','How many executors? How much work can each run?'],['memory','2','Memory & Shuffling','How much data does each task carry?'],['aqe','3','Adaptive Query Execution (AQE)','Which decisions can Spark adjust while the query runs?']].map(([id,n,title,sub])=>`<article class="card prod-panel" id="prod-panel-${id}"><div class="prod-panel-heading"><span>${n}</span><div><h3>${title}</h3><p>${sub}</p></div></div><div class="prod-layout"><div class="prod-controls">${prodControls(id)}</div><div class="prod-preview" id="prod-${id}-out" aria-live="polite"></div></div></article>`).join('')}
+    <p class="note prod-sources">Official reference: <a href="https://spark.apache.org/docs/3.5.7/configuration.html">Spark configuration</a> · <a href="https://spark.apache.org/docs/3.5.7/tuning.html">Tuning guide</a> · <a href="https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html">SQL tuning &amp; AQE</a>. Verify defaults for your Spark distribution.</p></section>`);
+  $('#deploy-prod').addEventListener('change',e=>{const input=e.target.closest('[data-prod]');if(!input)return;prod[input.dataset.prod]=input.type==='checkbox'?input.checked:+input.value;renderProd()});
+  $('#prod-reset').onclick=()=>{Object.assign(prod,PROD_DEFAULTS);$$('[data-prod]').forEach(el=>{if(el.type==='checkbox')el.checked=prod[el.dataset.prod];else el.value=prod[el.dataset.prod]});renderProd()};
+  $('#chTrade').addEventListener('click',e=>{const c=e.target.closest('[data-case]'),f=e.target.closest('[data-fixed]'),state=incidentState[cur];if(c){state.index=+c.dataset.case;state.fixed=false}else if(f)state.fixed=f.dataset.fixed==='true';else return;renderProdFailures(cur,$('#chTrade'));const selector=c?`[data-case="${state.index}"]`:`[data-fixed="${state.fixed}"]`;$('#chTrade').querySelector(selector).focus({preventScroll:true})});
+  renderProd();
+}
+Lab.start({phases:PHASES,ovs:OVS,ctl:ctlHTML,state:()=>S,renderTrade:renderProdFailures});
+mountProd();
 
-Lab.start({phases:PHASES,detail:DETAIL,ovs:OVS,ctl:ctlHTML,state:()=>S});
 </script>
 </body>
 </html>
