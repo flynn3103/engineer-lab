@@ -15,6 +15,64 @@
 .sst.skip{opacity:.45}
 .le{display:inline-block;min-width:34px;text-align:center;font-family:ui-monospace,monospace;font-size:10.5px;border:1px solid var(--line);border-radius:4px;padding:1px 4px;margin:1px}
 .le.c{border:2px solid var(--ok);font-weight:700}
+/* Production tuning and incident comparisons */
+.ops-panel{margin:18px 0;padding:20px}
+.ops-grid{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:20px}
+.ops-controls{display:grid;gap:14px;align-content:start}
+.ops-controls label{display:grid;gap:5px;border-bottom:1px solid var(--line);padding-bottom:13px;font-size:13px}
+.ops-controls label:last-child{border:0}
+.ops-controls select{width:max-content;max-width:100%}
+.ops-controls small,.ops-muted{color:var(--mut);font-size:12px;line-height:1.5}
+.ops-preview{min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:16px;font-size:13px}
+.ops-preview h4{margin:0 0 12px}
+.ops-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}
+.ops-metrics div{border-top:2px solid var(--acc);padding-top:7px;min-width:0}
+.ops-metrics b{display:block;font-size:17px}.ops-metrics span{display:block;font-size:11px;color:var(--mut)}
+.ops-replicas{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.ops-replicas span{border:1px solid var(--line);border-radius:8px;padding:7px 11px;background:var(--card)}
+.ops-replicas .hit{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 13%,var(--card))}
+.ops-replicas .miss{border-color:var(--bad);opacity:.7}
+.ops-bar{height:22px;display:flex;border-radius:5px;overflow:hidden;margin:10px 0}
+.ops-bar span{min-width:0;display:grid;place-items:center;font-size:11px;background:var(--acc);color:white}
+.ops-bar span+span{background:var(--soft);color:var(--ink)}
+.ops-case-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 18px}
+.ops-case-tabs button{font-size:12px;line-height:1.25;text-align:left}
+.ops-case-tabs button[aria-selected="true"],.ops-case-tabs button[aria-pressed="true"]{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 12%,var(--card));font-weight:700}
+.ops-incident h3{margin:0 0 5px}.ops-incident>p{margin:0 0 15px}
+.ops-context{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin:12px 0}
+.ops-context>div,.ops-fix{border:1px solid var(--line);border-radius:9px;padding:12px;min-width:0}
+.ops-context h4,.ops-fix h4{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);margin:0 0 8px}
+.ops-context p{font-size:13px;margin:0}.ops-context pre{font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 6px;padding:9px;border-radius:6px;background:var(--soft)}
+.ops-context small{font-size:11px;color:var(--mut)}
+.ops-stage{border:1px solid var(--line);border-radius:11px;background:var(--bg);padding:14px;margin:15px 0}
+.ops-stage-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ops-stage-head b{font-size:13px}.ops-stage-head .ops-case-tabs{margin:0}
+.ops-stage-caption{font-size:12px;color:var(--mut);margin:10px 0 0}
+.ops-chart{display:grid;gap:7px;margin:15px 0}
+.ops-chart-row{display:grid;grid-template-columns:minmax(55px,95px) minmax(0,1fr) 42px;gap:8px;align-items:center;font-size:11px}
+.ops-chart-track{background:var(--soft);border-radius:5px;height:21px;overflow:hidden}
+.ops-chart-track i{display:block;height:100%;background:var(--bad);border-radius:5px;min-width:3px}
+.ops-stage.fixed .ops-chart-track i{background:var(--ok)}
+.ops-chart-row strong{text-align:right;font-variant-numeric:tabular-nums}
+.ops-node-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:16px 0}
+.ops-node{background:var(--card);border:2px solid var(--line);border-radius:9px;text-align:center;padding:12px 5px;min-width:0}
+.ops-node.good{border-color:var(--ok)}.ops-node.bad{border-color:var(--bad)}.ops-node.muted{opacity:.55}
+.ops-node b{display:block;font-size:14px}.ops-node span{font-size:11px;overflow-wrap:anywhere}
+.ops-files{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:4px;margin:16px 0}
+.ops-file{display:grid;place-items:center;min-height:37px;border:1px solid var(--line);border-radius:4px;font-size:10px;background:var(--card)}
+.ops-file.open{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,var(--card))}.ops-file.needed{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,var(--card))}.ops-file.skip{opacity:.45}
+.ops-file-summary{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--mut)}
+.ops-time{display:flex;align-items:stretch;gap:6px;margin:16px 0;overflow-x:auto}
+.ops-time-point{flex:1;min-width:72px;border:1px solid var(--line);border-top:4px solid var(--acc);border-radius:6px;padding:8px;background:var(--card);font-size:11px}
+.ops-time-point.bad{border-top-color:var(--bad)}.ops-time-point.good{border-top-color:var(--ok)}
+.ops-time-point b{display:block;font-size:10px;color:var(--mut);margin-bottom:5px}.ops-time-arrow{align-self:center;color:var(--mut)}
+.ops-quorum{display:grid;grid-template-columns:1fr 25px 1fr;gap:8px;align-items:center;margin:16px 0}
+.ops-quorum-side{border:1px solid var(--line);border-radius:9px;background:var(--card);padding:12px;text-align:center;font-size:12px}
+.ops-quorum-side b{display:block;font-size:24px}.ops-quorum-side.bad{border-color:var(--bad)}.ops-quorum-side.good{border-color:var(--ok)}
+.ops-fix ol{margin:0;padding-left:20px;display:grid;gap:6px;font-size:13px}.ops-fix li::marker{color:var(--acc)}
+.ops-evidence{background:var(--soft);border-radius:8px;padding:11px;font-size:12px;margin-top:12px}
+.ops-evidence p{margin:5px 0}.ops-evidence a{overflow-wrap:anywhere}
+@media(max-width:760px){.ops-grid,.ops-context{grid-template-columns:1fr}.ops-panel{padding:14px}.ops-files{grid-template-columns:repeat(6,minmax(0,1fr))}.ops-node-grid{gap:4px}.ops-node{padding:8px 2px}.ops-case-tabs[role=tablist]{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}.ops-case-tabs[role=tablist] button{flex:none;white-space:nowrap}}
 
 </style>
 </head>
@@ -57,7 +115,7 @@ const STORY={
  chapters:[
   {ask:'Which machine owns customer C101’s orders?',
    why:'40 million customers cannot live on one machine. Every client and every node must agree on the owner of a row <b>without asking anyone</b>.',
-   v0:{name:'Hash the key and take the remainder',code:'owner = hash(key) % nodes.length',breaks:'Add a 5th node and the divisor changes from 4 to 5: roughly <b>80% of keys get a new owner</b>, so you must move most of your data. (The deep dive at the bottom of the page measures this on your data.)'},
+   v0:{name:'Hash the key and take the remainder',code:'owner = hash(key) % nodes.length',breaks:'Add a 5th node and the divisor changes from 4 to 5: roughly <b>80% of keys get a new owner</b>, so you must move most of your data. (The deep dive in this chapter measures this on your data.)'},
    design:'Hash keys onto a ring, place nodes on the same ring. A key belongs to the next node clockwise, so a new node only steals a slice from its neighbours.',
    predict:{q:'You add a 5th node to a 4-node ring. About how many keys change owner?',opts:['About 80%, like <code>hash % N</code>','About 20%: only the slice the new node takes over','None: the ring never moves keys'],ans:1,why:'Only the token range the new node takes over moves, about 1/N of the data. That is the whole point of consistent hashing.'},
    build:{intro:'You need four small pieces, each testable on its own:',
@@ -65,21 +123,21 @@ const STORY={
     code:'token = hash64(encode(partitionKey))\ni = lowerBound(ring, token)           // wraps to 0 at the end\nowner = ring[i % ring.length].node\nreplicas = next RF distinct nodes clockwise from i',
     rule:'Every client and every node computes the <b>same token and the same owner</b> from the same key bytes.'}},
   {ask:'A node dies in the middle of a write. Is the order lost?',
-   why:'With one copy, yes. With several copies the question becomes: <b>how many must answer</b> before you tell the client OK?',
+   why:'With one copy, yes. With several copies the question becomes: <b>how many must answer</b> before you tell the client OK? This chapter is about row data: quorum counts responses from replicas, but does not put concurrent writes into one agreed order.',
    v0:{name:'Write to the owner, replicate in the background',code:'owner.write(row)\nreturn OK            // replicas catch up later',breaks:'The owner can crash <b>after</b> the OK but before copying the row: an <b>acknowledged write is lost</b>. A read from a lagging replica returns stale data.'},
    design:'Any node can be the coordinator. It sends the write to all 3 replicas in parallel and answers once enough of them acknowledge (the consistency level).',
    predict:{q:'RF = 3. You write at ONE, then read at ONE from a different replica. Can the read return the old value?',opts:['Never: the write was acknowledged','Yes, if that replica missed or has not applied the write yet','Only if two nodes are down'],ans:1,why:'ONE only waits for a single replica. Another replica may not have the write yet, so ONE + ONE gives no overlap. QUORUM + QUORUM always overlaps (2 + 2 > 3).'},
    build:{steps:['The coordinator finds the replicas from the ring (chapter 1) and sends the mutation to <b>all</b> live ones.','Count ACKs; reply to the client when you have <code>need</code> of them.','Refuse early (<i>Unavailable</i>) if fewer than <code>need</code> replicas are alive.','Reads ask <code>need</code> replicas and return the <b>highest version</b>.'],
     code:'need = { ONE: 1, QUORUM: floor(rf/2)+1, ALL: rf }[cl]\nacks = sendToAll(replicas, mutation)\nif (acks >= need) reply(OK)\n// read: ask `need` replicas, return max(version)',
-    rule:'<b>R + W &gt; RF</b>: every read quorum overlaps the latest write quorum.'}},
+    rule:'<b>R + W &gt; RF</b>: a read set intersects the acknowledged write set for a completed write. Concurrent conflicting writes still need version conflict resolution; quorum overlap is not a total order or a transaction.'}},
   {ask:'The process is killed right after we said OK. Is the data still there?',
    why:'RAM is fast but forgets on a crash. Disk is durable but slow for random writes. A database needs both speed and durability.',
    v0:{name:'Update the row in place on disk',code:'page = disk.read(pageOf(key))\npage.update(row)\ndisk.write(page)',breaks:'Every write is a <b>random disk I/O</b>, which caps throughput. A crash halfway through writing a page can <b>corrupt</b> it.'},
-   design:'Append every write to a sequential commit log and fsync it, apply it to a sorted in-memory memtable, and flush full memtables to immutable sorted files (SSTables).',
-   predict:{q:'The node crashes right after ACK, before any flush. What does it recover on restart?',opts:['Nothing: the memtable lived in RAM','Every acknowledged write: the commit log is replayed','Only what is already in SSTables'],ans:1,why:'The commit log was fsynced before the ACK. On restart the node replays frames newer than the last flush and rebuilds the memtable.'},
+   design:'Append writes to a sequential commit log, apply them to a sorted memtable, then flush immutable SSTables. This lab models sync-before-ACK for strict local crash durability; ScyllaDB’s periodic commitlog mode can ACK before fsync, while batch mode waits for the sync.',
+   predict:{q:'In this lab’s sync-before-ACK mode, the node crashes right after ACK, before any flush. What does it recover?',opts:['Nothing: the memtable lived in RAM','Every acknowledged write: the commit log is replayed','Only what is already in SSTables'],ans:1,why:'In this mode the commit log was synced before ACK. Restart replays frames newer than the last flush and rebuilds the memtable.'},
    build:{steps:['<b>Commit log:</b> append <code>{seq,key,value,version}</code>, then <code>fsync</code>, then ACK.','<b>Memtable:</b> a sorted map; newest version of a key wins.','<b>Flush:</b> when the memtable passes its budget, write its sorted rows to a temp file, fsync, then publish it with an atomic manifest swap.','<b>Recovery:</b> load the manifest, replay only log frames with <code>seq &gt; flushedSeq</code>.'],
     code:'write(m): log.append(m); log.fsync(); memtable.put(m); ack()\nif (memtable.size > BUDGET):\n  sst = writeSorted(memtable.freeze())   // temp file + fsync\n  manifest.publish(sst, flushedSeq)      // atomic rename\n  log.truncate(flushedSeq)\nrecover(): replay log frames where seq > manifest.flushedSeq',
-    rule:'<b>ACK only after the log is durable</b>, and drop log segments only after the SSTable is published.'}},
+    rule:'For strict local durability, <b>ACK only after the log is durable</b>; retire log segments only after the SSTable is published. Check production commitlog_sync mode before assuming this guarantee.'}},
   {ask:'One row can live in the memtable and a dozen files. How do we read it without opening them all?',
    why:'Every flush creates another file. Newer data shadows older data, so a read must still find the newest version of the key.',
    v0:{name:'Scan every file and merge',code:'for f in [memtable, ...sstables]:\n  scan(f).filter(key)',breaks:'Cost grows with <b>files &times; size</b> and gets worse with every flush. Most files do not even contain the key.'},
@@ -113,26 +171,18 @@ const STORY={
     code:'move(tablet, from, to):\n  stream(snapshot); stream(changesSince(snapshot))\n  fence(from, epoch+1)\n  metadata.commit(tablet, replicas=[..to..], epoch+1)',
     rule:'<b>Exactly one replica set is authoritative per epoch</b>, and epochs only increase.'}},
   {ask:'Who decides the tablet map when nodes disagree or the network splits?',
-   why:'Tablet placement must have <b>one agreed order</b> of changes. Leaderless QUORUM gives no total order.',
+   why:'Tablet placement must have <b>one agreed order</b> of changes. Chapter 2 can acknowledge row writes on overlapping replica sets, but it cannot decide whether “move tablet” happened before or after “split tablet” when coordinators disagree.',
    v0:{name:'Let every node edit the map and gossip it',code:'node.map[tablet] = newReplicas\ngossip(node.map)',breaks:'A network split lets both sides change placement: <b>two owners for the same range</b>, and last-write-wins cannot repair that.'},
-   design:'Raft: one leader per term replicates a log to followers; an entry is committed once a majority stores it; a new leader can only win if its log is up to date.',
+   design:'For the metadata in this model, Raft elects one leader per term and commits placement changes in log order after a majority stores them. The minority cannot commit a competing map; ordinary row writes continue through the chapter 2 path.',
    predict:{q:'A 5-member group splits into 2 | 3. Which side can commit new entries?',opts:['Both sides','Only the 3-member majority','Neither side'],ans:1,why:'Commit needs a majority (3 of 5). The 2-side cannot elect a leader or commit, so there is never a second authoritative history.'},
    build:{steps:['Persist <code>(currentTerm, votedFor, log)</code> before replying to anyone.','Follower &rarr; candidate on election timeout; vote only for a candidate whose log is at least as up to date.','Leader sends <code>AppendEntries</code> (also as heartbeat); followers truncate conflicts.','Commit index = highest index stored on a majority <i>in the current term</i>; apply entries in order.'],
     code:'onTimeout(): term++; vote(self); ask all RequestVote\nleader: AppendEntries(prevIdx, prevTerm, entries)\ncommitIdx = majority(matchIndex) where log[idx].term == term',
     rule:'A committed entry exists on a majority, so <b>every future leader contains it</b>.'}}
  ],
- milestones:[
-  {t:'Token ring',test:'The same key gives the same owner on every node; adding a node moves about 1/N of keys.'},
-  {t:'Single-node storage',test:'<code>kill -9</code> right after an ACK loses nothing (commit log + memtable + flush).'},
-  {t:'Reads across files',test:'Results always equal a plain in-memory map (your oracle), with Bloom + index on or off.'},
-  {t:'Compaction (start with size-tiered)',test:'Read results are identical before and after; file count stays bounded.'},
-  {t:'Replication and consistency levels',test:'Kill any 1 of 3 replicas: QUORUM reads and writes still succeed.'},
-  {t:'Tombstones and TTL',test:'A delete survives compaction and repair; nothing is resurrected.'},
-  {t:'Tablets, then Raft',test:'Move a tablet under write load with no lost write; split the cluster and see only the majority commit.'}],
- capstone:{title:'Put it together: a live cluster',lead:'Everything from the chapters, running at once. Play a scenario, scrub the timeline, tap any node or event to see why it happened, then kill a node.'},
- extras:[{id:'dd1b',title:'Consistent hashing vs hash % N',sub:'chapter 1'},{id:'dd2b',title:'Bloom filter explorer',sub:'chapter 4'},{id:'dd3b',title:'Leaderless QUORUM vs Raft',sub:'chapters 2 and 8'}]
+ extras:[]
 };
 </script>
+<script src="./scylla-incidents.js"></script>
 <script>
 Lab.mount(STORY);
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
@@ -516,7 +566,7 @@ function draw2(p){
     rd=`<h3>Read experiment: key <span class="mono">${esc(short(rk.replace(/\d+:/g,'').replace(/(.)$/,'$1'),30))}</span> (replicas read after the failed node is back)</h3>
     <table><tr><th>replica</th><th>local winner</th></tr>${e0.ws.map(x=>`<tr><td>${nn(x.node)}</td><td class="mono">${x.w?`v${x.w.ver} ${x.w.kind}${x.w.exp!=null?' exp '+x.w.exp:''}`:'<span class="bad">nothing (missed)</span>'}${x.w&&e0.truth&&x.w.ver<e0.truth.ver?' <span class="tag r">stale</span>':''}</td></tr>`).join('')}</table>
     <table style="margin-top:6px"><tr><th>read at</th><th>replicas asked</th><th>result</th><th>can return stale?</th></tr>${ex.map(({cl,e})=>`<tr><td><b>${cl}</b> (${e.need})</td><td class="mono">${e.outs.map(x=>'{'+x.nodes.map(nn).join(',')+'}').join(' ')}</td><td class="mono">${e.outs.map(x=>x.w?'v'+x.w.ver:'∅').join(' / ')}</td><td>${e.stale?'<b class="bad">yes</b>':'<b class="ok">no</b>'}</td></tr>`).join('')}</table>
-    <div class="note">With a successful QUORUM write (≥2 replicas) every QUORUM read set intersects it, so it always sees the newest version; ONE can hit the replica that missed it. Reconciliation picks the max version; there is no read repair here.</div>`;
+    <div class="note">For this sequential, single-key experiment, every QUORUM read set intersects the successful QUORUM write set (2 + 2 &gt; 3), so it finds the latest completed version. ONE can hit a replica that missed it. Concurrent conflicting writes and clock or timestamp issues are outside this overlap guarantee; this model does no read repair.</div>`;
   }
   return`${cap}${s}<div class="chips" style="margin:6px 0"><span class="chip">writes ok ${ok}/${R.length}</span><span class="chip ${R.length-ok?'bad':''}">unavailable ${R.length-ok}</span><span class="chip ${miss?'bad':''}">replica misses ${miss}</span><span class="chip ${S.cl.div.length?'bad':''}">keys with diverged replicas ${S.cl.div.length}</span></div>${rd}`;
 }
@@ -533,11 +583,11 @@ function draw3(p){
     rec=`<h3>Crash &amp; restart experiment</h3><div class="caption ${r.ok?'good':'bad'}"><b>${cr==='midflush'?'Crash in the middle of the last flush':'Crash right after the last ACK (memtable lost)'}</b>. ${r.note?esc(r.note)+'. ':''}Restart: load manifest (${r.sst} SSTables) → replay commitlog frames with seq &gt; ${r.fl} (${r.replayed} frame${r.replayed===1?'':'s'}) → memtable has ${r.memAfter} row(s). Visible state ${r.ok?'<b class="ok">identical</b> to before the crash ✔':'<b class="bad">DIFFERS ✘</b>'}.</div>`}
   return`<div class="caption ${flushed?'good':''}">Write ${k}/${H.length} on node <b>${nn(eng.id)}</b>: ${esc(h.cap)}</div>
   <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
-    <div class="col" style="background:var(--p4)"><h4>Commitlog (sequential, sync before ACK)</h4>${h.wal.map(f=>`<span class="row ${f.ret?'ret':''} ${f.kind==='delete'?'del':''}" title="${esc(f.key)}">seq ${f.seq} · ${f.kind} · ${esc(short(f.key.replace(/\d+:/g,'|'),22))}</span>`).join('')}<div class="note">${h.walKept} frame(s) must be kept for replay; struck-through ones are retired after a safe flush.</div></div>
+    <div class="col" style="background:var(--p4)"><h4>Commitlog (lab: sync before ACK)</h4>${h.wal.map(f=>`<span class="row ${f.ret?'ret':''} ${f.kind==='delete'?'del':''}" title="${esc(f.key)}">seq ${f.seq} · ${f.kind} · ${esc(short(f.key.replace(/\d+:/g,'|'),22))}</span>`).join('')}<div class="note">${h.walKept} frame(s) must be kept for replay; struck-through ones are retired after a safe flush.</div></div>
     <div class="col" style="background:var(--p1)"><h4>Memtable (RAM, ordered) ${h.mem.length}/${S.cfg.budget}</h4><div class="meter"><i style="width:${h.mem.length/S.cfg.budget*100}%"></i></div>${h.mem.map(x=>`<span class="row">${esc(short(x.replace(/\d+:/g,'|'),28))}</span>`).join('')||'<span class="note">empty (just flushed)</span>'}</div>
     <div class="col" style="background:var(--p2)"><h4>SSTables (immutable) · manifest gen ${h.manifest}</h4>${h.ssts.map(x=>`<span class="sst ${flushed&&x===h.ssts[h.ssts.length-1]?'out':''}">${x.id} · ${x.n} rows · ${x.bytes} B<br><small>${esc(short(x.min.replace(/\d+:/g,'|'),14))} … ${esc(short(x.max.replace(/\d+:/g,'|'),14))}</small></span>`).join('')||'<span class="note">none yet</span>'}</div>
   </div>${rec}
-  <div class="note">ACK is only sent after the log record is synced and the memtable applied. A SSTable becomes readable only once the manifest publishes it; the commitlog prefix is retired only after that.</div>`;
+  <div class="note">This lab uses sync-before-ACK. ScyllaDB periodic commitlog mode may ACK before the next fsync; batch mode waits for fsync. An SSTable becomes readable only once the manifest publishes it; the commitlog prefix is retired only after that.</div>`;
 }
 
 /* =========================================================
@@ -784,7 +834,7 @@ function rsLoop(){let last=null;const f=now=>{if(!rsLive||cur!==7)return;if(last
 const PHASES=[
  {t:'Partition & token ring',s:'key → token → owner',f:'F01',dur:5000,draw:draw1,b:'A partition key is encoded canonically, hashed to a 64-bit token, and placed on a ring of vnode endpoints. All rows of a partition share one token and one set of replicas; clustering keys only order rows inside it.'},
  {t:'Route & replicate',s:'coordinator + CL',f:'F05',dur:4500,draw:draw2,b:'Any node can coordinate. It fans a mutation out to the 3 replicas and answers the client once ONE / QUORUM / ALL replicas acknowledge. A replica that is down simply misses the write: reads at weak levels can then be stale.'},
- {t:'Replica write path',s:'commitlog → memtable → SSTable',f:'F02',dur:7000,draw:draw3,b:'Each replica appends to a sequential commitlog and syncs before ACK, applies to an ordered memtable, and flushes full memtables into immutable SSTables published through a manifest. After a crash, the log is replayed.'},
+ {t:'Replica write path',s:'commitlog → memtable → SSTable',f:'F02',dur:7000,draw:draw3,b:'This lab uses a strict sync-before-ACK commitlog path: each replica logs, syncs, applies to a memtable, then later flushes an immutable SSTable. Production periodic sync can ACK earlier; batch sync waits for fsync.'},
  {t:'Read path',s:'Bloom → index → merge → cache',f:'F06 · F03',dur:4500,draw:draw4,b:'A point read must merge every version of a row across memtable and SSTables. Bloom filters skip files that surely lack the key, a sparse index jumps to the right offset, and a generation-checked cache can skip all of it.'},
  {t:'Compaction',s:'STCS · LCS · TWCS',f:'F03',dur:8000,draw:draw5,b:'Flushes pile up SSTables, so background compaction merges them without changing read results. Each strategy trades write, space and read amplification differently.'},
  {t:'Deletes & TTL',s:'tombstones & purge guard',f:'F04',dur:7000,draw:draw6,b:'A delete or expired TTL is a versioned marker that must hide older data in every file and replica. Compaction may purge it only when no older data can still exist outside the inputs.'},
@@ -796,12 +846,12 @@ function ctlHTML(k){
   const N=S&&!S.error?S.cfg.N:4,nodesOpt=[...Array(N).keys()].map(i=>[i,'node '+nn(i)]);
   const keyOpt=S&&!S.error?(k===1&&S.cl.div.length?S.cl.div.map(d=>d.key):S.keys).slice(0,60).map(x=>[x,x.replace(/\d+:/g,'|')]):[];
   if(!S||S.error)return'';
-  if(k===0)return`<label>Nodes ${sel('N',[3,4,5,6].map(x=>[x,x]),OPT.N)}</label><label>vnodes/node ${sel('vn',[1,2,3,4].map(x=>[x,x]),OPT.vn)}</label><label>Placement ${sel('place',[['ring','token ring'],['tablets','tablets']],OPT.place)}</label>`;
-  if(k===1)return`<label>Consistency ${sel('cl',['ONE','QUORUM','ALL'].map(x=>[x,x]),OPT.cl)}</label><label>Node down ${sel('downNode',[[-1,'none'],...nodesOpt],OPT.downNode)}</label><label>from ${sel('downFrom',[0,.2,.3,.4,.5].map(x=>[x,Math.round(x*100)+'%']),OPT.downFrom)}</label><label>to ${sel('downTo',[.5,.6,.7,.8,1].map(x=>[x,Math.round(x*100)+'%']),OPT.downTo)}</label><label>Animate op <input type="range" data-opt="opIdx" min="0" max="${S.cl.res.length-1}" value="${clamp(OPT.opIdx,0,S.cl.res.length-1)}" style="width:140px"></label><label>Read key ${sel('rkey',keyOpt,keyOpt.some(x=>x[0]===OPT.rkey)?OPT.rkey:(keyOpt[0]||[''])[0])}</label>`;
-  if(k===2)return`<label>Replica node ${sel('wnode',nodesOpt,OPT.wnode)}</label><label>Memtable budget ${sel('budget',[2,3,4,6,8].map(x=>[x,x+' rows']),OPT.budget)}</label><label>Crash experiment ${sel('crash',[['none','none'],['ack','crash after last ACK'],['midflush','crash mid-flush']],OPT.crash)}</label>`;
-  if(k===3)return`<label>Key ${sel('rkey',S.keys.slice(0,80).map(x=>[x,x.replace(/\d+:/g,'|')]),OPT.rkey||S.keys[Math.min(2,S.keys.length-1)])}</label><label>Replica ${sel('rnode',[[-1,'primary'],...nodesOpt],OPT.rnode)}</label><label>Bloom bits/key <input type="range" data-opt="bloomBits" min="2" max="16" value="${OPT.bloomBits}" style="width:100px"> ${OPT.bloomBits}</label><label><input type="checkbox" data-opt="cache" ${OPT.cache?'checked':''}> row cache</label><label>ReadAt <input type="range" data-opt="readAt" min="0" max="${S.ops.length+40}" value="${OPT.readAt<0?S.ops.length:OPT.readAt}" style="width:120px"> ${S.readAt}</label>`;
-  if(k===4)return`<label>Strategy ${sel('strategy',['STCS','LCS','TWCS'].map(x=>[x,x]),OPT.strategy)}</label><label>Node ${sel('cnode',nodesOpt,OPT.cnode)}</label><label>Trace rounds ${sel('rounds',[1,2,3,4,5].map(x=>[x,x]),OPT.rounds)}</label><label>Memtable ${sel('budget',[2,3,4,6].map(x=>[x,x+' rows']),OPT.budget)}</label><span class="note">Tip: set Workload to “inserts with TTL” and pick TWCS.</span>`;
-  if(k===5)return`<label>Scenario ${sel('scen',[['delete','DELETE tombstone'],['ttl','TTL expiry']],OPT.scen)}</label><label>Purge policy ${sel('purge',[['safe','safe (guard)'],['unsafe','unsafe (age only)'],['full','merge all files']],OPT.purge)}</label><label>now = <input type="range" data-opt="tNow" min="10" max="70" value="${OPT.tNow}" style="width:140px"> ${OPT.tNow}</label>`;
+  if(k===0)return`<label>Nodes ${sel('N',[3,4,5,6].map(x=>[x,x]),OPT.N)}</label><label><code>num_tokens</code> (vnodes) ${sel('vn',[1,2,3,4].map(x=>[x,x]),OPT.vn)}</label><label>Placement ${sel('place',[['ring','vnodes (token ring)'],['tablets','tablets']],OPT.place)}</label>`;
+  if(k===1)return`<label>Consistency level (CL) ${sel('cl',['ONE','QUORUM','ALL'].map(x=>[x,x]),OPT.cl)}</label><label>Node down ${sel('downNode',[[-1,'none'],...nodesOpt],OPT.downNode)}</label><label>from ${sel('downFrom',[0,.2,.3,.4,.5].map(x=>[x,Math.round(x*100)+'%']),OPT.downFrom)}</label><label>to ${sel('downTo',[.5,.6,.7,.8,1].map(x=>[x,Math.round(x*100)+'%']),OPT.downTo)}</label><label>Animate op <input type="range" data-opt="opIdx" min="0" max="${S.cl.res.length-1}" value="${clamp(OPT.opIdx,0,S.cl.res.length-1)}" style="width:140px"></label><label>Read key ${sel('rkey',keyOpt,keyOpt.some(x=>x[0]===OPT.rkey)?OPT.rkey:(keyOpt[0]||[''])[0])}</label>`;
+  if(k===2)return`<label>Replica node ${sel('wnode',nodesOpt,OPT.wnode)}</label><label>Memtable flush threshold ${sel('budget',[2,3,4,6,8].map(x=>[x,x+' rows']),OPT.budget)}</label><label>Crash experiment ${sel('crash',[['none','none'],['ack','crash after last ACK'],['midflush','crash mid-flush']],OPT.crash)}</label>`;
+  if(k===3)return`<label>Key ${sel('rkey',S.keys.slice(0,80).map(x=>[x,x.replace(/\d+:/g,'|')]),OPT.rkey||S.keys[Math.min(2,S.keys.length-1)])}</label><label>Replica ${sel('rnode',[[-1,'primary'],...nodesOpt],OPT.rnode)}</label><label>Bloom bits/key (<code>bloom_filter_fp_chance</code>) <input type="range" data-opt="bloomBits" min="2" max="16" value="${OPT.bloomBits}" style="width:100px"> ${OPT.bloomBits}</label><label><input type="checkbox" data-opt="cache" ${OPT.cache?'checked':''}> <code>caching</code> row cache</label><label>ReadAt <input type="range" data-opt="readAt" min="0" max="${S.ops.length+40}" value="${OPT.readAt<0?S.ops.length:OPT.readAt}" style="width:120px"> ${S.readAt}</label>`;
+  if(k===4)return`<label><code>compaction.class</code> ${sel('strategy',['STCS','LCS','TWCS'].map(x=>[x,x]),OPT.strategy)}</label><label>Node ${sel('cnode',nodesOpt,OPT.cnode)}</label><label>Trace rounds ${sel('rounds',[1,2,3,4,5].map(x=>[x,x]),OPT.rounds)}</label><label>Memtable flush threshold ${sel('budget',[2,3,4,6].map(x=>[x,x+' rows']),OPT.budget)}</label><span class="note">Tip: set Workload to “inserts with TTL” and pick TWCS.</span>`;
+  if(k===5)return`<label>Scenario ${sel('scen',[['delete','DELETE tombstone'],['ttl','TTL expiry']],OPT.scen)}</label><label>Tombstone purge rule ${sel('purge',[['safe','safe (guard)'],['unsafe','unsafe (age only)'],['full','merge all files']],OPT.purge)}</label><label>now (vs <code>gc_grace_seconds</code>) = <input type="range" data-opt="tNow" min="10" max="70" value="${OPT.tNow}" style="width:140px"> ${OPT.tNow}</label>`;
   if(k===6){const tabs=TMS?TMS.tablets:initTablets(N,OPT.tablets);return`<label>Tablet ${sel('mtab',tabs.map(t=>[t.id,t.id+' ['+t.rep.map(nn).join('')+']']),OPT.mtab||tabs[0].id)}</label><button data-act="split">Split tablet</button><label>Move replica ${sel('mfrom',nodesOpt,OPT.mfrom)} → ${sel('mto',nodesOpt,OPT.mto)}</label><label>Crash at step ${sel('mcrash',[[0,'none'],...MSTEPS.map((_,i)=>[i+1,i+1])],OPT.mcrash)}</label><button class="primary" data-act="move">▶ Run migration</button><button data-act="resetT">Reset map</button>`}
   if(k===7)return`<label>Members ${sel('raftN',[3,5].map(x=>[x,x]),OPT.raftN)}</label><label>Scenario ${sel('raftScen',[['elect','1 · leader election'],['replicate','2 · replicate & commit'],['crash','3 · leader crash'],['partition','4 · minority partition']],OPT.raftScen)}</label><button data-act="r-propose">Write command</button><button data-act="r-killl">Kill leader</button><button data-act="r-revive">Restart killed</button><button data-act="r-isolate">Isolate leader</button><button data-act="r-heal">Heal</button><button data-act="r-live">▶/⏸ Run live</button><button data-act="r-reset">Reset</button>`;
   return'';
@@ -841,7 +891,7 @@ function refresh(dataChanged,auto){
   S=build();
   if(S.error){showPhase(cur);return}
   if(!OPT.rkey)OPT.rkey=S.cl.div.length?S.cl.div[0].key:S.keys[0];
-  showPhase(cur);refreshDeep();
+  showPhase(cur);
 }
 ['#src'].forEach(s=>$(s).addEventListener('input',()=>{stopAll();refresh(true,false)}));
 ['#fmt'].forEach(s=>$(s).addEventListener('change',()=>{stopAll();refresh(true,false)}));
@@ -852,48 +902,10 @@ $('#file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileR
 /* =========================================================
    DEEP DIVES
    ========================================================= */
-function refreshDeep(){dd1();dd2();dd3()}
-function dd1(){
-  const el=$('#dd1b');if(!S||S.error){el.innerHTML='';return}
-  const N=S.cfg.N,rs=remapStats(S);
-  const a=['ab','c'],b=['a','bc'];const naive=x=>x.join(''),canon=x=>x.map(enc).join('');
-  el.innerHTML=`<div class="g2"><div><div class="bar"><b class="big">${Math.round(rs.ring*100)}%</b><span>of 1000 synthetic keys change owner when node ${nn(N)} joins a <b>ring</b> (yours: ${Math.round(rs.real.ring*100)}% of ${rs.real.n} partitions)</span></div>
-    <div class="bar"><b class="big bad">${Math.round(rs.mod*100)}%</b><span>change owner with <code>hash(key) % N</code> (${N} → ${N+1} nodes)</span></div>
-    <div class="note">Consistent hashing moves only the token ranges the new node takes over. The ring remap uses ${S.cfg.vn} vnode(s) per node. (Remap is a placement experiment; moving the data safely is Feature 07.)</div></div>
-    <div><h3 style="margin-top:0">Why a canonical key codec?</h3><table><tr><th>(a, b)</th><th>naive a+b</th><th>length-prefixed</th></tr>
-    <tr><td>("ab","c")</td><td class="mono">${naive(a)}</td><td class="mono">${canon(a)}</td></tr><tr><td>("a","bc")</td><td class="mono">${naive(b)}</td><td class="mono">${canon(b)}</td></tr></table>
-    <div class="note">Naive concatenation gives two different keys the same bytes (same token, same row). The lab uses length-prefixed fields before hashing.</div></div></div>`;
-}
-function dd2(){
-  const el=$('#dd2b');if(!S||S.error){el.innerHTML='';return}
-  const eng=S.cl.engines.reduce((a,b)=>b.sst.reduce((x,s)=>x+s.n,0)>a.sst.reduce((x,s)=>x+s.n,0)?b:a);
-  const sst=eng.sst.slice().sort((a,b)=>b.n-a.n)[0];
-  if(!sst){el.innerHTML='<div class="note">No SSTables yet.</div>';return}
-  const bits=OPT.bloomBits,b=bloomOf(sst,bits),set=b.arr.reduce((a,x)=>a+x,0);
-  let fp=0,tries=400;for(let i=0;i<tries;i++)if(bloomMaybe(sst,'absent-key-'+i,bits))fp++;
-  const kk=b.k,theo=Math.pow(1-Math.exp(-kk*sst.n/b.m),kk);
-  el.innerHTML=`<div class="note" style="margin:0 0 6px">SSTable ${sst.id} on node ${nn(eng.id)}: ${sst.n} keys, ${b.m} bits (${bits} bits/key), ${kk} hash functions. Change bits/key in phase 4.</div>
-    <div style="display:flex;flex-wrap:wrap;gap:1px;max-width:100%">${Array.from(b.arr).map(x=>`<span style="width:9px;height:9px;background:${x?'var(--acc)':'var(--line)'};display:inline-block"></span>`).join('')}</div>
-    <div class="chips" style="margin-top:8px"><span class="chip">bits set ${set}/${b.m} (${Math.round(set/b.m*100)}%)</span><span class="chip">false-positive rate measured ${(fp/tries*100).toFixed(1)}% (${tries} absent keys)</span><span class="chip">theory ${(theo*100).toFixed(1)}%</span><span class="chip ok">false negatives: 0 (every stored key says “maybe”)</span></div>
-    <div class="note">More bits per key means fewer wasted file opens but more RAM. A false positive only costs one extra index probe; it can never hide data.</div>`;
-}
-function dd3(){
-  $('#dd3b').innerHTML=`<table><tr><th></th><th>Leaderless QUORUM (Feature 05)</th><th>Raft group (new)</th></tr>
-  <tr><td>Who takes writes</td><td>any coordinator</td><td>the single leader</td></tr>
-  <tr><td>Order of writes</td><td>per-mutation version (last-write-wins)</td><td>log index: one total order</td></tr>
-  <tr><td>Commit rule</td><td>R+W &gt; RF (e.g. 2+2 &gt; 3) overlaps</td><td>majority stored + current-term entry</td></tr>
-  <tr><td>Minority side during a partition</td><td>may still accept writes at ONE; replicas diverge</td><td>cannot commit; uncommitted entries truncated on heal</td></tr>
-  <tr><td>Node failure</td><td>other replicas keep serving; missed writes stay missed</td><td>new leader elected; log catches followers up</td></tr>
-  <tr><td>Conditional update / CAS</td><td>not provided</td><td>natural (apply in log order)</td></tr>
-  <tr><td>Cost</td><td>low latency, high throughput</td><td>extra hop + log fsync, leader bottleneck</td></tr>
-  <tr><td>Best for</td><td>bulk table data</td><td>metadata: topology, schema, tablet placement</td></tr></table>
-  <div class="note">They complement each other: row data keeps the leaderless fast path; changes that need one agreed order (tablet map epochs from phase 7) go through Raft. Raft safety: one leader per term, log matching, and committed entries survive every election.</div>`;
-}
-
 /* =========================================================
    ARCHITECTURE OVERVIEW (components + relationships)
    ========================================================= */
-const OVS={"w": 1000, "h": 430, "groups": [{"x": 420, "y": 40, "w": 380, "h": 370, "label": "Replica node (3 per partition)"}], "nodes": [{"id": "client", "x": 10, "y": 195, "w": 110, "h": 64, "label": "Client", "sub": "CQL request", "desc": "An application reads or writes a row identified by its partition key."}, {"id": "ring", "x": 170, "y": 70, "w": 175, "h": 64, "label": "Token ring", "sub": "key \u2192 token \u2192 replicas", "desc": "The partition key is hashed to a token; the ring (or a tablet map) names the owner and the other replicas. All rows of a partition live together.", "phase": 0}, {"id": "coord", "x": 170, "y": 195, "w": 150, "h": 64, "label": "Coordinator", "sub": "CL ONE \u00b7 QUORUM \u00b7 ALL", "desc": "Any node can coordinate a request. It fans out to the replicas and answers after enough acknowledgements.", "phase": 1}, {"id": "commitlog", "x": 440, "y": 75, "w": 140, "h": 60, "label": "Commitlog", "sub": "fsync before ACK", "desc": "A sequential log written and synced before the write is acknowledged, so a crash can be replayed.", "phase": 2}, {"id": "memtable", "x": 630, "y": 75, "w": 150, "h": 60, "label": "Memtable", "sub": "RAM, ordered", "desc": "The in-memory ordered table that absorbs writes until it is full and flushed.", "phase": 2}, {"id": "read", "x": 440, "y": 200, "w": 150, "h": 64, "label": "Read path", "sub": "Bloom \u00b7 index \u00b7 cache", "desc": "Skips SSTables that cannot contain the key (Bloom), seeks with a sparse index, merges versions, and may serve from a cache.", "phase": 3}, {"id": "sst", "x": 630, "y": 200, "w": 150, "h": 64, "label": "SSTables", "sub": "immutable files", "desc": "Flushed, sorted, immutable files. The same row can have versions in several files, so reads must merge.", "phase": 2}, {"id": "tomb", "x": 440, "y": 335, "w": 140, "h": 60, "label": "Tombstones", "sub": "deletes \u00b7 TTL", "desc": "Versioned delete markers that must hide older data in every file until it is safe to purge.", "phase": 5}, {"id": "compact", "x": 630, "y": 335, "w": 150, "h": 60, "label": "Compaction", "sub": "STCS \u00b7 LCS \u00b7 TWCS", "desc": "Background merging of SSTables to bound read cost and space, without changing what reads return.", "phase": 4}, {"id": "tablets", "x": 850, "y": 75, "w": 130, "h": 64, "label": "Tablets", "sub": "ranges + epoch", "desc": "Per-table token ranges with their own replica sets, split and moved by a journaled migration protocol.", "phase": 6}, {"id": "raft", "x": 850, "y": 260, "w": 130, "h": 64, "label": "Raft group", "sub": "agreed metadata", "desc": "A replicated log that gives the cluster one agreed order for metadata such as tablet placement epochs.", "phase": 7}], "edges": [{"from": "client", "to": "coord", "label": "request", "kind": "data"}, {"from": "ring", "to": "coord", "label": "owner + replicas", "kind": "ctl"}, {"from": "coord", "to": "commitlog", "label": "mutation (CL ACKs)", "kind": "data"}, {"from": "commitlog", "to": "memtable", "label": "apply", "kind": "data"}, {"from": "memtable", "to": "sst", "label": "flush", "kind": "data"}, {"from": "coord", "to": "read", "label": "read at CL", "kind": "data"}, {"from": "read", "to": "sst", "label": "seek", "kind": "data"}, {"from": "sst", "to": "compact", "label": "inputs", "kind": "data", "bend": 22}, {"from": "compact", "to": "sst", "label": "output", "kind": "data", "bend": 22}, {"from": "tomb", "to": "compact", "label": "purge", "kind": "ctl"}, {"from": "tomb", "to": "read", "label": "masks", "kind": "ctl"}, {"from": "tablets", "to": "ring", "label": "replaces static ring", "kind": "ctl", "bend": 95}, {"from": "raft", "to": "tablets", "label": "agrees placement epochs", "kind": "ctl"}], "flow": [{"n": "client", "t": "A client writes a row."}, {"n": "ring", "t": "The partition key is hashed to a token that names 3 replicas."}, {"n": "coord", "t": "The coordinator fans the mutation out and waits for CL acknowledgements."}, {"n": "commitlog", "t": "Each replica appends and syncs the commitlog."}, {"n": "memtable", "t": "Then applies it to the memtable and ACKs."}, {"n": "sst", "t": "A full memtable is flushed to an immutable SSTable."}, {"n": "compact", "t": "Compaction merges SSTables in the background."}, {"n": "read", "t": "Later reads use Bloom filters and indexes to avoid most files, then merge the winner."}]};
+const OVS={"w": 1000, "h": 430, "groups": [{"x": 420, "y": 40, "w": 380, "h": 370, "label": "Replica node (3 per partition)"}], "nodes": [{"id": "client", "x": 10, "y": 195, "w": 110, "h": 64, "label": "Client", "sub": "CQL request", "desc": "An application reads or writes a row identified by its partition key."}, {"id": "ring", "x": 170, "y": 70, "w": 175, "h": 64, "label": "Token ring", "sub": "key \u2192 token \u2192 replicas", "desc": "The partition key is hashed to a token; the ring (or a tablet map) names the owner and the other replicas. All rows of a partition live together.", "phase": 0}, {"id": "coord", "x": 170, "y": 195, "w": 150, "h": 64, "label": "Coordinator", "sub": "CL ONE \u00b7 QUORUM \u00b7 ALL", "desc": "Any node can coordinate a request. It fans out to the replicas and answers after enough acknowledgements.", "phase": 1}, {"id": "commitlog", "x": 440, "y": 75, "w": 140, "h": 60, "label": "Commitlog", "sub": "lab: sync before ACK", "desc": "This lab models strict sync-before-ACK. Production periodic commitlog mode can acknowledge before the next disk sync.", "phase": 2}, {"id": "memtable", "x": 630, "y": 75, "w": 150, "h": 60, "label": "Memtable", "sub": "RAM, ordered", "desc": "The in-memory ordered table that absorbs writes until it is full and flushed.", "phase": 2}, {"id": "read", "x": 440, "y": 200, "w": 150, "h": 64, "label": "Read path", "sub": "Bloom \u00b7 index \u00b7 cache", "desc": "Skips SSTables that cannot contain the key (Bloom), seeks with a sparse index, merges versions, and may serve from a cache.", "phase": 3}, {"id": "sst", "x": 630, "y": 200, "w": 150, "h": 64, "label": "SSTables", "sub": "immutable files", "desc": "Flushed, sorted, immutable files. The same row can have versions in several files, so reads must merge.", "phase": 2}, {"id": "tomb", "x": 440, "y": 335, "w": 140, "h": 60, "label": "Tombstones", "sub": "deletes \u00b7 TTL", "desc": "Versioned delete markers that must hide older data in every file until it is safe to purge.", "phase": 5}, {"id": "compact", "x": 630, "y": 335, "w": 150, "h": 60, "label": "Compaction", "sub": "STCS \u00b7 LCS \u00b7 TWCS", "desc": "Background merging of SSTables to bound read cost and space, without changing what reads return.", "phase": 4}, {"id": "tablets", "x": 850, "y": 75, "w": 130, "h": 64, "label": "Tablets", "sub": "ranges + epoch", "desc": "Per-table token ranges with their own replica sets, split and moved by a journaled migration protocol.", "phase": 6}, {"id": "raft", "x": 850, "y": 260, "w": 130, "h": 64, "label": "Raft group", "sub": "agreed metadata", "desc": "A replicated log that gives the cluster one agreed order for metadata such as tablet placement epochs.", "phase": 7}], "edges": [{"from": "client", "to": "coord", "label": "request", "kind": "data"}, {"from": "ring", "to": "coord", "label": "owner + replicas", "kind": "ctl"}, {"from": "coord", "to": "commitlog", "label": "mutation (CL ACKs)", "kind": "data"}, {"from": "commitlog", "to": "memtable", "label": "apply", "kind": "data"}, {"from": "memtable", "to": "sst", "label": "flush", "kind": "data"}, {"from": "coord", "to": "read", "label": "read at CL", "kind": "data"}, {"from": "read", "to": "sst", "label": "seek", "kind": "data"}, {"from": "sst", "to": "compact", "label": "inputs", "kind": "data", "bend": 22}, {"from": "compact", "to": "sst", "label": "output", "kind": "data", "bend": 22}, {"from": "tomb", "to": "compact", "label": "purge", "kind": "ctl"}, {"from": "tomb", "to": "read", "label": "masks", "kind": "ctl"}, {"from": "tablets", "to": "ring", "label": "replaces static ring", "kind": "ctl", "bend": 95}, {"from": "raft", "to": "tablets", "label": "agrees placement epochs", "kind": "ctl"}], "flow": [{"n": "client", "t": "A client writes a row."}, {"n": "ring", "t": "The partition key is hashed to a token that names 3 replicas."}, {"n": "coord", "t": "The coordinator fans the mutation out and waits for CL acknowledgements."}, {"n": "commitlog", "t": "In this lab, each replica appends and syncs the commitlog before ACK."}, {"n": "memtable", "t": "Then applies it to the memtable and ACKs."}, {"n": "sst", "t": "A full memtable is flushed to an immutable SSTable."}, {"n": "compact", "t": "Compaction merges SSTables in the background."}, {"n": "read", "t": "Later reads use Bloom filters and indexes to avoid most files, then merge the winner."}]};
 
 /* =========================================================
    INIT
@@ -902,138 +914,73 @@ $('#src').value=SAMPLES.orders.t();$('#fmt').value='csv';
 refresh(true,true);
 
 /* ================= v2: live simulation, accordion, packets ================= */
-const DETAIL=[
-{how:"ScyllaDB serializes the partition key, hashes it with the Murmur3Partitioner into a signed 64-bit token, and finds the node that owns the range containing that token. With vnodes (num_tokens, 256 by default) each node owns many small ranges. The keyspace replication factor and NetworkTopologyStrategy then pick the next distinct nodes or racks as replicas, and the token also selects the CPU shard inside each node. Token-aware drivers compute this client-side and skip an extra hop.",
- pros:["Hash placement spreads partitions evenly with no central directory to consult or maintain","Any client can compute replicas locally, so token-aware routing removes a network hop","Vnodes let a joining or leaving node stream small slices from many peers in parallel","Clustering keys sort rows inside a partition, so range scans within one partition are cheap sequential reads"],
- cons:["Hashing destroys key order, so range scans across partitions need a full token-range scan","One very popular partition key always lands on the same replicas and cannot be split","Choosing the partition key is a one-way design decision that is hard to change later","Many vnodes make repair and token-range operations more complex than a few big ranges"],
- fails:[{m:"Hot partition",s:"One shard or replica set shows high CPU and latency while the rest of the cluster is idle",x:"Add a bucket (for example day or hash suffix) to the partition key, or cache or rate-limit the hot key at the application layer"},
- {m:"Large partition",s:"Large partition warnings in the log, slow reads and long repairs for specific keys",x:"Bound partition size by time or bucket; find offenders in system.large_partitions and remodel the table"},
- {m:"Low-cardinality partition key",s:"Data and traffic pile onto few tokens and some nodes or shards hold far more data than others",x:"Pick a high-cardinality key or compose the key with a bucket column so tokens spread evenly"},
- {m:"Non-token-aware client",s:"Higher latency and extra coordinator-to-replica traffic on every request",x:"Use the Scylla shard-aware driver with a TokenAwarePolicy and a correct local datacenter"}],
- watch:["nodetool status and nodetool ring: ownership should be roughly even across nodes","ScyllaDB Monitoring per-shard load panel: a single shard much busier than its peers means a hot partition","SELECT * FROM system.large_partitions: any rows above a few hundred MB are a warning sign","nodetool getendpoints <ks> <table> <key> shows which replicas own a given key"]},
 
-{how:"Any node can act as coordinator. It computes the replicas and sends the mutation to all of them in parallel, then replies to the client once the consistency level (ONE, QUORUM, LOCAL_QUORUM, ALL) is met. Replicas that are down or slow still get the write later through hinted handoff (if within max_hint_window) or repair. For reads the coordinator asks one replica for data and others for digests, and read repair or speculative retry can reconcile or hide slow nodes.",
- pros:["Leaderless: there is no single write master, so losing any node does not stop writes while a quorum survives","Tunable per-request consistency lets each query trade latency against safety","LOCAL_QUORUM keeps latency inside one datacenter while still replicating across DCs","Hinted handoff and read repair heal most transient divergence automatically"],
- cons:["CL=ONE writes and reads can return stale data if the replica read missed an earlier write","There is no total order across replicas, so conflicts are resolved by last-write-wins timestamps","QUORUM and ALL pay the latency of the slowest replica involved","Hints are best-effort and time-limited; they do not replace repair"],
- fails:[{m:"Stale read at weak CL",s:"A client reads old values right after a successful write; results differ between retries",x:"Use QUORUM or LOCAL_QUORUM for both reads and writes so R + W > RF, and run regular repair"},
- {m:"UnavailableException",s:"Coordinator rejects the request because fewer replicas are alive than the CL needs",x:"Restore the failed nodes or lower the CL for tolerant workloads; check RF and rack layout so one rack loss does not break quorum"},
- {m:"Write or read timeout",s:"WriteTimeoutException or ReadTimeoutException while nodes are up but overloaded",x:"Find the slow replica (compaction backlog, hot shard, GC-like stalls), reduce load, and tune the client timeouts and retries"},
- {m:"Clock skew with LWW",s:"A newer write appears to lose to an older one because of unsynced node or client clocks",x:"Run chrony or NTP on all nodes; prefer server-side timestamps or driver timestamp generators with monotonic guarantees"}],
- watch:["Metrics scylla_storage_proxy_coordinator_write_timeouts and read_timeouts, and unavailables: any sustained rise is bad","scylla_hints_manager_* counters and nodetool statushandoff: growing pending hints mean a replica is behind","Driver-side latency percentiles per CL; a p99 far above p50 usually means one slow replica","nodetool status: any DN node lowers the CL levels you can still satisfy"]},
 
-{how:"On each replica the mutation is appended to the commitlog (a segment-based sequential log) and applied to an in-memory memtable per table. When memtables use too much dirty memory, or commitlog space (commitlog_total_space_in_mb) runs low, they are flushed to new immutable SSTables made of Data, Index, Summary, Filter and TOC files. Once flushed, the old commitlog segments are released. After a crash, Scylla replays the commitlog on startup to rebuild the lost memtables.",
- pros:["Writes are sequential appends plus a memory insert, so they are fast and avoid random disk I/O","Immutable SSTables are simple to cache, back up and checksum, and never need in-place updates","Commitlog replay gives durability without writing every row to its final on-disk place at once","Each shard owns its own memtable, so writes scale with cores and avoid cross-thread locks"],
- cons:["Default commitlog_sync is periodic (about 10 s), so a power loss can lose the latest acknowledged writes unless you use batch mode","Every flush creates a new SSTable, which adds read amplification until compaction merges them","Memtable and commitlog sizing need care; too small means many small SSTables, too large means long replay","Replication is the real durability story: one node's disk is not enough on its own"],
- fails:[{m:"Commitlog full or write stall",s:"Writes slow down or block; log shows memtable flush pressure and commitlog segments piling up",x:"Check disk throughput, add nodes or shards of capacity, and avoid bursts that outrun flush and compaction"},
- {m:"Data loss on crash with periodic sync",s:"After a power failure the most recent acknowledged writes on one replica are gone",x:"Rely on RF>=3 with QUORUM and repair, or switch to commitlog_sync: batch when single-node durability matters"},
- {m:"Slow or corrupt commitlog replay",s:"Node takes very long to start or refuses to start after a crash",x:"Keep commitlog on fast storage, avoid oversize commitlog space, and follow the corrupt-segment recovery steps in the docs"},
- {m:"Too many tiny SSTables",s:"Rising SSTable count per read and compaction backlog after many small flushes",x:"Avoid frequent forced flushes and tiny memtable budgets; let compaction catch up before adding more write load"}],
- watch:["scylla_commitlog_disk_total_bytes and pending flushes: a commitlog near its limit means flush or disk is the bottleneck","scylla_memtable_* and scylla_database_dirty_memory metrics: dirty memory pinned at the limit means write throttling","nodetool cfstats: SSTable count and memtable size per table; steadily climbing counts are bad","Disk write latency and bandwidth on the data and commitlog volumes"]},
 
-{how:"A point read merges the freshest versions of a row from the memtable and every SSTable that may hold the partition. For each SSTable Scylla checks the Bloom filter (bloom_filter_fp_chance, default 0.01) to skip files that surely lack the key, then uses the partition index and summary to seek the right offset. Scylla also has a per-shard row cache that serves hot partitions from memory and is kept consistent with writes, so a hit skips SSTable access. Results are reconciled by timestamp, with tombstones winning ties.",
- pros:["Bloom filters avoid disk reads for SSTables that do not contain the key","Sparse index and summary reach the right offset with one small seek","The row cache gives memory-speed reads for hot data without a separate cache layer","Reads see a consistent merged view even while flushes and compactions run"],
- cons:["Read amplification grows with the number of SSTables that overlap the key","Lower bloom_filter_fp_chance costs more memory; higher values cause extra useless disk reads","Wide partitions and range scans can evict useful rows from the cache","Reconciling many versions and tombstones is CPU work on the read path"],
- fails:[{m:"Read amplification from compaction backlog",s:"p99 read latency climbs and tracing shows many SSTables touched per query",x:"Clear the compaction backlog, consider a strategy better for the read pattern (LCS), and avoid overlapping data"},
- {m:"Cache thrash on big scans",s:"Cache hit rate falls and disk reads rise after analytics-style or full-table scans",x:"Run scans with BYPASS CACHE, throttle them, or move them to a separate workload or datacenter"},
- {m:"Tombstone-heavy reads",s:"Slow reads, tracing shows many tombstones read per query, warnings in the log",x:"Fix the data model (queue-like deletes), shorten the scanned range, lower gc_grace after repairing, and compact"},
- {m:"Bloom filter too weak or too big",s:"Many Bloom false positives cause extra disk reads, or filters consume too much memory",x:"Tune bloom_filter_fp_chance per table and recheck with cfstats false-positive ratio"}],
- watch:["scylla_cache_row_hits vs scylla_cache_row_misses: hit rate should be high for hot workloads","nodetool tablehistograms <ks> <table>: SSTables per read, p99 above a few means read amplification","CQL TRACING ON for a slow query: look for many SSTables and tombstones scanned","nodetool cfstats: bloom filter false ratio and disk space used by filters"]},
 
-{how:"Compaction runs in the background merging SSTables into fewer, larger ones, dropping shadowed versions and expired tombstones without changing query results. The strategy is a per-table option: STCS merges similar-sized SSTables, LCS keeps non-overlapping levels for low read amplification, TWCS buckets data by time window for TTL workloads, and Incremental (ICS) is available in Enterprise. Scylla's compaction controller sizes CPU and I/O shares by the backlog so compaction does not starve foreground traffic.",
- pros:["STCS gives the lowest write amplification, good for write-heavy workloads","LCS bounds read amplification with about one SSTable per level per read, good for read-heavy workloads","TWCS drops whole expired windows cheaply and avoids rewriting old time-series data","The backlog-driven controller automatically balances compaction against foreground latency"],
- cons:["STCS needs lots of free disk (up to about 50 percent headroom) and gives high space and read amplification","LCS rewrites data many times and stresses disk with high write amplification","TWCS works badly with out-of-order writes, updates or manual deletes inside old windows","Changing strategy triggers large recompaction work on existing data"],
- fails:[{m:"Compaction backlog",s:"Backlog metric rises, SSTable count grows, read latency and disk usage worsen",x:"Add capacity or shards, slow the ingest, check disk I/O, and avoid running repair or major compactions at the same time"},
- {m:"Out of disk during STCS compaction",s:"Free space drops sharply during big merges; node may stop compacting or crash",x:"Keep 50 percent free space for STCS, add nodes, or move to ICS or LCS; never run major compaction near full disk"},
- {m:"Wrong strategy for the workload",s:"TWCS with updates keeps old windows alive; LCS on write-heavy data saturates disk",x:"Match the strategy to the access pattern: TWCS for append-only TTL data, LCS for read-heavy, STCS for write-heavy"},
- {m:"Overlapping time windows",s:"TWCS never drops expired SSTables because late writes keep touching old windows",x:"Write in time order, size windows so that about 20-30 exist per TTL, and stop updates to old data"}],
- watch:["scylla_compaction_manager_backlog and nodetool compactionstats: a backlog that keeps growing means compaction cannot keep up","SSTable count per table in nodetool cfstats and disk free percent on data volumes","scylla_compaction_manager_pending_compactions and per-shard I/O queue delay","Read latency p99 vs SSTables per read; if both rise together, compaction is the cause"]},
-
-{how:"A DELETE or an expired TTL writes a tombstone, a timestamped marker that hides older data in every SSTable and replica. The tombstone must live at least gc_grace_seconds (default 864000, 10 days) so repair can spread it before it is purged. During compaction Scylla drops a tombstone only when it is older than the gc time and no overlapping data outside the compaction inputs could still need hiding. The table option tombstone_gc (timeout, repair, immediate, disabled) controls when the purge is allowed.",
- pros:["Marking a delete as a write keeps deletes fast, append-only and replicated like any other write","The purge guard prevents deleted data from reappearing when older copies sit in other files","gc_grace gives the repair process time to propagate deletes to every replica","tombstone_gc repair mode ties purge to completed repairs, which is safer than wall-clock time alone"],
- cons:["Deleted data still costs disk and read CPU until tombstones are compacted away","Heavy delete workloads (queues, wide partitions with range deletes) create tombstone overload","Tombstones cannot be purged until gc_grace passes and overlap checks succeed, so space is held back","Mistuning gc_grace or skipping repair risks zombie data coming back"],
- fails:[{m:"Tombstone overload",s:"Reads slow down or time out; tracing and logs show huge numbers of tombstones scanned",x:"Remodel to avoid queue patterns, bucket data by time, query narrower ranges, and compact once gc_grace has passed"},
- {m:"Zombie data resurrection",s:"Deleted rows reappear after a node was down longer than gc_grace and was not repaired",x:"Run repair within gc_grace_seconds (or use tombstone_gc repair mode) and replace long-dead nodes instead of rejoining them"},
- {m:"Tombstones not purged",s:"Disk stays full of deleted data even after compaction and gc_grace has elapsed",x:"Check overlapping SSTables blocking purge, run compaction for the table, and ensure repairs complete if tombstone_gc is repair mode"},
- {m:"Unsafe purge by age only",s:"Data returns because tombstone was dropped while an older shadowed copy remained in another file",x:"Keep the purge guard on; never lower gc_grace without a repair schedule that fits it"}],
- watch:["CQL TRACING output: tombstone cells scanned per query; large counts mean trouble","Scylla log warnings about tombstones, plus system.large_partitions and large_rows for delete-heavy partitions","nodetool repair run history vs gc_grace_seconds: last repair must be newer than gc_grace","Table option tombstone_gc and gc_grace_seconds in DESCRIBE TABLE; check them after every schema change"]},
-
-{how:"With tablets (ScyllaDB 6.0 and later, enabled per keyspace), each table is split into many token-range tablets, each with its own replica set, instead of fixed vnode ownership. Tablets split or merge automatically as they grow or shrink, and the load balancer moves tablets between nodes and shards. A migration streams a snapshot to the new replica, catches up on later writes, fences the old replica, then commits the new replica set through the topology state machine on Raft.",
- pros:["Adding or removing nodes is faster and can run concurrently because only some tablets move","Load balancing is continuous and per-table, so uneven data or traffic can be corrected without a full topology change","Tablets split with data growth, so ranges stay small and bounded","Fencing and an epoch (topology version) stop stale replicas from serving after a move"],
- cons:["Tablets need NetworkTopologyStrategy keyspaces and some features or older tools may not be supported with them","Migrations consume network, disk and CPU, which can affect latency during rebalancing","A single hot partition still cannot be split by a tablet split","More metadata (tablet map) must be kept consistent through Raft, so operations depend on a healthy quorum"],
- fails:[{m:"Stuck or slow tablet migration",s:"Rebalancing never finishes or a node add or removal seems to hang",x:"Check streaming and compaction load, node health and Raft quorum; inspect system.tablets and logs, then retry or abort via the documented procedure"},
- {m:"Node failure during migration",s:"A move was interrupted at a step; the tablet shows a transitional state",x:"The topology coordinator rolls the move back or forward from its durable state; make sure a Raft majority is up so it can resume"},
- {m:"Migration latency impact",s:"Foreground read and write p99 rises while tablets stream",x:"Lower streaming load, schedule changes off-peak, and make sure compaction and I/O shares leave room for user traffic"},
- {m:"Hot tablet",s:"One tablet carries disproportionate traffic and its replicas run hot despite balancing",x:"Fix the key distribution in the data model; balancing moves tablets but cannot spread one partition"}],
- watch:["nodetool status and the system.tablets table: replica sets and tablet counts per table should look balanced","Scylla logs and metrics for streaming and tablet migration progress; any migration stuck for a long time is bad","Per-node and per-shard load panels in ScyllaDB Monitoring while rebalancing runs","Raft group 0 health, since topology changes need a live majority"]},
-
-{how:"ScyllaDB uses Raft for strongly consistent cluster metadata: schema changes and topology changes (including tablet maps) go through Raft group 0. Voters elect a leader per term; the leader appends commands to its log, replicates them, and marks them committed once a majority stores them in its current term. Each node applies committed entries in the same order. A leader cut off from the majority cannot commit, and a new election happens in a higher term after a heartbeat timeout.",
- pros:["Gives one agreed total order for metadata, so schema and topology changes cannot conflict","Safe re-election: a committed entry is never lost as long as a majority survives","Removes the old gossip-based, eventually consistent schema and topology changes with their races","Minority-side leaders cannot commit stale decisions, so there is no split brain for metadata"],
- cons:["Metadata changes need a live majority; losing quorum blocks DDL and topology operations","A single leader serializes commands, so metadata throughput is limited (fine for metadata, not for data)","Leader elections add a pause after leader failure or network flaps","Raft covers metadata only; normal data writes still use leaderless replication with tunable CL"],
- fails:[{m:"Raft quorum lost",s:"CREATE, ALTER or node add and remove time out or fail; reads and writes of data may still work",x:"Bring enough group 0 voters back; if nodes are permanently lost, follow the documented majority-loss recovery procedure"},
- {m:"Leader churn",s:"Frequent elections and slow schema or topology operations during network instability",x:"Fix network latency and packet loss, check for overloaded nodes missing heartbeats, and avoid running too many voters across weak links"},
- {m:"Minority partition",s:"Nodes on the small side cannot change schema or topology and may report errors, while the majority continues",x:"Heal the partition; the minority truncates uncommitted entries and catches up from the leader automatically"},
- {m:"Unsafe manual intervention",s:"Removing or replacing nodes without a majority leaves the group in an inconsistent state",x:"Use nodetool removenode or the recovery procedure with all steps; never delete system.raft data by hand"}],
- watch:["Schema agreement after DDL: nodetool describecluster should show one schema version","Raft-related errors and leader changes in Scylla logs; repeated elections are a bad sign","nodetool status for DN nodes: count how many group 0 voters remain compared with the majority needed","DDL and topology command latency; sudden timeouts often mean lost quorum"]}
+/* Production tuning: small, explicit models rather than latency predictions. */
+const TUNE_DEFAULTS={write:'QUORUM',read:'QUORUM',down:1,bloom:0.01,strategy:'STCS',workload:'write',grace:10,repair:7};
+const tune={...TUNE_DEFAULTS};
+const TUNE_PANELS=[
+ {id:'consistency',title:'1 · Replica consistency',sub:'How many replicas must answer?',controls:[
+  ['write','Write CL',['ONE','QUORUM','ALL'],'Acknowledgements required for a completed write.'],
+  ['read','Read CL',['ONE','QUORUM','ALL'],'Responses reconciled for a read.'],
+  ['down','Failed replicas',[0,1,2],'Assume RF = 3 for one partition.']]},
+ {id:'bloom',title:'2 · Bloom filter',sub:'Memory against unnecessary SSTable probes',controls:[
+  ['bloom','bloom_filter_fp_chance',[0.1,0.01,0.001],'Target false-positive chance for a key absent from an SSTable.']]},
+ {id:'compaction',title:'3 · Compaction strategy',sub:'Match file layout to the workload',controls:[
+  ['strategy','Table strategy',['STCS','LCS','TWCS'],'Changing strategy on a real table can trigger substantial recompaction.'],
+  ['workload','Workload',['write','read','ttl'],'write = frequent updates · read = point reads · ttl = mostly append-only TTL.']]},
+ {id:'deletes',title:'4 · Tombstone grace',sub:'Keep deletes long enough for repair',controls:[
+  ['grace','gc_grace_seconds (days)',[1,3,10,30],'Illustrates timeout-based tombstone GC; repair-based mode follows different rules.'],
+  ['repair','Full repair interval (days)',[1,3,7,14,30],'Use the longest real interval, including likely delays.']]}
 ];
+const TUNE_LABEL={write:'Write CL',read:'Read CL',down:'Failed replicas',bloom:'bloom_filter_fp_chance',strategy:'Table strategy',workload:'Workload',grace:'gc_grace_seconds (days)',repair:'Full repair interval (days)'};
+function tuneControl([id,,values,help]){
+  return `<label for="tune-${id}"><b>${TUNE_LABEL[id]}</b><select id="tune-${id}" data-tune="${id}">${values.map(v=>`<option value="${v}" ${tune[id]===v?'selected':''}>${v}</option>`).join('')}</select><small>${help}</small></label>`;
+}
+const tuneMetric=(value,label)=>`<div><b>${value}</b><span>${label}</span></div>`;
+function tuneRender(){
+  const need=x=>x==='ONE'?1:x==='ALL'?3:2,live=3-tune.down,w=need(tune.write),r=need(tune.read),wOK=live>=w,rOK=live>=r,overlap=w+r>3;
+  $('#tune-preview-consistency').innerHTML=`<h4>RF = 3 · ${live} live replica${live===1?'':'s'}</h4><div class="ops-replicas">${[0,1,2].map(i=>`<span class="${i<live?'hit':'miss'}">Replica ${i+1} ${i<live?'✓':'✕'}</span>`).join('')}</div>
+    <div class="ops-metrics">${tuneMetric(w+'/3','write ACKs needed')}${tuneMetric(r+'/3','read replies needed')}${tuneMetric(w+r+' > 3',overlap?'sets must overlap':'overlap not guaranteed')}</div>
+    <p>${wOK?'Write can complete.':'Write is unavailable.'} ${rOK?'Read can complete.':'Read is unavailable.'} ${wOK&&rOK&&overlap?'A later read must contact at least one replica from a completed write set, assuming the same replica set and no competing writes.':'This choice does not give a successful overlapping read and write under the selected failures.'}</p>
+    <p class="ops-muted">Overlap is about a completed write and later read. It does not order concurrent writes, repair missed replicas, or replace Raft for metadata.</p>`;
+  const p=+tune.bloom,bits=-Math.log(p)/Math.LN2**2,probes=Math.round(1000*12*p),width=Math.min(100,bits/16*100);
+  $('#tune-preview-bloom').innerHTML=`<h4>1,000 absent-key reads across 12 SSTables</h4><div class="ops-bar" role="img" aria-label="${bits.toFixed(1)} approximate bits per key"><span style="width:${width}%">${bits.toFixed(1)} bits/key</span><span style="flex:1">filter memory</span></div>
+    <div class="ops-metrics">${tuneMetric((12000-probes).toLocaleString(),'expected files skipped')}${tuneMetric(probes.toLocaleString(),'expected false probes')}${tuneMetric('0','false negatives')}</div>
+    <p>Lowering the target from 0.1 to 0.001 spends roughly 3× as many filter bits per key to avoid most wasted probes. It cannot fix reads that touch many SSTables containing the key.</p>
+    <p class="ops-muted">Illustration: 12,000 independent absent-key checks; expected probes = checks × target probability. Actual filter size and observed rate depend on the table and data.</p>`;
+  const profiles={STCS:{read:3,write:1,space:3,desc:'Merge similar-sized files. Low rewrite cost, but overlapping files raise read cost and large merges need disk headroom.'},LCS:{read:1,write:3,space:1,desc:'Non-overlapping levels reduce point-read work and space overhead, at the cost of more rewrites.'},TWCS:{read:2,write:1,space:1,desc:'Group mostly append-only TTL data by time so expired windows can be dropped together. Late updates and mixed TTLs can block that.'}},a=profiles[tune.strategy];
+  const fit=tune.workload==='write'?tune.strategy==='STCS':tune.workload==='read'?tune.strategy==='LCS':tune.strategy==='TWCS';
+  const bar=(n,color)=>`<div class="ops-bar" aria-label="${n} of 3 relative cost"><span style="width:${n/3*100}%;background:${color}">${'●'.repeat(n)}</span><span style="flex:1"></span></div>`;
+  $('#tune-preview-compaction').innerHTML=`<h4>${tune.strategy} · ${fit?'good starting fit':'check this mismatch'}</h4><p>${a.desc}</p>
+    <div class="ops-metrics">${tuneMetric(a.read+'/3','relative read work')}${tuneMetric(a.write+'/3','relative rewrite work')}${tuneMetric(a.space+'/3','relative disk pressure')}</div><b>Read work</b>${bar(a.read,'var(--acc)')}<b>Rewrite work</b>${bar(a.write,'var(--acc2)')}
+    <p>${fit?'This matches the selected workload as a starting hypothesis.':'For this workload, test '+(tune.workload==='write'?'STCS':tune.workload==='read'?'LCS':'TWCS')+' as a starting hypothesis.'} Measure SSTables per read, compaction backlog, write throughput and free disk before changing a real table.</p>
+    <p class="ops-muted">The 1–3 marks show direction only; they are not benchmark results or predicted latency. TWCS assumes time-ordered, mostly immutable data with consistent TTL.</p>`;
+  const safe=+tune.repair<+tune.grace;
+  $('#tune-preview-deletes').innerHTML=`<h4>Repair must complete before the grace window closes</h4><div class="ops-bar" role="img" aria-label="repair every ${tune.repair} days; grace ${tune.grace} days"><span style="width:${Math.min(100,tune.repair/Math.max(tune.grace,tune.repair)*100)}%;background:${safe?'var(--ok)':'var(--bad)'}">repair ${tune.repair}d</span><span style="flex:1">grace ${tune.grace}d</span></div>
+    <div class="ops-metrics">${tuneMetric(tune.grace+'d','grace window')}${tuneMetric(tune.repair+'d','repair interval')}${tuneMetric(safe?'inside':'too late','schedule check')}</div>
+    <p>${safe?'The example repair schedule fits within the grace window. Leave time for delays and verify every replica was repaired.':'The example repair schedule can miss the grace window. An offline replica may retain an old value after the delete marker is purged.'}</p>
+    <p class="ops-muted">This timing check is necessary for timeout-based GC, not sufficient: overlapping SSTables, actual repair completion and replica outages matter. Tablets may use repair-based tombstone GC instead.</p>`;
+}
 
-(function(){
-const SC_REP=(k,n)=>{const h=sHash(k)%n,r=[];for(let i=0;i<Math.min(3,n);i++)r.push((h+i)%n);return r};
-const nid=(x,n)=>String(x||'').startsWith('@')?SC_REP(x.slice(1),n)[1]:(+x||0);
-const SIMM={
- id:'scylla',nodeLabel:'nodes',nodeRange:[3,6,4],
- settings:[{id:'cl',label:'consistency',opts:['ONE','QUORUM','ALL'],def:'QUORUM'}],
- menu:[{op:'W',label:'INSERT / UPDATE',args:[{n:'key',d:'c101',w:60},{n:'value',d:'paid',w:70}]},{op:'D',label:'DELETE (tombstone)',args:[{n:'key',d:'c101',w:60}]},{op:'R',label:'SELECT (read)',args:[{n:'key',d:'c101',w:60}]},{op:'K',label:'kill node (# or @key = a replica of key)',args:[{n:'#',d:'1',w:50}]},{op:'H',label:'restart node',args:[{n:'#',d:'1',w:36}]}],
- scenarios:[
-  {name:'insert → update → delete',desc:'Any node coordinates. The partition key is hashed to a token that names 3 replicas; each replica appends to its commitlog and memtable. Updates and deletes are new versions (a delete is a tombstone). The highest version wins.',acts:['0 W c101 new','1800 W c102 paid','3600 W c101 shipped','5400 R c101','7000 D c102','8800 R c102']},
-  {name:'a replica is down (QUORUM vs ONE)',desc:'One replica misses writes while it is down and nothing repairs it here. Reads at ONE can return stale data; QUORUM overlaps with the write quorum and sees the newest version. Change consistency in the controls.',acts:['0 W c101 v1','1800 K @c101','2400 W c101 v2','4400 H @c101','5200 R c101','6600 R c101','8000 R c101']},
- ],
- topo(n){
-  const nodes=[{id:'cli',x:14,y:170,w:90,h:70,label:'Client'}],cx=520,cy=215,rx=280,ry=145,bw=130,bh=104;
-  for(let i=0;i<n;i++){const a=(i/n)*2*Math.PI-Math.PI/2;nodes.push({id:'n'+i,x:cx+rx*Math.cos(a)-bw/2,y:cy+ry*Math.sin(a)-bh/2,w:bw,h:bh,label:'node '+i})}
-  const edges=[];for(let i=0;i<n;i++){edges.push(['cli','n'+i]);for(let j=i+1;j<n;j++)edges.push(['n'+i,'n'+j])}
-  return{nodes,edges,w:900,h:430};
- },
- init(n){const st={status:{cli:'up'},d:{},cl:{},mem:{},sst:{},n};for(let i=0;i<n;i++){const id='n'+i;st.status[id]='up';st.d[id]={};st.cl[id]=0;st.mem[id]=0;st.sst[id]=0}return st},
- apply(st,f){const id='n'+f.n;switch(f.op){case'put':st.d[id][f.k]=f.rec;st.cl[id]++;st.mem[id]++;if(st.mem[id]>=4){st.mem[id]=0;st.sst[id]++}break;case'down':st.status[id]='down';break;case'up':st.status[id]='up';break}},
- fxText(f){return f.op==='put'?`node ${f.n}: ${f.k} v${f.rec.ver}${f.rec.del?' (tombstone)':'='+f.rec.v} → commitlog + memtable`:`node ${f.n} ${f.op}`},
- run(acts,n,set){
-  const W=SIMM.init(n),ev=[],pend=[],ap=f=>SIMM.apply(W,f);
-  const push=e=>{ev.push(e);if(e.fx.length)pend.push({at:e.t+e.d,e});return e};
-  const flush=t=>{pend.sort((x,y)=>x.at-y.at);while(pend.length&&pend[0].at<=t){pend.shift().e.fx.forEach(ap)}};
-  let ver=0,rr=0,rd=0;const rf=Math.min(3,n),need=set.cl==='ONE'?1:set.cl==='ALL'?rf:Math.floor(rf/2)+1;
-  const coord=()=>{const up=[...Array(n).keys()].filter(i=>W.status['n'+i]==='up');return up.length?up[rr++%up.length]:null};
-  for(const a of acts){const t=a.t;flush(t);
-   if(a.op==='W'||a.op==='D'){
-    const k=a.args[0]||'k',v=a.args[1]||'v',del=a.op==='D',c=coord();
-    if(c===null){push(E(t,300,'cli','cli','no node available','fail',[],'All nodes are down.'));continue}
-    const reps=SC_REP(k,n),live=reps.filter(r=>W.status['n'+r]==='up'),existed=reps.some(r=>W.d['n'+r][k]&&!W.d['n'+r][k].del);ver++;
-    const label=del?`DELETE ${k}`:`${existed?'UPDATE':'INSERT'} ${k}=${v}`;
-    push(E(t,500,'cli','n'+c,label,'write',[],`Any node can be the coordinator (here node ${c}). The key hashes to a token that names its ${rf} replicas: nodes ${reps.join(', ')}.`));
-    if(live.length<need){push(E(t+500,400,'n'+c,'cli',`UnavailableException: ${set.cl} needs ${need} replica(s), only ${live.length} alive`,'fail',[],'The coordinator knows too few replicas are up for this consistency level, so it refuses the write instead of risking an inconsistent result. Nothing was written.'));continue}
-    const acks=[];live.forEach((r,i)=>{const rec={v:del?null:v,ver,del};push(E(t+500+i*60,500,'n'+c,'n'+r,del?'tombstone':'mutation','write',[{op:'put',n:r,k,rec}],'Each replica appends to its commitlog (durability), then applies to its memtable. A delete is not an erase: it is a tombstone version that hides older data.'));
-      const ak=push(E(t+1000+i*60,400,'n'+r,'n'+c,'ack','ack',[],'The replica acknowledges after the commitlog append and memtable apply.'));acks.push(ak.t+ak.d)});
-    acks.sort((x,y)=>x-y);push(E(acks[need-1],350,'n'+c,'cli',`OK after ${need}/${live.length} ack(s) (${set.cl})`,'ack',[],`${set.cl} needs ${need} replica acknowledgement(s). Remaining replicas still apply the write in the background.`));
-    reps.filter(r=>!live.includes(r)).forEach(r=>push(E(t+700,0,'n'+c,'n'+c,`node ${r} is down: it MISSES this write`,'info',[],'There are no hints or repair in this model, so a replica that was down stays behind until something repairs it.')));
-   }
-   if(a.op==='R'){const k=a.args[0]||'k',c=coord();if(c===null)continue;const reps=SC_REP(k,n),live=reps.filter(r=>W.status['n'+r]==='up');
-    push(E(t,450,'cli','n'+c,`SELECT ${k}`,'read',[],`The coordinator asks ${need} replica(s) for the row (consistency ${set.cl}).`));
-    if(live.length<need){push(E(t+450,400,'n'+c,'cli',`UnavailableException (${set.cl})`,'fail',[],'Not enough live replicas to satisfy the consistency level.'));continue}
-    flush(t+1500);const off=rd++%live.length,ask=live.slice(off).concat(live.slice(0,off)).slice(0,need),res=[];ask.forEach((r,i)=>{push(E(t+450+i*60,450,'n'+c,'n'+r,'read','read',[],'Replicas return their newest version of the row.'));const x=W.d['n'+r][k];res.push(x);push(E(t+900+i*60,450,'n'+r,'n'+c,x?`v${x.ver}${x.del?' tombstone':'='+x.v}`:'(no row)','data',[],'The reply carries the row version (timestamp).'))});
-    const best=res.filter(Boolean).sort((x,y)=>y.ver-x.ver)[0],truth=reps.map(r=>W.d['n'+r][k]).filter(Boolean).sort((x,y)=>y.ver-x.ver)[0],stale=(best?best.ver:0)<(truth?truth.ver:0);
-    push(E(t+1400,450,'n'+c,'cli',best?(best.del?'(deleted)':`"${best.v}"`)+(stale?' ← STALE':''):'(not found)'+(stale?' ← STALE':''),stale?'fail':'ack',[],stale?`A replica that missed the write answered. Newest version in the cluster is v${truth.ver}: with ${set.cl} the read set did not overlap the write set.`:'The coordinator reconciles the replies and returns the highest version. A tombstone means "deleted".'))}
-   if(a.op==='K'){const i=nid(a.args[0],n);if(i>=n)continue;push(E(t,0,'cli','n'+i,`node ${i} goes down`,'fail',[{op:'down',n:i}],'The node stops answering. Other nodes keep serving as long as the consistency level can still be met.'));flush(t)}
-   if(a.op==='H'){const i=nid(a.args[0],n);if(i>=n)continue;push(E(t,0,'cli','n'+i,`node ${i} restarts (commitlog replay)`,'info',[{op:'up',n:i}],'On restart the node replays its commitlog to rebuild the memtable. It does NOT get the writes it missed.'));flush(t)}
-  }
-  return{events:ev};
- },
- lines(id,st){if(id==='cli')return[];const d=st.d[id],ks=Object.keys(d);return[`cl${st.cl[id]} mem${st.mem[id]} sst${st.sst[id]}`,...ks.slice(0,6).map(k=>d[k].del?`${k} ✕ tombstone v${d[k].ver}`:`${k}=${d[k].v} v${d[k].ver}`)]},
- detail(id,st){if(id==='cli')return[];const d=st.d[id];return[`commitlog records ${st.cl[id]}`,`memtable rows ${st.mem[id]}`,`sstables ${st.sst[id]}`,...Object.entries(d).map(([k,r])=>`${k}: ${r.del?'TOMBSTONE':r.v} (version ${r.ver})`)]}
-};
-
-Lab.sim(SIMM);})();
-
+function mountOperations(){
+  $('#build').remove();$('#capstone').remove();$('#chDeepBox')?.remove();$('#deepStore')?.remove();
+  $('nav a[href="#build"]')?.remove();const nav=$('nav a[href="#capstone"]');if(nav){nav.href='#parameter-tuning';nav.textContent='Parameter tuning'}
+  $('.foot').insertAdjacentHTML('beforebegin',`<section class="sec" id="parameter-tuning"><div class="sec-h"><div class="kick">Parameter tuning</div><h2>Change a parameter. See the consequence.</h2><p>Start from a symptom, adjust one setting, then check the production metric. These small models explain direction and safety rules; they do not predict latency or replace a load test.</p></div>
+    <div class="bar"><button id="tune-reset">Reset parameters</button><span class="ops-muted">Examples use RF = 3, one datacenter and a simplified workload.</span></div>
+    ${TUNE_PANELS.map(p=>`<article class="card ops-panel"><h3>${p.title}</h3><p class="ops-muted">${p.sub}</p><div class="ops-grid"><div class="ops-controls">${p.controls.map(tuneControl).join('')}</div><div class="ops-preview" id="tune-preview-${p.id}" aria-live="polite"></div></div></article>`).join('')}
+    <p class="ops-muted">Official references: <a href="https://docs.scylladb.com/manual/stable/cql/consistency.html">consistency levels</a> · <a href="https://docs.scylladb.com/manual/stable/cql/ddl.html">table options</a> · <a href="https://docs.scylladb.com/manual/stable/architecture/compaction/compaction-strategies.html">compaction strategies</a> · <a href="https://docs.scylladb.com/manual/stable/kb/gc-grace-seconds.html">repair and gc_grace_seconds</a>.</p></section>`);
+  $('#parameter-tuning').addEventListener('change',e=>{const el=e.target.closest('[data-tune]');if(!el)return;const id=el.dataset.tune;tune[id]=typeof TUNE_DEFAULTS[id]==='number'?+el.value:el.value;tuneRender()});
+  $('#tune-reset').onclick=()=>{Object.assign(tune,TUNE_DEFAULTS);$$('[data-tune]').forEach(el=>el.value=tune[el.dataset.tune]);tuneRender()};
+  $('#chTrade').addEventListener('click',e=>{const c=e.target.closest('[data-case]'),f=e.target.closest('[data-fixed]');if(!c&&!f)return;const k=activeIncidentChapter,state=incidentState[k];if(!state)return;if(c){state.index=+c.dataset.case;state.fixed=false}else state.fixed=f.dataset.fixed==='true';renderIncidents(k,$('#chTrade'));$('#chTrade').querySelector(c?`[data-case="${state.index}"]`:`[data-fixed="${state.fixed}"]`)?.focus({preventScroll:true})});
+  $('#chTrade').addEventListener('keydown',e=>{const tab=e.target.closest('[data-case]');if(!tab||!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const tabs=[...$('#chTrade').querySelectorAll('[data-case]')],i=tabs.indexOf(tab),next=e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;tabs[next].click()});
+  tuneRender();
+}
 Lab.onStop(()=>{rsLive=false;rsAnim=false;migAnim=null});
-Lab.start({phases:PHASES,detail:DETAIL,ovs:OVS,ctl:ctlHTML,state:()=>S,beforePlay:k=>{if(k===7){rsInit(S.cfg.raftScen);rsAnim=true}},afterPlay:k=>{if(k===7)rsAnim=false}});
+Lab.start({phases:PHASES,ovs:OVS,ctl:ctlHTML,state:()=>S,renderTrade:renderIncidents,beforePlay:k=>{if(k===7){rsInit(S.cfg.raftScen);rsAnim=true}},afterPlay:k=>{if(k===7)rsAnim=false}});
+mountOperations();
 </script>
 </body>
 </html>
