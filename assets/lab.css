@@ -255,3 +255,76 @@ details.dd summary{cursor:pointer;font-weight:600}details.dd summary small{color
 .wide{overflow-x:auto;overscroll-behavior-x:contain}
 .wide>svg{min-width:600px}
 .view .row{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+
+/* ---------- ops panel: tune at scale · case studies · prod parameters ---------- */
+.ops{border-left:5px solid var(--acc2)}
+.opsintro{margin:0 0 10px;color:var(--mut);font-size:14.5px}
+.presets{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 10px}
+.presets button{min-height:34px;padding:3px 12px;border-radius:999px;font-size:13px}
+.slgrid{display:grid;gap:8px 18px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));margin:0 0 12px;padding:10px 12px;background:var(--soft);border-radius:12px}
+label.sl{display:grid;grid-template-columns:minmax(0,1fr) minmax(90px,1.1fr) auto;gap:4px 10px;align-items:center;font-size:13px;color:var(--ink)}
+label.sl .sl-l{display:flex;flex-direction:column;font-family:ui-monospace,Menlo,monospace;font-size:12px;overflow-wrap:anywhere}
+label.sl .sl-l small{font-family:system-ui,sans-serif;color:var(--mut);font-size:11.5px}
+label.sl input[type=range]{width:100%;min-width:0}
+label.sl select{grid-column:2/4;min-width:0}
+label.sl .sl-v{font-family:ui-monospace,Menlo,monospace;font-size:12px;min-width:3.4em;text-align:right;white-space:nowrap}
+@media(max-width:520px){label.sl{grid-template-columns:1fr auto}label.sl .sl-l{grid-column:1/3}label.sl select{grid-column:1/3}}
+.ocards{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));margin:0 0 12px}
+.oc{border:1px solid var(--line);border-left:5px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg);min-width:0}
+.oc small{display:block;color:var(--mut);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em}
+.oc b{display:block;font-size:19px;line-height:1.25;overflow-wrap:anywhere}
+.oc i{display:block;font-style:normal;color:var(--mut);font-size:12px;line-height:1.3;margin-top:2px}
+.oc.ok{border-left-color:var(--ok)}.oc.warn{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,var(--bg))}.oc.bad{border-left-color:var(--bad);background:color-mix(in srgb,var(--bad) 9%,var(--bg))}
+.oc.bad b{color:var(--bad)}.oc.warn b{color:var(--warn)}
+.ochart{margin:0 0 12px}
+.ochart h5{margin:0 0 6px;font-size:13px}.ochart h5 span{color:var(--mut);font-weight:400}
+.ob{display:grid;grid-template-columns:minmax(64px,110px) 1fr minmax(54px,auto);gap:8px;align-items:center;margin:3px 0;font-size:12px}
+.ob .ol{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mut)}
+.ob .otrack{position:relative;height:14px;border-radius:5px;background:var(--line);overflow:visible}
+.ob .otrack i{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:var(--brand,var(--acc));transition:width .25s}
+.ob.ok .otrack i{background:var(--ok)}.ob.warn .otrack i{background:var(--warn)}.ob.bad .otrack i{background:var(--bad)}
+.ob .otrack u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);opacity:.7;text-decoration:none}
+.ob .ov{font-family:ui-monospace,Menlo,monospace;text-align:right;white-space:nowrap}
+.otips{margin:8px 0 0;padding-left:18px;font-size:14px}.otips li{margin:3px 0}
+.case{border:1px solid var(--line);border-radius:12px;margin:8px 0;background:var(--bg)}
+.case>summary{cursor:pointer;list-style:none;padding:10px 12px;display:grid;grid-template-columns:auto 1fr;gap:2px 10px;align-items:baseline}
+.case>summary::-webkit-details-marker{display:none}
+.case>summary b{font-size:15px}
+.case>summary small{grid-column:2;color:var(--mut);font-size:13px;line-height:1.4}
+.case[open]>summary{border-bottom:1px solid var(--line)}
+.ctag{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:700;border-radius:5px;padding:1px 7px;background:color-mix(in srgb,var(--bad) 14%,var(--card));color:var(--bad);white-space:nowrap}
+.cbody{padding:10px 12px}
+.cgrid{display:grid;gap:10px 16px;grid-template-columns:1fr 1fr}
+@media(max-width:760px){.cgrid{grid-template-columns:1fr}}
+.cgrid>div{min-width:0}
+.cgrid h5{margin:0 0 4px;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)}
+.cgrid ul{margin:0;padding-left:18px;font-size:13.5px}.cgrid li{margin:3px 0}.cgrid p{margin:0;font-size:13.5px}
+.cbody .src{font-size:12px}
+.cbody .src a{color:var(--mut)}
+.ptwrap{overflow-x:auto}
+table.pt{width:100%;border-collapse:collapse;font-size:13px}
+table.pt th,table.pt td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+table.pt th{background:var(--soft);font-size:12px;white-space:nowrap}
+table.pt td:first-child{min-width:170px;overflow-wrap:anywhere}
+table.pt tr.pg td{background:var(--soft);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut)}
+@media(max-width:760px){
+  table.pt,table.pt tbody,table.pt tr,table.pt td{display:block;width:100%}
+  table.pt tr:first-child{display:none}
+  table.pt tr{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;padding:6px 10px;background:var(--soft)}
+  table.pt tr.pg{background:none;border:0;padding:4px 0;margin:10px 0 2px}
+  table.pt td{border:0;padding:3px 0;min-width:0!important}
+  table.pt td[data-l]::before{content:attr(data-l) ": ";color:var(--mut);font-size:11.5px}
+  table.pt td:first-child::before{content:""}
+}
+.deep{border-left:5px solid var(--brand,var(--acc))}
+.deep details.dd:first-child{margin-top:0}
+/* live gauges above the end-to-end simulation */
+.gauges{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+.gz{border:1px solid var(--line);border-left:4px solid var(--line);border-radius:8px;padding:3px 10px;background:var(--bg);min-width:96px}
+.gz small{display:block;color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em}
+.gz b{font-family:ui-monospace,Menlo,monospace;font-size:14px}
+.gz.ok{border-left-color:var(--ok)}.gz.warn{border-left-color:var(--warn)}.gz.bad{border-left-color:var(--bad)}.gz.bad b{color:var(--bad)}
+/* overview drill-down: components with an `inner` map open on tap */
+.ovn.zoomable:hover rect{stroke:var(--brand,var(--acc));stroke-width:3}
+#ovCrumb{font-size:15px;margin-right:6px}
+.ovgo{display:flex;flex-wrap:wrap;gap:6px}
