@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spark DAG Planner (simple)</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2230;--mut:#667085;--line:#d9dee7;--acc:#e25a1c;--acc2:#2f6fed;--ok:#1a9b5a;--bad:#d64545;
+--p0:#dbe9ff;--p1:#ffe6cf;--p2:#d9f4e3;--p3:#f1defa;--p4:#fff3b8;--p5:#ffd9de;--p6:#d6f2f2;--p7:#e6e6e6}
+@media(prefers-color-scheme:dark){:root{--bg:#10141c;--card:#181e29;--ink:#e8ecf3;--mut:#93a0b5;--line:#2b3445;--acc:#ff7a3d;--acc2:#6c9bff;--ok:#43c783;--bad:#ff6b6b;
+--p0:#1f3556;--p1:#53361c;--p2:#1d4630;--p3:#44274f;--p4:#524a17;--p5:#552630;--p6:#17454a;--p7:#3a3f48}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:980px;margin:auto;padding:24px 16px 60px}
+h1{margin:0 0 4px;font-size:24px}h1 span{color:var(--acc)}
+.lead{margin:0 0 16px;color:var(--mut)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
+button,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600;padding:8px 18px}
+button:disabled{opacity:.45;cursor:default}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+label{color:var(--mut);font-size:13px}
+.caption{margin:14px 0 6px;padding:12px 14px;border-radius:10px;background:var(--bg);border-left:5px solid var(--acc);font-size:17px;min-height:64px}
+.caption.cut{border-left-color:var(--bad)}.caption.make{border-left-color:var(--ok)}
+svg{display:block;width:100%}
+svg text{font-family:ui-monospace,Menlo,monospace;font-size:12px;fill:var(--ink)}
+.nd{cursor:pointer}
+.nd rect{fill:var(--card);stroke:var(--line);stroke-width:1.5;transition:fill .3s,stroke .3s}
+.nd.cur rect{stroke:var(--acc);stroke-width:4}
+.nd.fin rect{stroke:var(--acc2);stroke-width:3}
+.nd .s2{fill:var(--mut);font-size:11px}
+.edge{fill:none;stroke:#8a94a6;stroke-width:1.6}
+.edge.shuf{stroke:var(--bad);stroke-dasharray:6 4;stroke-width:2.2}
+.edge.walk{stroke:var(--acc);stroke-width:3.5}
+.edge.found{stroke:var(--bad);stroke-width:4.5;stroke-dasharray:none}
+.legend{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.st{border-radius:8px;padding:6px 12px;border:2px solid var(--line);animation:pop .35s ease-out;font-size:13px}
+.st.reuse{border-style:dashed}
+@keyframes pop{from{transform:scale(.95);opacity:0}to{transform:none;opacity:1}}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
+.hint{color:var(--mut);font-size:13px;margin-top:8px}
+details{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:8px 14px;background:var(--card)}
+summary{cursor:pointer;color:var(--mut);font-size:14px}
+.log{max-height:200px;overflow:auto;font-family:ui-monospace,monospace;font-size:12px;margin-top:8px}
+.log div{padding:2px 0;border-bottom:1px dashed var(--line)}
+.key{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--mut);margin-top:6px}
+.key i{display:inline-block;width:26px;border-top:3px solid #8a94a6;vertical-align:3px;margin-right:6px}
+.key i.r{border-top:3px dashed var(--bad)}
+.lab-back{display:inline-block;margin:0 0 10px;font-size:14px;color:var(--acc2);text-decoration:none}.lab-back:hover{text-decoration:underline}
+.leadin{background:var(--card);border-radius:10px;padding:10px 14px;margin:0 0 14px;font-size:14.5px;border:1px solid var(--line);border-left:5px solid var(--acc)}
+.leadin b.t{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--acc);margin-bottom:2px}
+.svgscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.swipe{display:none;font-size:12px;color:var(--mut);text-align:center}
+@media(max-width:640px){.swipe{display:block}button,select{min-height:38px}}
+.bar>span[style*="flex:1"]{min-width:0}
+</style>
+</head>
+<body>
+<main>
+  <a class="lab-back" href="04-spark-internals-end-to-end.html">&larr; Back to the Spark tour</a>
+  <h1><span>Spark</span> · How the planner cuts stages</h1>
+  <div class="leadin"><b class="t">The problem this page solves</b>A job with a <code>reduceByKey</code> cannot run in one pass: every reducer needs output from every mapper first. So the planner must find exactly where the job has to stop and wait. Step through the DAGScheduler's backward walk and see why narrow steps share a stage while a shuffle cuts a new one.</div>
+  <p class="lead">Rule of thumb: <b>narrow</b> steps stay in one stage; a <b>shuffle</b> (<code>ReduceByKey</code>) cuts the plan into two stages. Press <b>Next</b> and follow the sentence.</p>
+
+  <div class="card">
+    <div class="bar">
+      <label>Example <select id="ex">
+        <option value="wc">Word count (1 shuffle)</option>
+        <option value="narrow">Narrow only (no shuffle)</option>
+        <option value="two">Two shuffles</option>
+        <option value="union">Union + shared ancestor</option>
+      </select></label>
+      <span style="flex:1"></span>
+      <button class="primary" id="next">▶ Start planning</button>
+      <button id="auto">Auto-play</button>
+      <button id="reset">Reset</button>
+    </div>
+
+    <div class="caption" id="cap">Pick an example, then press <b>&nbsp;Start planning</b>.</div>
+
+    <div class="svgscroll"><svg id="dag" role="img" aria-label="RDD lineage graph"></svg></div><div class="swipe">&larr; swipe the graph &rarr;</div>
+    <div class="key"><span><i></i>narrow (same stage)</span><span><i class="r"></i>shuffle (stage boundary)</span><span>Click a node to change the <b>final RDD</b> of the action</span></div>
+
+    <div class="legend" id="stages"></div>
+    <div class="hint" id="done"></div>
+  </div>
+
+  <details id="builder">
+    <summary>Build your own lineage</summary>
+    <div class="bar" style="margin-top:10px">
+      <label>Partitions <select id="parts"><option>1</option><option>2</option><option selected>3</option><option>4</option></select></label>
+      <button data-add="Source">+ Source</button>
+      <button data-add="Map">Map</button><button data-add="Filter">Filter</button><button data-add="FlatMap">FlatMap</button><button data-add="KeyBy">KeyBy</button>
+      <button data-add="ReduceByKey">ReduceByKey ⚡</button>
+      <button id="clear">Clear</button>
+    </div>
+    <div class="hint">New nodes attach to the selected node, which then becomes the final RDD.</div>
+    <div class="hint bad" id="err" style="color:var(--bad)"></div>
+  </details>
+
+  <details>
+    <summary>Event log (technical detail)</summary>
+    <div class="log" id="log"></div>
+  </details>
+</main>
+
+<script>
+const $=s=>document.querySelector(s);
+const pc=i=>`var(--p${((i%8)+8)%8})`;
+/* patch the DOM in place (no flicker, CSS transitions keep running) */
+const sameNode=(a,b)=>a.nodeType===b.nodeType&&(a.nodeType!==1||(a.nodeName===b.nodeName&&a.namespaceURI===b.namespaceURI));
+function patchKids(d,s){const sk=s.childNodes;for(let i=0;i<sk.length;i++){const sn=sk[i],dn=d.childNodes[i];if(!dn)d.appendChild(document.importNode(sn,true));else if(sameNode(dn,sn))patchNode(dn,sn);else d.replaceChild(document.importNode(sn,true),dn)}while(d.childNodes.length>sk.length)d.removeChild(d.lastChild)}
+function patchNode(d,s){if(d.nodeType!==1){if(d.nodeValue!==s.nodeValue)d.nodeValue=s.nodeValue;return}for(const a of [...d.attributes])if(!s.hasAttribute(a.name))d.removeAttribute(a.name);for(const a of s.attributes)if(d.getAttribute(a.name)!==a.value)d.setAttribute(a.name,a.value);patchKids(d,s)}
+function morph(root,html){const tpl=document.createElement('template');const isSvg=root.namespaceURI==='http://www.w3.org/2000/svg';tpl.innerHTML=isSvg?'<svg xmlns="http://www.w3.org/2000/svg">'+html+'</svg>':html;patchKids(root,isSvg?tpl.content.firstChild:tpl.content)}
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------- model ---------- */
+let nodes=[],selected=null,sched,ui;
+const fresh=()=>({cur:null,stageOf:new Map(),edgeWalk:new Set(),edgeFound:new Set(),cards:[],logs:[],cap:null});
+function newSched(){sched={jobs:0,stages:0,shuffleStages:new Map()}}
+function addNode(op,parentIds,parts){
+  const n={id:nodes.length,op,parts,deps:[]};
+  if(op==='Union'){let off=0;parentIds.forEach(p=>{n.deps.push({kind:'narrow',parent:p});off+=nodes[p].parts});n.parts=off}
+  else if(op==='ReduceByKey')n.deps.push({kind:'shuffle',parent:parentIds[0]});
+  else if(parentIds.length){n.deps.push({kind:'narrow',parent:parentIds[0]});n.parts=nodes[parentIds[0]].parts}
+  nodes.push(n);return n;
+}
+function resetAll(){stopPlay();nodes=[];selected=null;newSched();ui=fresh();events=[];idx=0;setBtn()}
+function preset(k){
+  resetAll();
+  if(k==='wc'){const s=addNode('Source',[],3),f=addNode('FlatMap',[s.id]),kb=addNode('KeyBy',[f.id]),r=addNode('ReduceByKey',[kb.id],2),fl=addNode('Filter',[r.id]);selected=fl.id}
+  if(k==='two'){const s=addNode('Source',[],4),kb=addNode('KeyBy',[s.id]),r1=addNode('ReduceByKey',[kb.id],3),m=addNode('Map',[r1.id]),k2=addNode('KeyBy',[m.id]),r2=addNode('ReduceByKey',[k2.id],2);selected=r2.id}
+  if(k==='union'){const s=addNode('Source',[],3),a=addNode('Map',[s.id]),b=addNode('Filter',[s.id]),u=addNode('Union',[a.id,b.id]),kb=addNode('KeyBy',[u.id]),r=addNode('ReduceByKey',[kb.id],2),f=addNode('Filter',[r.id]);selected=f.id}
+  if(k==='narrow'){const s=addNode('Source',[],3),m=addNode('Map',[s.id]),f=addNode('Filter',[m.id]),x=addNode('FlatMap',[f.id]);selected=x.id}
+  draw();
+}
+$('#ex').onchange=e=>preset(e.target.value);
+
+document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{
+  const op=b.dataset.add,p=+$('#parts').value;
+  if(op==='Source')selected=addNode('Source',[],p).id;
+  else{if(selected==null){$('#err').textContent='Add a Source first.';return}selected=addNode(op,[selected],op==='ReduceByKey'?Math.max(1,p-1):p).id}
+  $('#err').textContent='';stopPlay();ui=fresh();events=[];idx=0;setBtn();draw();
+});
+$('#clear').onclick=()=>{resetAll();draw()};
+
+/* ---------- drawing ---------- */
+function layout(){
+  const d={};const dep=n=>d[n.id]??(d[n.id]=n.deps.length?1+Math.max(...n.deps.map(x=>dep(nodes[x.parent]))):0);
+  nodes.forEach(dep);const lv={};nodes.forEach(n=>{n.d=d[n.id];(lv[n.d]=lv[n.d]||[]).push(n)});
+  const W=150,H=68,gx=70,gy=20;
+  nodes.forEach(n=>{n.x=10+n.d*(W+gx);n.y=10+lv[n.d].indexOf(n)*(H+gy)});
+  const dm=Math.max(...nodes.map(n=>n.d)),mr=Math.max(...Object.values(lv).map(a=>a.length));
+  return{W,H,w:20+(dm+1)*(W+gx)-gx,h:20+mr*(H+gy)-gy};
+}
+function draw(){
+  const svg=$('#dag');
+  if(!nodes.length){svg.setAttribute('viewBox','0 0 600 70');svg.style.minWidth='';morph(svg,'<text x="10" y="40" style="fill:var(--mut)">Empty. Pick an example or open "Build your own lineage".</text>');renderSide();return}
+  const L=layout();svg.setAttribute('viewBox',`0 0 ${L.w} ${L.h}`);svg.style.maxHeight=Math.max(L.h,120)*1.4+'px';svg.style.minWidth=Math.round(Math.min(L.w,1100)*0.62)+'px';
+  let h='<defs><marker id="ar" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0L8,4L0,8z" fill="#8a94a6"/></marker></defs>';
+  nodes.forEach(n=>n.deps.forEach(dp=>{
+    const a=nodes[dp.parent],k=a.id+'>'+n.id;
+    const cls=`edge ${dp.kind==='shuffle'?'shuf':''} ${ui.edgeWalk.has(k)?'walk':''} ${ui.edgeFound.has(k)?'found':''}`;
+    const x1=a.x+L.W,y1=a.y+L.H/2,x2=n.x,y2=n.y+L.H/2;
+    h+=`<path class="${cls}" d="M${x1},${y1} C${x1+30},${y1} ${x2-30},${y2} ${x2},${y2}" marker-end="url(#ar)"/>`;
+    if(dp.kind==='shuffle')h+=`<text x="${(x1+x2)/2}" y="${(y1+y2)/2-7}" text-anchor="middle" style="fill:var(--bad);font-size:11px">⚡ shuffle</text>`;
+  }));
+  nodes.forEach(n=>{
+    const st=ui.stageOf.get(n.id);
+    h+=`<g class="nd ${ui.cur===n.id?'cur':''} ${n.id===selected?'fin':''}" data-id="${n.id}">
+      <rect ${st!=null?`style="fill:${pc(st)}"`:''} x="${n.x}" y="${n.y}" width="${L.W}" height="${L.H}" rx="9"/>
+      <text x="${n.x+9}" y="${n.y+21}" font-weight="700">#${n.id} ${n.op}</text>
+      <text class="s2" x="${n.x+9}" y="${n.y+39}">${n.parts} partitions</text>
+      <text x="${n.x+9}" y="${n.y+58}" style="font-size:11px;font-weight:700">${st!=null?'Stage '+st:''}</text>
+      ${n.id===selected?`<text x="${n.x+L.W-9}" y="${n.y+58}" text-anchor="end" style="fill:var(--acc2);font-size:11px">final RDD</text>`:''}</g>`;
+  });
+  morph(svg,h);
+  svg.querySelectorAll('.nd').forEach(g=>g.onclick=()=>{selected=+g.dataset.id;stopPlay();ui=fresh();events=[];idx=0;setBtn();draw()});
+  renderSide();
+}
+function renderSide(){
+  const c=$('#cap');
+  if(ui.cap){c.className='caption '+(ui.cap.k||'');c.innerHTML=ui.cap.t}
+  else{c.className='caption';c.innerHTML=nodes.length?`Final RDD is <b>#${selected}</b>. Press <b>&nbsp;Start planning</b> and the planner will walk backward from it.`:'Pick an example.'}
+  morph($('#stages'),ui.cards.map(({stage:s,reused})=>`<div class="st ${reused?'reuse':''}" style="background:${pc(s.id)}"><b>Stage ${s.id}</b> · ${s.kind==='result'?'ResultStage':'ShuffleMapStage'}${reused?` <i>(reused from an earlier job)</i>`:''}
+    <div class="mono">${s.members.slice().sort((a,b)=>a-b).map(i=>'#'+i+' '+nodes[i].op).join(' → ')} · ${s.parts} tasks later${s.parents.length?' · waits for Stage '+s.parents.join(', '):' · can run first'}</div></div>`).join(''));
+  morph($('#log'),ui.logs.map(l=>`<div>${esc(l)}</div>`).join(''));
+}
+
+/* ---------- planner (events) ---------- */
+function planEvents(final){
+  const ev=[];const jobId=sched.jobs++;
+  ev.push({t:'job',final});
+  function find(start,why){
+    ev.push({t:'begin',start,why});
+    const stack=[start],seen=new Set(),deps=[],members=[];
+    while(stack.length){
+      const cur=stack.pop();
+      if(seen.has(cur)){ev.push({t:'skip',rdd:cur});continue}
+      seen.add(cur);members.push(cur);ev.push({t:'look',rdd:cur});
+      for(const dp of nodes[cur].deps){
+        if(dp.kind==='shuffle'){deps.push({child:cur,parent:dp.parent});ev.push({t:'cut',child:cur,parent:dp.parent})}
+        else{stack.push(dp.parent);ev.push({t:'keep',child:cur,parent:dp.parent})}
+      }
+    }
+    return{deps,members};
+  }
+  function getOrCreate(dep){
+    const ex=sched.shuffleStages.get(dep.child);
+    if(ex){ev.push({t:'reuse',stage:ex});return ex.id}
+    const {deps,members}=find(dep.parent,'feeds');
+    const parents=[...new Set(deps.map(getOrCreate))];
+    const stage={id:sched.stages++,kind:'map',rdd:dep.parent,members,parents,parts:nodes[dep.parent].parts,job:jobId};
+    sched.shuffleStages.set(dep.child,stage);ev.push({t:'make',stage});return stage.id;
+  }
+  const {deps,members}=find(final,'final');
+  const parents=[...new Set(deps.map(getOrCreate))];
+  const rs={id:sched.stages++,kind:'result',rdd:final,members,parents,parts:nodes[final].parts,job:jobId};
+  ev.push({t:'make',stage:rs});
+  const all=new Map();[...sched.shuffleStages.values(),rs].forEach(s=>all.set(s.id,s));
+  const order=[],seen=new Set();(function go(i){if(seen.has(i))return;seen.add(i);all.get(i).parents.forEach(go);order.push(i)})(rs.id);
+  ev.push({t:'done',order});
+  return ev;
+}
+
+/* ---------- player: one visible step = one caption ---------- */
+let events=[],idx=0,timer=null,auto=false;
+const nm=i=>`<b>#${i} ${nodes[i].op}</b>`;
+// returns true if event produced a caption (visible step)
+function apply(e){
+  ui.logs.push(e.t+' '+JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k])=>k!=='t'&&k!=='stage'))));
+  switch(e.t){
+    case'job':ui.cap={t:`PlanJob starts at the action's final RDD ${nm(e.final)}. Nothing is read or run: we only look at dependencies.`};return true;
+    case'begin':ui.cur=e.start;
+      if(e.why==='feeds')ui.cap={t:`Now plan the stage that <b>feeds</b> that shuffle. Start from ${nm(e.start)}.`};
+      else ui.cap={t:`Walk backward from ${nm(e.start)}.`};return true;
+    case'look':ui.cur=e.rdd;ui.cap={t:`Looking at ${nm(e.rdd)}.`};return false;
+    case'skip':ui.cap={t:`${nm(e.rdd)} was already seen, so it is not visited twice.`};return true;
+    case'keep':ui.edgeWalk.add(e.parent+'>'+e.child);ui.cap={t:`${nm(e.child)} ← ${nm(e.parent)} is <b>narrow</b>: same stage, keep walking.`};return true;
+    case'cut':ui.edgeFound.add(e.parent+'>'+e.child);ui.cap={k:'cut',t:`${nm(e.child)} ← ${nm(e.parent)} is a <b>shuffle</b>. <b>Cut here</b>: ${nm(e.parent)} and everything before it belong to a different stage.`};return true;
+    case'make':ui.cur=null;ui.cards.push({stage:e.stage,reused:false});e.stage.members.forEach(m=>ui.stageOf.set(m,e.stage.id));
+      ui.cap={k:'make',t:`Create <b>Stage ${e.stage.id}</b> (${e.stage.kind==='result'?'ResultStage':'ShuffleMapStage'}) containing ${e.stage.members.slice().sort((a,b)=>a-b).map(i=>'#'+i).join(', ')}. It will need ${e.stage.parts} tasks later.`};return true;
+    case'reuse':ui.cur=null;ui.cards.push({stage:e.stage,reused:true});e.stage.members.forEach(m=>ui.stageOf.set(m,e.stage.id));
+      ui.cap={k:'make',t:`Stage ${e.stage.id} already exists for this shuffle, so it is <b>reused</b> instead of being created again.`};return true;
+    case'done':ui.cur=null;ui.cap={k:'make',t:`Plan ready. Run order: ${e.order.map(s=>'Stage '+s).join(' → ')}. Still 0 tasks launched and 0 closures called.`};return true;
+  }
+}
+function step(){
+  if(idx>=events.length)return false;
+  let vis=false;
+  while(idx<events.length&&!vis)vis=apply(events[idx++]);
+  draw();
+  if(idx>=events.length){stopPlay();setBtn(true)}
+  return idx<events.length;
+}
+function startPlan(){
+  ui=fresh();events=planEvents(selected);idx=0;draw();
+}
+function stopPlay(){clearTimeout(timer);auto=false;$('#auto').textContent='Auto-play'}
+function loop(){clearTimeout(timer);if(!auto)return;if(step())timer=setTimeout(loop,1500);else stopPlay()}
+function setBtn(finished){$('#next').textContent=finished?'↻ Plan again':(events.length&&idx<events.length?'Next ▶':'▶ Start planning')}
+$('#next').onclick=()=>{
+  if(selected==null)return;
+  if(!events.length||idx>=events.length){startPlan()}
+  step();setBtn(idx>=events.length);
+};
+$('#auto').onclick=()=>{
+  if(selected==null)return;
+  if(auto){stopPlay();return}
+  if(!events.length||idx>=events.length)startPlan();
+  auto=true;$('#auto').textContent='⏸ Pause';loop();setBtn();
+};
+$('#reset').onclick=()=>{stopPlay();ui=fresh();events=[];idx=0;newSched();setBtn();draw()};
+
+resetAll();preset('wc');
+</script>
+</body>
+</html>

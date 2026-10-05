@@ -1,0 +1,1069 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redis Internals End-to-End</title>
+<link rel="stylesheet" href="../../assets/lab.css">
+<style>
+:root{--acc:#d82c20;--acc2:#2f6fed}
+@media(prefers-color-scheme:dark){:root{--acc:#ff5a4d;--acc2:#6c9bff}}
+@media(max-width:820px){.g2{grid-template-columns:1fr}}
+.resp{font-family:ui-monospace,monospace;font-size:12.5px;line-height:1.9;word-break:break-all}
+.resp .b{display:inline-block;padding:0 1px;border-radius:3px}
+.resp .crlf{color:var(--mut);font-size:10px}
+.cut{border-left:2px solid var(--bad);margin-left:1px}
+.tile{display:inline-block;width:28px;height:28px;margin:2px;border-radius:5px;border:1px solid var(--line);font-size:9px;text-align:center;line-height:28px;overflow:hidden}
+.ent{display:inline-block;border:2px solid var(--line);border-radius:7px;padding:2px 7px;margin:2px;font-family:ui-monospace,monospace;font-size:11px;background:var(--card);vertical-align:top}
+input.cli{width:100%}
+.view table{white-space:normal}
+.view td.mono{overflow-wrap:anywhere}
+.view .row{white-space:normal;overflow-wrap:anywhere}
+.legend2{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;color:var(--mut);margin:2px 0 6px}.legend2 i{display:inline-block;width:14px;height:4px;border-radius:2px;vertical-align:middle;margin-right:4px}
+.rcon{background:#10141c;color:#e8ecf3;border-radius:8px;padding:10px;max-height:300px;overflow:auto;font-family:ui-monospace,monospace;font-size:12.5px}
+.rcon .q{color:#8ab4ff}.rcon .e{color:#ff8a8a}.rcon .m{color:#8b97ab}
+.rcon>div{white-space:pre-wrap;word-break:break-word}
+
+</style>
+</head>
+<body>
+<div id="dataSlot" hidden>
+<div class="sample-row"><span class="lbl">Every chapter runs this dataset through a mini Redis engine:</span>
+  <button data-sample="users">Users (CSV)</button><button data-sample="products">Products (CSV)</button><button data-sample="events">Events (JSONL)</button>
+  <span class="note" id="statLine" style="margin:0"></span></div>
+<details class="mydata"><summary>Use your own data, key layout and workload</summary>
+  <div class="bar"><input type="file" id="file" accept=".csv,.json,.jsonl,.ndjson"><label>Format <select id="fmt"><option value="auto">auto-detect</option><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="json">JSON array</option></select></label></div>
+  <textarea id="src" rows="5" spellcheck="false"></textarea>
+  <div class="note" id="srcInfo"></div>
+  <div class="jobgrid">
+    <span>Key column <select id="kcol"></select></span>
+    <span>Key prefix <input type="text" id="prefix" style="width:90px"></span>
+    <label>Load each row as <select id="ltype"><option value="hash">HASH (HSET)</option><option value="string">STRING (SET json)</option></select></label>
+    <label>Rows with TTL <select id="ttlp"><option value="0">0%</option><option value="30" selected>30%</option><option value="60">60%</option><option value="100">100%</option></select></label>
+    <span class="note" style="margin:0">Each row also feeds a set index, a sorted-set ranking, a recent-list and a counter, so every type exists.</span>
+  </div>
+  <h4 style="margin:12px 0 4px;font-size:13px">Workload script <span class="note" style="font-weight:400">runs after the load, one command every 20 ms of virtual time</span></h4>
+  <textarea id="script" rows="6" spellcheck="false"></textarea>
+</details>
+</div>
+<script src="../../assets/lab.js"></script>
+<script>
+const STORY={
+ system:'Redis',
+ title:'Build <span>Redis</span> from scratch',
+ lead:'Start from a real production problem. Watch the obvious fix break. Then see the design Redis uses, running on your own data inside a small Redis engine.',
+ problem:{
+  scene:[
+   'You run the <b>backend of a busy marketplace</b>: 50,000 requests per second at peak. Every request checks a session and bumps a rate-limit counter, the homepage shows a live leaderboard, and every order feeds a queue of background jobs.',
+   'Your PostgreSQL primary sits at 85% CPU, mostly on these tiny lookups, and p99 latency is 40 ms. Product says: <i>"Keep the hot data in memory, under 1 ms, and do not lose it when a machine dies."</i> You have to design that store.'],
+  musts:[
+   '<b>Sub-millisecond</b> reads and writes at 100k+ operations per second.',
+   '<b>No lost updates.</b> Concurrent increments and check-then-set stay correct.',
+   '<b>Bounded memory.</b> Sessions expire on time, and a full cache evicts instead of crashing.',
+   '<b>Declared durability.</b> A crash loses at most a known window, for example one second.',
+   '<b>Survives a dead machine</b>, and can grow past the RAM of one machine.'],
+  naive:{title:'Your first instinct: a hash map inside every app server',text:'Each app process keeps its own in-memory map of sessions, counters and carts. It is fast on day one, then:',
+   breaks:['20 app servers hold 20 different copies: a rate limit counted per process is 20&times; too generous.','A deploy or a crash restarts the process, and every session is gone.','Nothing bounds memory: old sessions pile up until the process is OOM-killed.']},
+  quest:'Rebuild the core of Redis in 10 chapters: one shared, single-threaded, in-memory server first, then make it expire, evict, persist, replicate, fail over, shard and queue. Each chapter meets a problem, tries the naive fix, watches it fail, then runs the real design on your data.'},
+ overview:{title:'The whole system on one page',lead:'Before the details, see how one command travels. Press <b>Trace a request</b> to follow a <code>SET</code> from the client to the replicas, or tap a component to see what it receives and sends. Colors match the chapters.'},
+ chapters:[
+  {ask:'Thousands of clients send commands at once over TCP. How do you run them without locks or lost updates?',
+   why:'Two clients each run <i>read counter, add 1, write it back</i> 5 times. If their steps interleave, the counter ends below 10, and at 100k ops/s a lock per key becomes the bottleneck.',
+   v0:{name:'One thread per connection, a shared map, read-then-write',code:'on request(line):            // split on "\\n"\n  v = map.get(key)\n  map.set(key, v + 1)',breaks:'The two read-then-write sequences interleave: both read the same value and both write <code>v+1</code>, so <b>updates are lost</b> (the playground ends at 8, not 10). And splitting requests on newlines breaks as soon as a value contains <code>\\r\\n</code>.'},
+   design:'Frame every request with length prefixes (RESP) so any byte is safe inside a value, then let one thread execute complete commands one at a time: each command is atomic without a single lock.',
+   predict:{q:'<code>SET bin "a\\r\\nb"</code> arrives split across two TCP chunks, cut in the middle of the value. What does the server do with the first chunk?',opts:['Runs SET with the truncated value <code>"a"</code>','Rejects the request: values cannot contain CRLF','Keeps the bytes in a buffer; nothing runs until the frame is complete'],ans:2,why:'A bulk string announces its byte length (<code>$4</code>), so the parser knows exactly how many bytes to wait for, and a CRLF inside the value is just data. Press Play: bytes arrive chunk by chunk, and a command turns green only once its whole frame has arrived, whatever <b>TCP chunk</b> size you pick.'},
+   build:{intro:'One process, one executor, many sockets:',
+    steps:['A <b>query buffer</b> per connection: append whatever the socket returns, never assume one read = one command.','An <b>incremental RESP parser</b>: <code>*N</code> then N &times; <code>$len\\r\\n&lt;bytes&gt;\\r\\n</code>; if bytes are missing, return "need more" and keep them.','An <b>event loop</b> (epoll/kqueue) tells you which sockets are readable or writable; nothing blocks.','A <b>single executor</b>: look the command up, check its arity, run it to completion, append the encoded reply to that client\'s output buffer.','Measure <b>queue wait</b> separately from command time: one slow KEYS delays everyone behind it.'],
+    code:'loop:\n  for conn in poll(readable):\n    conn.buf += read(conn)\n    while argv = parseRESP(conn.buf):   // null if incomplete\n      reply = COMMANDS[argv[0]](argv)   // runs to completion\n      conn.out += encode(reply)\n  flush writable outputs',
+    rule:'Exactly <b>one command touches the data at a time</b>, and it runs to completion before the next one starts.'}},
+  {ask:'A cart, a leaderboard and a session share one keyspace. How do commands on them stay fast and safe?',
+   why:'If every value is an opaque blob, adding one item to a 2,000-item cart means fetching, decoding, editing and rewriting the whole thing, from every client.',
+   v0:{name:'Store everything as a JSON string',code:'cart = JSON.parse(GET cart:7)\ncart.push(item)\nSET cart:7 JSON.stringify(cart)',breaks:'Every change ships and rewrites the whole value, O(size) per update. Two clients doing it at once each overwrite the other\'s item: the round trip between GET and SET makes it non-atomic.'},
+   design:'Give each value a type with its own server-side structure and operations (HSET, LPUSH, ZADD...), and check the type before a command touches anything.',
+   predict:{q:'<code>LPUSH</code> is sent to a key that currently holds a hash. What happens to the hash?',opts:['Nothing: the command fails with WRONGTYPE and the hash is unchanged','The hash is converted into a list','The hash is replaced by a new list'],ans:0,why:'The type is checked before any mutation, so the error leaves state untouched. The <b>Wrong-type guard</b> box in the playground compares a digest of the whole keyspace before and after the bad command.'},
+   build:{steps:['Keyspace = one hash map <code>key &rarr; {type, value, expireAt}</code>.','One structure per type: byte string, hash map, list (deque), set, sorted set (hash map + skip list), stream (log).','A command table with <b>arity</b> and a <i>write</i> flag; reject wrong arity before running anything.','A <b>type guard first</b>: <code>lookup(key, type)</code> fails with WRONGTYPE before the first change.','Account bytes per key (key + value + overhead) so chapter 4 can enforce a budget.'],
+    code:'lookup(key, type):\n  e = db.get(key)\n  if e and e.type != type: error WRONGTYPE   // nothing changed yet\n  return e\nHSET(k, f, v):\n  e = lookup(k, "hash") or db.put(k, newHash())\n  e.value[f] = v',
+    rule:'A failing command <b>changes nothing</b>: validate type and arguments before the first mutation.'}},
+  {ask:'A million sessions must disappear after 30 minutes. Who deletes them, and when?',
+   why:'Scanning every key each second would stall the single thread; never deleting them leaks memory; and a read must never return a session that has expired.',
+   v0:{name:'Scan the whole keyspace every second',code:'every 1s:\n  for k in db:\n    if k.expireAt <= now: delete k',breaks:'The scan is O(all keys) on the one executor thread: with 10 million keys, every second becomes a latency spike for every client. Between scans, reads still return expired keys.'},
+   design:'Store an absolute deadline per key, check it on every access (lazy expiry), and reclaim untouched keys with a small random-sampling cycle that only repeats while many sampled keys are expired.',
+   predict:{q:'Turn the <b>active expire cycle off</b>. A key\'s deadline has passed but no client touches it. What is true?',opts:['Reads still return it until something deletes it','Reads already treat it as gone, but its memory stays allocated until something touches it','It is deleted exactly at its deadline'],ans:1,why:'Every lookup checks the deadline first (and deletes the key on the spot), so no read ever sees an expired key. But with no active cycle nothing frees the bytes of keys nobody touches: watch the red <b>held in RAM but invisible</b> counter grow.'},
+   build:{steps:['<code>EXPIRE</code> stores <code>expireAt = now + ttl</code> as an <b>absolute</b> millisecond time, in a separate index of keys that have one.','<b>Lazy:</b> every lookup checks <code>now &gt;= expireAt</code> and deletes the key before answering.','<b>Active:</b> 10 times a second, sample 20 keys from that index, delete the expired ones, repeat while more than 25% were expired, stop at a time budget.','Drive tests with a <b>fake clock</b> so expiry is deterministic.'],
+    code:'lookup(k):\n  e = db[k]\n  if e and e.expireAt <= now: delete k; return nil\nevery 100 ms:\n  repeat:\n    s = sample(expires, 20); delete s.filter(expired)\n  until expiredShare(s) <= 25% or budgetSpent',
+    rule:'A key past its deadline is <b>never returned</b>, whether or not its memory has been freed yet.'}},
+  {ask:'The memory budget is full and a new key arrives. What do you throw away?',
+   why:'As a cache, rejecting writes breaks the app, and evicting the wrong keys drops the hit rate and sends that load straight back to the database.',
+   v0:{name:'Exact LRU with one global linked list',code:'on access(k): list.moveToFront(k)\non full:      delete list.tail',breaks:'Two extra pointers per key and a list update on <b>every read</b>, across millions of keys. Pure recency is also fooled by one big scan that touches everything once.'},
+   design:'Do not keep a global order: sample a few random keys and evict the worst of them, judged by a per-key access clock (LRU) or a decaying frequency counter (LFU).',
+   predict:{q:'Memory is at <code>maxmemory</code> and the policy is <code>noeviction</code>. A client writes a new key. What happens?',opts:['The least recently used key is evicted to make room','Redis keeps growing past the limit until the OS kills it','The write fails with an OOM error; reads keep working'],ans:2,why:'<code>noeviction</code> turns memory pressure into rejected writes instead of data loss. Pick it in the playground: the <b>rejected writes</b> column fills up while the other policies evict.'},
+   build:{steps:['Track <code>used</code> bytes as keys change (chapter 2 accounting).','Before running a <b>write</b>, while <code>used &gt; maxmemory</code>: pick a victim and delete it, or reply OOM under noeviction.','Per key keep a coarse <b>last-access clock</b> (LRU) or a <b>logarithmic counter that decays</b> (LFU), updated on lookup.','Choose victims from <b>N random samples</b> (Redis default 5), kept in a small pool of the best candidates.','Count hits, misses and evictions to judge the policy.'],
+    code:'beforeWrite():\n  while used > maxmemory:\n    if policy == noeviction: error OOM\n    cand = sample(db, N)\n    victim = worst(cand)   // oldest access or lowest freq\n    delete(victim)',
+    rule:'A write is admitted only once <b>used memory is back under the budget</b>; otherwise it is refused, never half-applied.'}},
+  {ask:'The machine loses power right after the server replied OK. What is still there after the restart?',
+   why:'Everything lives in RAM. Without a disk copy a restart empties every session. Bytes handed to the OS survive a process crash but not a power cut; only fsync survives that, and fsyncing every write makes each one wait for the disk.',
+   v0:{name:'Dump the whole map to a file every 5 minutes',code:'every 300s:\n  write("dump", serialize(db))',breaks:'A crash loses up to 5 minutes of acknowledged writes, and a crash <b>during</b> the dump leaves a half-written file in place of the good one.'},
+   design:'Append every write to a log (AOF) and fsync it on a declared policy; write snapshots (RDB) to a temp file with a checksum and publish them with an atomic rename.',
+   predict:{q:'AOF with <code>appendfsync everysec</code>. The crash cuts the last record in half (torn tail). What does recovery do?',opts:['Replays every complete record and drops the torn tail','Refuses to start: the whole log is corrupt','Applies the partial record with a truncated value'],ans:0,why:'Records are RESP frames, so the parser knows where each one ends; it stops at the last complete one. Redis does the same with <code>aof-load-truncated yes</code>. Under <b>More options</b>, set <b>Crash type</b> to <i>mid-record</i> and compare the recovered state with the durable prefix.'},
+   build:{steps:['<b>AOF:</b> after a write executes, append its RESP form to the log; rewrite relative TTLs as absolute <code>PEXPIREAT</code>.','<b>fsync policy:</b> <i>always</i> (fsync before the reply leaves), <i>everysec</i> (about 1 s at risk), <i>no</i> (the OS decides).','<b>Recovery:</b> replay complete records in order; stop at a torn tail.','<b>Snapshot:</b> serialize to a temp file with a checksum, fsync, then rename over the old one (Redis forks a child so the main thread keeps serving).','<b>Rewrite</b> the log from current state now and then so it does not grow forever.'],
+    code:'execWrite(argv):\n  apply(argv)\n  aof.append(resp(absoluteTTL(argv)))\n  if policy == always: aof.fsync()\n  reply(OK)\nrecover():\n  for rec in aof.completeRecords(): apply(rec)',
+    rule:'Recovery <b>never applies a partial record</b>, and the policy states exactly which acknowledged writes a crash may lose.'}},
+  {ask:'The primary\'s machine is gone, RAM and disk included. Where is an up-to-date copy?',
+   why:'Persistence only helps if the same box comes back. You need a second live copy that keeps up with 100k writes per second.',
+   v0:{name:'Copy the whole dataset to a replica every minute',code:'every 60s:\n  replica.load(primary.snapshot())',breaks:'The copy is up to a minute stale, and every round ships the entire dataset (gigabytes) even if only ten keys changed.'},
+   design:'Stream every write to the replicas in order and number the stream by byte offset; a replica that reconnects asks to continue from its offset and gets the gap from a bounded backlog.',
+   predict:{q:'Replica 1 is disconnected while the primary keeps writing, and it misses more bytes than the backlog holds. What happens when it reconnects?',opts:['Partial resync: it receives just the missing bytes','Full resync: a fresh snapshot, then the stream continues','It carries on with a permanent gap'],ans:1,why:'The missing bytes are no longer in the backlog, so the only safe way back is a full copy. With the default settings replica 1 misses more than the 1000 B backlog and needs a full resync; raise <b>Backlog</b> (under More options) to 50000 B and the same gap becomes a cheap partial resync.'},
+   build:{steps:['The primary keeps a <b>replication offset</b>: the number of bytes of write stream produced so far.','Each write is appended to a ring-buffer <b>backlog</b> and sent to every connected replica.','Replicas apply records in order and report their offset; anything at or below it is skipped, so duplicates are harmless.','Reconnect with <code>PSYNC replid offset</code>: still inside the backlog &rarr; partial; otherwise snapshot + stream (full).','Reply to the client <b>before</b> replicas confirm (asynchronous) and expose the lag.'],
+    code:'onWrite(rec):\n  offset += len(rec); backlog.push(rec)\n  for r in replicas: send(r, rec)\npsync(id, from):\n  if id == replId and from >= backlog.start: send(backlog[from:])  // partial\n  else: send(snapshot()); then stream                          // full',
+    rule:'A replica applies each offset <b>once and in order</b>, so at offset X its data equals the primary\'s at offset X.'}},
+  {ask:'Move 10 credits out of a balance. How do you stop another client changing it halfway?',
+   why:'Each command is atomic, but a business operation is several commands, and another client\'s write can land between them.',
+   v0:{name:'Read, compute, write back',code:'b = GET bal\nSET bal (b - 10)',breaks:'Another client can write <code>bal</code> between your GET and your SET; your SET silently overwrites it (a lost update). Pipelining the commands does not help: it saves round trips, but other clients still interleave.'},
+   design:'MULTI queues commands and EXEC runs them back-to-back on the single executor; WATCH adds an optimistic check that aborts EXEC if a watched key changed in the meantime.',
+   predict:{q:'Client A runs <code>WATCH bal</code> and <code>GET bal</code>. Client B then runs <code>SET bal 50</code>. A sends <code>MULTI</code>, <code>SET bal 90</code>, <code>EXEC</code>. What happens?',opts:['EXEC returns nil, nothing is applied, and A must retry','A\'s SET wins: bal becomes 90','B\'s SET waited until A was done'],ans:0,why:'B modified a watched key after A read it, so EXEC aborts and applies nothing. Pick the <b>WATCH conflict</b> scenario to replay exactly this sequence.'},
+   build:{steps:['Per client: a <code>queue</code> (null outside MULTI) and a <code>watched</code> map of key &rarr; version.','Every change to a key bumps its <b>version</b>, including deletes by expiry and eviction.','<code>MULTI</code>: from now on, validate and <b>queue</b> each command and reply QUEUED.','<code>EXEC</code>: if any watched version changed, reply nil; otherwise run the queue back-to-back, with no other client in between.','No rollback: a command that fails at run time does not undo the others.'],
+    code:'WATCH k: client.watched[k] = version[k]\nEXEC:\n  for k, v in client.watched:\n    if version[k] != v: return nil      // someone changed it\n  return [run(c) for c in client.queue]  // single executor: no interleaving',
+    rule:'Between EXEC\'s version check and its last queued command, <b>no other client\'s command runs</b>.'}},
+  {ask:'The primary stops answering at 3 a.m. Who decides it is dead, and who takes over?',
+   why:'Promote too eagerly and a network blip creates two primaries; too slowly and writes fail for minutes. And replication is asynchronous, so the newest writes may exist only on the dead machine.',
+   v0:{name:'Every client fails over on its own timeout',code:'if ping(primary) times out:\n  connect(replicas[0])\n  send REPLICAOF NO ONE',breaks:'Different clients see different blips and promote different replicas: <b>two primaries</b> accept writes (split brain). They may also promote a replica that is far behind.'},
+   design:'Several independent sentinels must agree the primary is down (quorum), then one elected leader promotes the replica with the highest replication offset and fences the old primary with a higher epoch.',
+   predict:{q:'The sentinels promote the replica with the <b>highest</b> offset. Can acknowledged writes still be lost?',opts:['No: the highest offset means it has every write','Only if the quorum is set to 1','Yes: writes acknowledged after the last byte it received are gone'],ans:2,why:'The primary replies before replicas have the write. Whatever it acknowledged beyond the best replica\'s offset existed only on the dead machine: the <b>Possible data loss</b> box lists those writes. <code>WAIT</code> and <code>min-replicas-to-write</code> narrow this window but do not close it.'},
+   build:{steps:['Three or more sentinels PING the primary; no valid reply for <code>down-after</code> ms &rarr; <b>SDOWN</b> (one sentinel\'s opinion).','When <b>quorum</b> sentinels report it &rarr; <b>ODOWN</b>; a leader is elected by majority vote for a new <b>epoch</b>.','The leader picks the replica with the best priority and <b>highest offset</b>, sends <code>REPLICAOF NO ONE</code>, and repoints the other replicas.','Publish the new primary with its epoch; clients ask Sentinel again on errors.','When the old primary returns it sees the higher epoch and becomes a replica; its unreplicated writes are discarded.'],
+    code:'if silentFor(primary) > downAfter: sdown = true\nif count(sdown) >= quorum and winVote(epoch + 1):\n  best = max(replicas, by offset)\n  best.send("REPLICAOF NO ONE")\n  publish(primary = best, epoch + 1)',
+    rule:'In a stable view <b>only one primary accepts writes</b>: the one named by the highest epoch.'}},
+  {ask:'The data outgrows one machine\'s RAM. How does a client know which machine holds a key?',
+   why:'Every request must reach its owner in one hop, and adding a machine must move only a slice of the keys, online, while traffic continues.',
+   v0:{name:'Hash the key modulo the number of nodes',code:'node = nodes[hash(key) % nodes.length]',breaks:'Going from 3 to 4 nodes changes the owner of about 75% of the keys, and every client still using the old N sends requests to the wrong node.'},
+   design:'Hash keys into a fixed set of 16,384 slots with CRC16, assign slot ranges to nodes, and move one slot at a time while nodes redirect stale clients with MOVED and ASK.',
+   predict:{q:'Slot S is being migrated. A client asks the <b>source</b> node for a key of S that has already been copied to the target. What is the reply?',opts:['MOVED: update your slot map for good','ASK: try the target for this one request','The value, served from the source'],ans:1,why:'The key has already left the source, but the slot still belongs to it until the migration commits. ASK is a one-shot redirect; MOVED only comes after the owner switches. Press Play and watch the probe in <b>Online migration</b>.'},
+   build:{steps:['<code>slot = CRC16(key) mod 16384</code>; if the key has a non-empty <code>{tag}</code>, hash only the tag.','Each node owns slot ranges; the slot map is versioned by a config epoch and shared by gossip.','A node asked for a slot it does not own replies <code>MOVED slot host:port</code>; clients cache the map.','Migration: mark the slot MIGRATING on the source and IMPORTING on the target, copy keys with their TTL, answer ASK for keys already moved, then commit the new owner with a new epoch.','Reject multi-key commands that span slots (CROSSSLOT).'],
+    code:'handle(k):\n  s = crc16(tagOrKey(k)) % 16384\n  if owner[s] != me: return MOVED(s, owner[s])\n  if k in db: return serve(k)\n  if migrating[s]: return ASK(s, target[s])  // already copied\n  return nil',
+    rule:'Every slot has <b>exactly one owner per epoch</b>, and a key is only ever served by the node that holds it.'}},
+  {ask:'A pool of workers processes order events. One worker crashes mid-job. Is that event lost?',
+   why:'Background jobs (emails, payments, stock updates) must each be done at least once, even when workers die, and you need to see which job is stuck where.',
+   v0:{name:'A list as a queue',code:'LPUSH jobs e        // producer\ne = BRPOP jobs      // worker: removed now\nprocess(e)          // crash here = lost',breaks:'The job is removed <b>before</b> it is processed. If the worker dies in between, the job is gone and nothing records who had it.'},
+   design:'Keep events in an append-only log with time-ordered IDs; a consumer group remembers what it delivered to whom (the pending entries list) until each consumer acknowledges.',
+   predict:{q:'Consumer c1 reads 2 entries and crashes before <code>XACK</code>. What happens to those entries?',opts:['They are lost: they were already delivered','They stay pending; after min-idle another consumer claims them','They are redelivered automatically, but only to c1'],ans:1,why:'Delivery and acknowledgement are separate. The entries sit in the PEL until a live consumer runs <code>XAUTOCLAIM</code> after the idle time; their delivery count goes up, so handlers must be idempotent.'},
+   build:{steps:['Entry ID = <code>ms-seq</code>, strictly increasing (seq+1 within the same ms; reject IDs &lt;= the last one).','Group state: <code>last-delivered-id</code> plus the <b>PEL</b> (pending entries list): id &rarr; consumer, delivery time, count.','<code>XREADGROUP &gt;</code> hands out entries after last-delivered-id and records them in the PEL; <code>XACK</code> removes them.','<code>XAUTOCLAIM</code>: entries idle longer than min-idle move to a new consumer, delivery count +1.','Retention is separate: <code>XTRIM MAXLEN</code> drops old entries even if they are still pending.'],
+    code:'XREADGROUP(g, c, ">"):\n  out = entries after g.lastDelivered\n  for e in out: g.pel[e.id] = {c, now, n: 1}; g.lastDelivered = e.id\nXACK(g, id): delete g.pel[id]\nXAUTOCLAIM(g, c2, minIdle):\n  for p in g.pel where now - p.t >= minIdle: p.c = c2; p.n += 1',
+    rule:'An entry stays pending until it is acknowledged: delivery is <b>at-least-once</b>, so handlers must be idempotent.'}}
+ ],
+ milestones:[
+  {t:'RESP server with one executor',test:'Two clients &times; 10,000 <code>INCR</code> end at exactly 20,000; a request split at every possible byte boundary parses to the same command.'},
+  {t:'Typed keyspace and TTL',test:'Every command on the wrong type returns WRONGTYPE with the keyspace unchanged; after a fake clock passes a deadline, no read returns the key.'},
+  {t:'maxmemory and eviction',test:'After every write, used memory is at or under the budget; under <code>noeviction</code> writes fail with OOM and reads still work.'},
+  {t:'AOF and snapshots',test:'Simulate power loss by dropping every byte not yet fsynced: with <code>appendfsync always</code> no acknowledged write is lost; truncating the log at any byte still recovers a valid prefix.'},
+  {t:'Replication with offsets',test:'Cut the link at random moments: after reconnecting, the replica\'s digest equals the primary\'s (partial inside the backlog, full otherwise).'},
+  {t:'MULTI, EXEC and WATCH',test:'A concurrent write to a watched key always makes EXEC return nil, and no other client\'s command ever runs inside an EXEC.'},
+  {t:'Sentinel failover',test:'Kill the primary: exactly one replica, the one with the highest offset, is promoted, and the old primary rejoins as a replica; lost writes are reported.'},
+  {t:'Cluster slots, then streams',test:'Migrate a slot under load with no lost key or TTL; kill a consumer before XACK and see its entries reclaimed by XAUTOCLAIM.'}],
+ capstone:{title:'Put it together: primary, replicas and a sentinel',lead:'Everything from the chapters, running at once: writes execute on the primary, go to the AOF, and stream to the replicas by offset. Play a scenario, scrub the timeline, tap a node or event to see why it happened, then kill the primary.'},
+ extras:[{id:'cliHost',title:'Mini redis-cli on the same keyspace',sub:'changes the loaded data; Reset restores it'},{id:'ddCost',title:'What each command costs',sub:'chapters 1 and 2'}]
+};
+</script>
+<script>
+Lab.mount(STORY);
+document.getElementById('cliHost').innerHTML='<div class="rcon" id="con"></div><div class="bar"><input class="cli" id="cli" type="text" placeholder="e.g.  HGETALL user:1   |   INCR hits   |   TTL session:1" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="cliRun" class="primary">Run</button><button id="cliReset">Reset data</button></div><div class="note">Supported: PING SET GET DEL EXISTS INCR/DECR/INCRBY/DECRBY APPEND STRLEN TYPE KEYS DBSIZE FLUSHALL EXPIRE PEXPIRE PEXPIREAT TTL PTTL PERSIST HSET HGET HGETALL HDEL HLEN LPUSH RPUSH LPOP RPOP LRANGE LLEN SADD SREM SMEMBERS SISMEMBER SCARD ZADD ZRANGE ZSCORE ZREM ZCARD ZRANK MULTI EXEC DISCARD WATCH XADD XLEN XRANGE XGROUP XREADGROUP XACK XPENDING XAUTOCLAIM XTRIM INFO. Each reply shows the RESP bytes and the cost units.</div>';
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const J=x=>{try{return JSON.stringify(x)}catch{return String(x)}};
+const pc=i=>`var(--p${((i%8)+8)%8})`,tc=i=>`var(--t${((i%8)+8)%8})`;
+const cmp=(a,b)=>a<b?-1:a>b?1:0;
+const short=(s,n=40)=>{s=String(s);return s.length>n?s.slice(0,n-1)+'…':s};
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const enc8=new TextEncoder(),dec8=new TextDecoder();
+function lcg(seed){let s=(seed>>>0)||1;return()=>{s=(Math.imul(s,1103515245)+12345)&0x7fffffff;return s/0x7fffffff}}
+function fnvStr(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h>>>0}
+const vis=s=>String(s).replace(/\r/g,'␍').replace(/\n/g,'␊');
+
+/* =========================================================
+   PARSING + SAMPLES
+   ========================================================= */
+function detect(t){const s=t.trim();if(s.startsWith('['))return'json';const l=s.split(/\r?\n/)[0]||'';if(l.startsWith('{'))return'jsonl';if(l.includes(','))return'csv';return'text'}
+function csvSplit(l){const o=[];let c='',q=false;for(let i=0;i<l.length;i++){const ch=l[i];if(q){if(ch==='"'){if(l[i+1]==='"'){c+='"';i++}else q=false}else c+=ch}else if(ch==='"')q=true;else if(ch===','){o.push(c);c=''}else c+=ch}o.push(c);return o}
+const conv=v=>(typeof v==='string'&&/^-?\d+(\.\d+)?$/.test(v.trim()))?Number(v):v;
+function colsOf(rows){const c=[];rows.forEach(r=>Object.keys(r).forEach(k=>{if(!c.includes(k))c.push(k)}));return c}
+function parseWhole(text,pf){
+  if(pf==='json'){const a=JSON.parse(text);if(!Array.isArray(a))throw new Error('JSON must be an array');return{rows:a,columns:colsOf(a)}}
+  const lines=text.split(/\r?\n/).filter(l=>l.trim()!=='');
+  if(pf==='jsonl'){const rows=lines.map(l=>JSON.parse(l));return{rows,columns:colsOf(rows)}}
+  if(pf==='csv'){if(!lines.length)return{rows:[],columns:[]};const h=csvSplit(lines[0]);const rows=lines.slice(1).map(l=>{const v=csvSplit(l),o={};h.forEach((k,i)=>o[k]=conv(v[i]??''));return o});return{rows,columns:h}}
+  return{rows:lines.map(l=>({line:l})),columns:['line']};
+}
+function sampleUsers(){const c=['VN','TH','ID','SG'],plan=['free','pro','team'],r=lcg(3),L=['id,name,country,plan,score'];for(let i=1;i<=24;i++)L.push([i,'user'+i,c[Math.floor(r()*4)],plan[Math.floor(r()*3)],Math.round(r()*1000)].join(','));return L.join('\n')}
+function sampleProducts(){const cat=['phone','laptop','book','toy'],r=lcg(8),L=['sku,name,category,price,stock'];for(let i=1;i<=24;i++)L.push(['P'+(100+i),'item'+i,cat[Math.floor(r()*4)],Math.round(5+r()*500),Math.floor(r()*80)].join(','));return L.join('\n')}
+function sampleEvents(){const a=['view','click','buy'],r=lcg(5),L=[];for(let i=1;i<=20;i++)L.push(J({id:i,user:'u'+(1+Math.floor(r()*5)),action:a[Math.floor(r()*3)],ms:Math.round(10+r()*200)}));return L.join('\n')}
+const SAMPLES={users:{t:sampleUsers,f:'csv',p:'user'},products:{t:sampleProducts,f:'csv',p:'product'},events:{t:sampleEvents,f:'jsonl',p:'event'}};
+
+/* =========================================================
+   MINI REDIS ENGINE (Features 01–03, 07, 10)
+   ========================================================= */
+class RErr extends Error{}
+const E_WT='WRONGTYPE Operation against a key holding the wrong kind of value';
+const S_=v=>({t:'s',v}),B_=v=>({t:'b',v:String(v)}),I_=v=>({t:'i',v}),A_=v=>({t:'a',v}),NIL={t:'n'},ER=v=>({t:'e',v});
+const toInt=s=>{if(!/^-?\d+$/.test(String(s)))throw new RErr('ERR value is not an integer or out of range');return parseInt(s,10)};
+const toNum=s=>{const n=Number(s);if(String(s)===''||isNaN(n))throw new RErr('ERR value is not a valid float');return n};
+const idStr=id=>id[0]+'-'+id[1];
+const cmpId=(a,b)=>a[0]-b[0]||a[1]-b[1];
+const parseId=(s,dflt=0)=>{if(s==='-')return[0,0];if(s==='+')return[Infinity,Infinity];const m=/^(\d+)(?:-(\d+))?$/.exec(s);if(!m)throw new RErr('ERR Invalid stream ID specified as stream command argument');return[+m[1],m[2]!==undefined?+m[2]:dflt]};
+class Redis{
+  constructor(){this.db=new Map();this.kv=new Map();this.now=0;this.st={cmds:0,expired:0,hit:0,miss:0};this.cost=1}
+  touch(k){this.kv.set(k,(this.kv.get(k)||0)+1)}
+  lookup(k,type){
+    let e=this.db.get(k);
+    if(e&&e.exp!=null&&this.now>=e.exp){this.db.delete(k);this.touch(k);this.st.expired++;e=undefined}
+    if(e&&type&&e.type!==type)throw new RErr(E_WT);
+    if(e)e.lru=this.now;
+    return e;
+  }
+  put(k,type,val){const e={type,val,exp:null,lru:this.now,lfu:1};this.db.set(k,e);this.touch(k);return e}
+  incr(k,d){const e=this.lookup(k,'string');const n=(e?toInt(e.val):0)+d;if(e){e.val=String(n);this.touch(k)}else this.put(k,'string',String(n));return I_(n)}
+  empty(k,e,len){if(!len){this.db.delete(k)}}
+  exec(argv,cl={}){
+    const name=String(argv[0]).toUpperCase(),d=CMDS[name];this.cost=1;
+    if(!d)return ER(`ERR unknown command '${argv[0]}'`);
+    if(d.a>0?argv.length!==d.a:argv.length<-d.a)return ER(`ERR wrong number of arguments for '${name.toLowerCase()}' command`);
+    if(cl.multi&&!['EXEC','DISCARD','MULTI','WATCH'].includes(name)){cl.multi.push(argv);return S_('QUEUED')}
+    try{const r=d.f.call(this,argv.slice(1),cl);this.st.cmds++;return r}catch(e){if(e instanceof RErr)return ER(e.message);throw e}
+  }
+  bytes(k,e){return k.length+vbytes(e)+48}
+  used(){let n=0;this.db.forEach((e,k)=>n+=this.bytes(k,e));return n}
+}
+function vbytes(e){
+  const v=e.val;
+  switch(e.type){
+    case'string':return String(v).length;
+    case'hash':{let n=0;v.forEach((x,k)=>n+=k.length+String(x).length+16);return n}
+    case'list':return v.reduce((a,x)=>a+String(x).length+8,0);
+    case'set':{let n=0;v.forEach(x=>n+=String(x).length+8);return n}
+    case'zset':{let n=0;v.forEach((s,m)=>n+=m.length+16);return n}
+    case'stream':return v.entries.reduce((a,x)=>a+x.f.join('').length+24,0)+v.groups.size*64;
+  }return 0;
+}
+const CMDS={};const def=(n,a,w,f)=>CMDS[n]={a,w,f};
+def('PING',-1,0,function(a){return a.length?B_(a[0]):S_('PONG')});
+def('SET',-3,1,function(a){const[k,v,...o]=a;let ex=null,nx=false;for(let i=0;i<o.length;i++){const u=o[i].toUpperCase();if(u==='EX')ex=this.now+toInt(o[++i])*1000;else if(u==='PX')ex=this.now+toInt(o[++i]);else if(u==='NX')nx=true;else throw new RErr('ERR syntax error')}
+  if(nx&&this.lookup(k))return NIL;const e=this.put(k,'string',String(v));e.exp=ex;return S_('OK')});
+def('GET',2,0,function(a){const e=this.lookup(a[0],'string');if(!e){this.st.miss++;return NIL}this.st.hit++;return B_(e.val)});
+def('DEL',-2,1,function(a){let n=0;a.forEach(k=>{if(this.lookup(k)){this.db.delete(k);this.touch(k);n++}});this.cost=a.length;return I_(n)});
+def('EXISTS',-2,0,function(a){this.cost=a.length;return I_(a.filter(k=>this.lookup(k)).length)});
+def('INCR',2,1,function(a){return this.incr(a[0],1)});def('DECR',2,1,function(a){return this.incr(a[0],-1)});
+def('INCRBY',3,1,function(a){return this.incr(a[0],toInt(a[1]))});def('DECRBY',3,1,function(a){return this.incr(a[0],-toInt(a[1]))});
+def('APPEND',3,1,function(a){const e=this.lookup(a[0],'string');if(e){e.val+=a[1];this.touch(a[0]);return I_(e.val.length)}this.put(a[0],'string',a[1]);return I_(a[1].length)});
+def('STRLEN',2,0,function(a){const e=this.lookup(a[0],'string');return I_(e?e.val.length:0)});
+def('TYPE',2,0,function(a){const e=this.lookup(a[0]);return S_(e?e.type:'none')});
+def('KEYS',2,0,function(a){const re=new RegExp('^'+a[0].replace(/[.+^${}()|[\]\\]/g,'\\$&').replace(/\*/g,'.*').replace(/\?/g,'.')+'$');this.cost=Math.max(1,this.db.size);return A_([...this.db.keys()].filter(k=>re.test(k)&&this.lookup(k)).sort().map(B_))});
+def('DBSIZE',1,0,function(){return I_(this.db.size)});
+def('FLUSHALL',1,1,function(){this.cost=Math.max(1,this.db.size);this.db.forEach((e,k)=>this.touch(k));this.db.clear();return S_('OK')});
+const setExp=(self,k,at)=>{const e=self.lookup(k);if(!e)return I_(0);e.exp=at;self.touch(k);return I_(1)};
+def('EXPIRE',3,1,function(a){return setExp(this,a[0],this.now+toInt(a[1])*1000)});
+def('PEXPIRE',3,1,function(a){return setExp(this,a[0],this.now+toInt(a[1]))});
+def('PEXPIREAT',3,1,function(a){return setExp(this,a[0],toInt(a[1]))});
+def('TTL',2,0,function(a){const e=this.lookup(a[0]);return I_(!e?-2:e.exp==null?-1:Math.ceil((e.exp-this.now)/1000))});
+def('PTTL',2,0,function(a){const e=this.lookup(a[0]);return I_(!e?-2:e.exp==null?-1:e.exp-this.now)});
+def('PERSIST',2,1,function(a){const e=this.lookup(a[0]);if(!e||e.exp==null)return I_(0);e.exp=null;this.touch(a[0]);return I_(1)});
+// hash
+def('HSET',-4,1,function(a){if(a.length%2!==1)throw new RErr("ERR wrong number of arguments for 'hset' command");let e=this.lookup(a[0],'hash');if(!e)e=this.put(a[0],'hash',new Map());let n=0;for(let i=1;i<a.length;i+=2){if(!e.val.has(a[i]))n++;e.val.set(a[i],a[i+1])}this.touch(a[0]);return I_(n)});
+def('HGET',3,0,function(a){const e=this.lookup(a[0],'hash');const v=e&&e.val.get(a[1]);return v===undefined?NIL:B_(v)});
+def('HGETALL',2,0,function(a){const e=this.lookup(a[0],'hash');if(!e)return A_([]);this.cost=e.val.size;const o=[];e.val.forEach((v,k)=>o.push(B_(k),B_(v)));return A_(o)});
+def('HDEL',-3,1,function(a){const e=this.lookup(a[0],'hash');if(!e)return I_(0);let n=0;a.slice(1).forEach(f=>{if(e.val.delete(f))n++});if(!e.val.size)this.db.delete(a[0]);this.touch(a[0]);return I_(n)});
+def('HLEN',2,0,function(a){const e=this.lookup(a[0],'hash');return I_(e?e.val.size:0)});
+// list
+const lpush=(self,a,front)=>{let e=self.lookup(a[0],'list');if(!e)e=self.put(a[0],'list',[]);a.slice(1).forEach(v=>front?e.val.unshift(v):e.val.push(v));self.touch(a[0]);return I_(e.val.length)};
+def('LPUSH',-3,1,function(a){return lpush(this,a,true)});def('RPUSH',-3,1,function(a){return lpush(this,a,false)});
+const lpop=(self,a,front)=>{const e=self.lookup(a[0],'list');if(!e)return NIL;const v=front?e.val.shift():e.val.pop();if(!e.val.length)self.db.delete(a[0]);self.touch(a[0]);return B_(v)};
+def('LPOP',2,1,function(a){return lpop(this,a,true)});def('RPOP',2,1,function(a){return lpop(this,a,false)});
+def('LRANGE',4,0,function(a){const e=this.lookup(a[0],'list');if(!e)return A_([]);const n=e.val.length;let s=toInt(a[1]),t=toInt(a[2]);if(s<0)s+=n;if(t<0)t+=n;s=Math.max(0,s);t=Math.min(n-1,t);const r=e.val.slice(s,t+1);this.cost=1+r.length;return A_(r.map(B_))});
+def('LLEN',2,0,function(a){const e=this.lookup(a[0],'list');return I_(e?e.val.length:0)});
+// set
+def('SADD',-3,1,function(a){let e=this.lookup(a[0],'set');if(!e)e=this.put(a[0],'set',new Set());let n=0;a.slice(1).forEach(m=>{if(!e.val.has(m)){e.val.add(m);n++}});this.touch(a[0]);return I_(n)});
+def('SREM',-3,1,function(a){const e=this.lookup(a[0],'set');if(!e)return I_(0);let n=0;a.slice(1).forEach(m=>{if(e.val.delete(m))n++});if(!e.val.size)this.db.delete(a[0]);this.touch(a[0]);return I_(n)});
+def('SMEMBERS',2,0,function(a){const e=this.lookup(a[0],'set');if(!e)return A_([]);this.cost=e.val.size;return A_([...e.val].map(B_))});
+def('SISMEMBER',3,0,function(a){const e=this.lookup(a[0],'set');return I_(e&&e.val.has(a[1])?1:0)});
+def('SCARD',2,0,function(a){const e=this.lookup(a[0],'set');return I_(e?e.val.size:0)});
+// zset
+const zsorted=e=>[...e.val.entries()].sort((a,b)=>a[1]-b[1]||cmp(a[0],b[0]));
+def('ZADD',-4,1,function(a){if(a.length%2!==1)throw new RErr('ERR syntax error');let e=this.lookup(a[0],'zset');const sc=[];for(let i=1;i<a.length;i+=2)sc.push([toNum(a[i]),a[i+1]]);if(!e)e=this.put(a[0],'zset',new Map());let n=0;sc.forEach(([s,m])=>{if(!e.val.has(m))n++;e.val.set(m,s)});this.touch(a[0]);this.cost=1+Math.log2(e.val.size+1);return I_(n)});
+def('ZRANGE',-4,0,function(a){const e=this.lookup(a[0],'zset');if(!e)return A_([]);const arr=zsorted(e),n=arr.length;let s=toInt(a[1]),t=toInt(a[2]);if(s<0)s+=n;if(t<0)t+=n;s=Math.max(0,s);t=Math.min(n-1,t);const ws=a[3]&&a[3].toUpperCase()==='WITHSCORES';const r=arr.slice(s,t+1);this.cost=Math.log2(n+1)+r.length;const o=[];r.forEach(([m,sc])=>{o.push(B_(m));if(ws)o.push(B_(sc))});return A_(o)});
+def('ZSCORE',3,0,function(a){const e=this.lookup(a[0],'zset');const s=e&&e.val.get(a[1]);return s===undefined?NIL:B_(s)});
+def('ZREM',-3,1,function(a){const e=this.lookup(a[0],'zset');if(!e)return I_(0);let n=0;a.slice(1).forEach(m=>{if(e.val.delete(m))n++});if(!e.val.size)this.db.delete(a[0]);this.touch(a[0]);return I_(n)});
+def('ZCARD',2,0,function(a){const e=this.lookup(a[0],'zset');return I_(e?e.val.size:0)});
+def('ZRANK',3,0,function(a){const e=this.lookup(a[0],'zset');if(!e||!e.val.has(a[1]))return NIL;return I_(zsorted(e).findIndex(x=>x[0]===a[1]))});
+// transactions (client context)
+def('MULTI',1,0,function(a,cl){if(cl.multi)throw new RErr('ERR MULTI calls can not be nested');cl.multi=[];return S_('OK')});
+def('DISCARD',1,0,function(a,cl){if(!cl.multi)throw new RErr('ERR DISCARD without MULTI');cl.multi=null;cl.watch=null;return S_('OK')});
+def('WATCH',-2,0,function(a,cl){if(cl.multi)throw new RErr('ERR WATCH inside MULTI is not allowed');cl.watch=cl.watch||new Map();a.forEach(k=>{this.lookup(k);cl.watch.set(k,this.kv.get(k)||0)});return S_('OK')});
+def('UNWATCH',1,0,function(a,cl){cl.watch=null;return S_('OK')});
+def('EXEC',1,1,function(a,cl){
+  if(!cl.multi)throw new RErr('ERR EXEC without MULTI');
+  const q=cl.multi,w=cl.watch;cl.multi=null;cl.watch=null;
+  if(w){for(const[k,v]of w){this.lookup(k);if((this.kv.get(k)||0)!==v){this.cost=1;return NIL}}}
+  const out=[];let c=0;q.forEach(av=>{out.push(this.exec(av,{}));c+=this.cost});this.cost=c;return A_(out);
+});
+// streams
+const stream=(self,k)=>{const e=self.lookup(k,'stream');return e};
+const entryReply=e=>A_([B_(idStr(e.id)),A_(e.f.map(B_))]);
+def('XADD',-5,1,function(a){
+  if(a.length%2!==0)throw new RErr("ERR wrong number of arguments for 'xadd' command");
+  let e=this.lookup(a[0],'stream');if(!e)e=this.put(a[0],'stream',{entries:[],last:[0,0],groups:new Map()});const s=e.val;let id;
+  if(a[1]==='*'){let ms=Math.max(this.now,s.last[0]);id=[ms,ms===s.last[0]?s.last[1]+1:0]}
+  else{id=parseId(a[1]);if(cmpId(id,s.last)<=0)throw new RErr('ERR The ID specified in XADD is equal or smaller than the target stream top item')}
+  s.entries.push({id,f:a.slice(2)});s.last=id;this.touch(a[0]);return B_(idStr(id));
+});
+def('XLEN',2,0,function(a){const e=stream(this,a[0]);return I_(e?e.val.entries.length:0)});
+def('XRANGE',-4,0,function(a){const e=stream(this,a[0]);if(!e)return A_([]);const lo=parseId(a[1]),hi=parseId(a[2],Infinity);let r=e.val.entries.filter(x=>cmpId(x.id,lo)>=0&&cmpId(x.id,hi)<=0);if(a[3]&&a[3].toUpperCase()==='COUNT')r=r.slice(0,toInt(a[4]));this.cost=1+r.length;return A_(r.map(entryReply))});
+def('XGROUP',-4,1,function(a){if(a[0].toUpperCase()!=='CREATE')throw new RErr('ERR unsupported XGROUP subcommand');const e=stream(this,a[1]);if(!e)throw new RErr('ERR The XGROUP subcommand requires the key to exist');if(e.val.groups.has(a[2]))throw new RErr('BUSYGROUP Consumer Group name already exists');
+  e.val.groups.set(a[2],{last:a[3]==='$'?e.val.last:parseId(a[3]),pel:new Map(),cons:new Set()});this.touch(a[1]);return S_('OK')});
+def('XREADGROUP',-7,1,function(a){
+  if(a[0].toUpperCase()!=='GROUP')throw new RErr('ERR syntax error');const gn=a[1],cn=a[2];let i=3,count=Infinity;
+  if(a[i]&&a[i].toUpperCase()==='COUNT'){count=toInt(a[i+1]);i+=2}
+  if(!a[i]||a[i].toUpperCase()!=='STREAMS')throw new RErr('ERR syntax error');const key=a[i+1],id=a[i+2];
+  const e=stream(this,key);if(!e)throw new RErr('NOGROUP No such key');const g=e.val.groups.get(gn);if(!g)throw new RErr(`NOGROUP No such consumer group '${gn}' for key name '${key}'`);g.cons.add(cn);
+  let out;
+  if(id==='>'){out=e.val.entries.filter(x=>cmpId(x.id,g.last)>0).slice(0,count);out.forEach(x=>{g.pel.set(idStr(x.id),{c:cn,t:this.now,n:1});g.last=x.id});if(out.length)this.touch(key)}
+  else{out=[...g.pel.entries()].filter(([s,p])=>p.c===cn).map(([s])=>e.val.entries.find(x=>idStr(x.id)===s)).filter(Boolean).slice(0,count)}
+  this.cost=1+out.length;if(id==='>'&&!out.length)return NIL;return A_([A_([B_(key),A_(out.map(entryReply))])]);
+});
+def('XACK',-4,1,function(a){const e=stream(this,a[0]);if(!e)return I_(0);const g=e.val.groups.get(a[1]);if(!g)return I_(0);let n=0;a.slice(2).forEach(s=>{if(g.pel.delete(s))n++});this.touch(a[0]);return I_(n)});
+def('XPENDING',-3,0,function(a){const e=stream(this,a[0]);const g=e&&e.val.groups.get(a[1]);if(!g)throw new RErr('NOGROUP No such consumer group');const ids=[...g.pel.keys()].sort((x,y)=>cmpId(parseId(x),parseId(y)));if(!ids.length)return A_([I_(0),NIL,NIL,NIL]);const per={};g.pel.forEach(p=>per[p.c]=(per[p.c]||0)+1);return A_([I_(ids.length),B_(ids[0]),B_(ids[ids.length-1]),A_(Object.entries(per).map(([c,n])=>A_([B_(c),B_(n)])))])});
+def('XAUTOCLAIM',-6,1,function(a){const e=stream(this,a[0]);const g=e&&e.val.groups.get(a[1]);if(!g)throw new RErr('NOGROUP No such consumer group');const minIdle=toInt(a[3]),start=parseId(a[4]);let count=100;if(a[5]&&a[5].toUpperCase()==='COUNT')count=toInt(a[6]);
+  g.cons.add(a[2]);const claimed=[],deleted=[];
+  [...g.pel.entries()].sort((x,y)=>cmpId(parseId(x[0]),parseId(y[0]))).forEach(([s,p])=>{if(claimed.length>=count||cmpId(parseId(s),start)<0||this.now-p.t<minIdle)return;const ent=e.val.entries.find(x=>idStr(x.id)===s);if(!ent){g.pel.delete(s);deleted.push(B_(s));return}p.c=a[2];p.t=this.now;p.n++;claimed.push(entryReply(ent))});
+  this.touch(a[0]);this.cost=1+claimed.length;return A_([B_('0-0'),A_(claimed),A_(deleted)])});
+def('XTRIM',4,1,function(a){const e=stream(this,a[0]);if(!e)return I_(0);if(a[1].toUpperCase()!=='MAXLEN')throw new RErr('ERR syntax error');const n=toInt(a[2]),s=e.val.entries;const rm=Math.max(0,s.length-n);s.splice(0,rm);this.touch(a[0]);this.cost=1+rm;return I_(rm)});
+def('INFO',-1,0,function(){return B_(`used_memory:${this.used()}\r\nkeys:${this.db.size}\r\nexpired_keys:${this.st.expired}\r\nkeyspace_hits:${this.st.hit}\r\nkeyspace_misses:${this.st.miss}`)});
+
+/* RESP encode / parse (Feature 01) */
+const blen=s=>enc8.encode(String(s)).length;
+const respCmd=argv=>'*'+argv.length+'\r\n'+argv.map(a=>'$'+blen(a)+'\r\n'+a+'\r\n').join('');
+function respReply(r){switch(r.t){case's':return'+'+r.v+'\r\n';case'e':return'-'+r.v+'\r\n';case'i':return':'+r.v+'\r\n';case'n':return'$-1\r\n';case'b':return'$'+blen(r.v)+'\r\n'+r.v+'\r\n';case'a':return'*'+r.v.length+'\r\n'+r.v.map(respReply).join('')}return''}
+function fmtReply(r,ind=0){switch(r.t){case's':return r.v;case'b':return JSON.stringify(r.v);case'i':return'(integer) '+r.v;case'n':return'(nil)';case'e':return'(error) '+r.v;case'a':return r.v.length?r.v.map((x,i)=>`${i+1}) ${fmtReply(x)}`).join('\n'+' '.repeat(ind)):'(empty array)'}return''}
+function parseResp(bytes){ // incremental: returns complete frames and bytes consumed (torn tail is left unconsumed)
+  const frames=[];let i=0;const n=bytes.length;
+  const line=p=>{for(let j=p;j+1<n;j++)if(bytes[j]===13&&bytes[j+1]===10)return j;return-1};
+  while(i<n){
+    if(bytes[i]!==42)return{frames,consumed:i,err:true};
+    let j=line(i);if(j<0)break;const cnt=parseInt(dec8.decode(bytes.slice(i+1,j)),10);let p=j+2;const argv=[];let ok=true;
+    for(let k=0;k<cnt;k++){
+      if(p>=n){ok=false;break}if(bytes[p]!==36)return{frames,consumed:i,err:true};
+      const q=line(p);if(q<0){ok=false;break}const len=parseInt(dec8.decode(bytes.slice(p+1,q)),10);const s=q+2;
+      if(s+len+2>n){ok=false;break}argv.push(dec8.decode(bytes.slice(s,s+len)));p=s+len+2;
+    }
+    if(!ok)break;frames.push({argv,end:p});i=p;
+  }
+  return{frames,consumed:i};
+}
+function tokenize(line){const out=[],re=/"((?:[^"\\]|\\.)*)"|(\S+)/g;let m;while((m=re.exec(line)))out.push(m[1]!==undefined?m[1].replace(/\\r/g,'\r').replace(/\\n/g,'\n').replace(/\\"/g,'"'):m[2]);return out}
+function snapObj(r){const o=[];[...r.db.entries()].sort((a,b)=>cmp(a[0],b[0])).forEach(([k,e])=>{let v;switch(e.type){case'string':v=e.val;break;case'hash':v=[...e.val.entries()].sort();break;case'list':v=e.val;break;case'set':v=[...e.val].sort();break;case'zset':v=[...e.val.entries()].sort();break;case'stream':v={l:e.val.last,e:e.val.entries.map(x=>[idStr(x.id),x.f]),g:[...e.val.groups.entries()].map(([n,g])=>[n,g.last,[...g.pel.entries()]])}}o.push([k,e.type,v,e.exp])});return o}
+const digest=r=>fnvStr(J(snapObj(r)));
+// AOF rewrite: relative expiry becomes absolute so replay time does not matter
+function aofRecs(argv,t){
+  const n=argv[0].toUpperCase();
+  if(n==='EXPIRE')return[['PEXPIREAT',argv[1],String(t+toInt(argv[2])*1000)]];
+  if(n==='PEXPIRE')return[['PEXPIREAT',argv[1],String(t+toInt(argv[2]))]];
+  if(n==='SET'){const o=argv.slice(3);const keep=[],exp=[];for(let i=0;i<o.length;i++){const u=o[i].toUpperCase();if(u==='EX'){exp.push(['PEXPIREAT',argv[1],String(t+toInt(o[++i])*1000)])}else if(u==='PX'){exp.push(['PEXPIREAT',argv[1],String(t+toInt(o[++i]))])}else keep.push(o[i])}return[[argv[0],argv[1],argv[2],...keep],...exp]}
+  return[argv];
+}
+
+/* =========================================================
+   LOAD + BUILD
+   ========================================================= */
+let OPT={chunk:7,p1cmd:0,clients:3,tFrac:0.5,active:true,wl:'zipf',mem:50,pol:'sampled-lru',samples:5,fsync:'everysec',snapK:10,crashPct:70,crashMode:'clean',corrupt:false,
+  lat:'med',discR:1,discFrom:0.35,discTo:0.6,backlog:1000,sc:'pipeline',rtt:20,nq:20,crashAt:0.7,downAfter:3000,quorum:2,cnodes:3,ckey:'',cclient:0,migSlot:-1,
+  ccrash:1,ccons:2,minIdle:5000,trim:0,sscen:'normal'};
+let S=null;
+const sleepFn=ms=>new Promise(r=>setTimeout(r,ms));
+function cfg(){return{text:$('#src').value,fmt:$('#fmt').value,kcol:$('#kcol').value,prefix:$('#prefix').value||'row',ltype:$('#ltype').value,ttlp:+$('#ttlp').value,script:$('#script').value}}
+function buildServer(c,rows){
+  const srv=new Redis(),cmds=[];srv.now=10000;
+  const run=(argv,src)=>{
+    const d=CMDS[String(argv[0]).toUpperCase()],t=srv.now,reply=srv.exec(argv);
+    const w=!!(d&&d.w)&&reply.t!=='e';
+    cmds.push({argv,t,w,reply,src,cost:srv.cost,aof:w?aofRecs(argv,t):[]});srv.now+=20;return reply;
+  };
+  const cols=colsOf(rows),rnd=lcg(rows.length*11+5);
+  const cat=cols.find(k=>k!==c.kcol&&rows.every(r=>typeof r[k]==='string')&&new Set(rows.map(r=>r[k])).size<=8&&new Set(rows.map(r=>r[k])).size>=2);
+  const num=cols.find(k=>k!==c.kcol&&!/id$/i.test(k)&&rows.every(r=>typeof r[k]==='number'));
+  rows.forEach((r,i)=>{
+    const key=c.prefix+':'+(r[c.kcol]!==undefined?r[c.kcol]:i+1);
+    if(c.ltype==='hash'){const a=['HSET',key];cols.forEach(k=>{a.push(k,String(r[k]))});run(a,'load')}else run(['SET',key,J(r)],'load');
+    if(cat)run(['SADD','idx:'+cat+':'+r[cat],key],'load');
+    if(num)run(['ZADD','rank:'+num,String(r[num]),key],'load');
+    if(i>=rows.length-5)run(['LPUSH','recent',key],'load');
+    run(['INCR','stat:rows'],'load');
+    if((i*37)%100<c.ttlp)run(['EXPIRE',key,String(5+Math.floor(rnd()*56))],'load');
+  });
+  run(['XADD','events','*',...cols.slice(0,3).flatMap(k=>[k,String(rows[0][k])])],'load');
+  const nLoad=cmds.length;
+  c.script.split('\n').map(l=>l.trim()).filter(l=>l&&!l.startsWith('#')).forEach(l=>run(tokenize(l),'script'));
+  return{srv,cmds,nLoad,cat,num};
+}
+function defaultScript(c,rows){
+  const cols=colsOf(rows),k=i=>c.prefix+':'+(rows[Math.min(i,rows.length-1)][c.kcol]??i+1),num=cols.find(x=>x!==c.kcol&&!/id$/i.test(x)&&rows.every(r=>typeof r[x]==='number'));
+  const L=[`GET stat:rows`,`INCR stat:views`,`SET session:1 token-abc EX 30`,`GET session:1`,c.ltype==='hash'?`HGETALL ${k(0)}`:`GET ${k(0)}`,`EXPIRE ${k(1)} 15`,`LPUSH recent ${k(2)}`,`INCRBY stat:views 5`];
+  if(num)L.push(`ZADD rank:${num} 9999 ${k(0)}`,`ZRANGE rank:${num} 0 2 WITHSCORES`);
+  L.push(`SET cart:7 "a,b" PX 4000`,`DEL ${k(3)}`,`LRANGE recent 0 -1`,`INCR stat:views`,`KEYS *`,`GET cart:7`,`XADD events * type login user ${k(0)}`);
+  return L.join('\n');
+}
+function build(){
+  const c=cfg(),o={cfg:c};
+  if(!c.text.trim()){o.error='No data yet.';return o}
+  let ds;try{ds=parseWhole(c.text,c.fmt==='auto'?detect(c.text):c.fmt)}catch(e){o.error='Cannot parse input: '+e.message;return o}
+  if(!ds.rows.length){o.error='No rows.';return o}
+  if(ds.rows.length>200){o.error='Please keep the data under 200 rows for the playground.';return o}
+  if(!ds.columns.includes(c.kcol)&&c.kcol!=='(row number)'){o.error='Choose a key column.';return o}
+  o.rows=ds.rows;o.columns=ds.columns;
+  Object.assign(o,buildServer(c,ds.rows));
+  o.writes=o.cmds.filter(x=>x.w);
+  o.wbytes=o.writes.map(w=>w.aof.reduce((a,r)=>a+blen(respCmd(r)),0));
+  return o;
+}
+
+/* =========================================================
+   PLAYER
+   ========================================================= */
+const cmdStr=a=>a.map(x=>/[\s"]/.test(x)||x===''?JSON.stringify(x):x).join(' ');
+const nodeName=i=>['P','R1','R2','R3'][i]??'N'+i;
+
+/* =========================================================
+   PHASE 1: RESP + EVENT LOOP (F01)
+   ========================================================= */
+function respColored(str,arrived,chunk){
+  const bytes=enc8.encode(str);let h='';
+  for(let i=0;i<bytes.length;i++){
+    const b=bytes[i];let ch=b===13?'<span class="crlf">␍</span>':b===10?'<span class="crlf">␊</span><wbr>':esc(String.fromCharCode(b));
+    const col=i<arrived?'var(--p2)':'transparent';
+    h+=`<span class="b ${i>0&&i%chunk===0?'cut':''}" style="background:${col}">${ch}</span>`;
+  }
+  return h;
+}
+function draw1(p){
+  const all=S.cmds.slice(S.nLoad),pool=all.length?all:S.cmds.slice(-8);
+  const i0=clamp(OPT.p1cmd,0,Math.max(0,pool.length-1)),group=[pool[i0],pool[(i0+1)%pool.length],{argv:['SET','bin','a\r\nb']}].map(x=>x.argv);
+  const str=group.map(respCmd).join(''),bytes=enc8.encode(str),arrived=Math.floor(p*bytes.length);
+  const pr=parseResp(bytes.slice(0,arrived)),done=pr.frames.length;
+  const chunk=OPT.chunk,nchunks=Math.ceil(arrived/chunk);
+  // executor timeline
+  const cl=OPT.clients,cs=S.cmds.slice(-18),tasks=cs.map((c,i)=>({i,c:i%cl,argv:c.argv,arr:i*0.25,dur:Math.max(0.05,c.cost*0.2)}));
+  let tt=0;tasks.forEach(t=>{t.start=Math.max(tt,t.arr);t.end=t.start+t.dur;tt=t.end;t.wait=t.start-t.arr});
+  const T=tt,now=p*T,W=440,X0=62,xs=t=>X0+t/T*W;
+  let sv=`<svg viewBox="0 0 510 ${40+cl*30+50}" style="max-height:${150+cl*30}px">`;
+  for(let c=0;c<cl;c++)sv+=`<text x="4" y="${50+c*30}" font-weight="700" style="fill:${tc(c)}">client ${c+1}</text>`;
+  sv+=`<text x="4" y="${50+cl*30+22}" font-weight="700">executor</text>`;
+  tasks.forEach(t=>{
+    if(t.arr>now&&p<1)return;const y=38+t.c*30,yE=40+cl*30+8;
+    if(t.start>t.arr)sv+=`<rect x="${xs(t.arr)}" y="${y}" width="${Math.max(1,xs(Math.min(t.start,p>=1?t.start:now))-xs(t.arr))}" height="18" rx="3" fill="var(--p5)" stroke="var(--bad)" stroke-dasharray="3 2"/>`;
+    if(t.start<=now||p>=1){const e=p>=1?t.end:Math.min(t.end,now);sv+=`<rect x="${xs(t.start)}" y="${yE}" width="${Math.max(2,xs(e)-xs(t.start))}" height="22" rx="3" fill="${tc(t.c)}" opacity=".85"><title>${esc(cmdStr(t.argv))} · ${t.dur.toFixed(2)}ms</title></rect>`;if(xs(t.end)-xs(t.start)>34)sv+=`<text x="${xs(t.start)+3}" y="${yE+15}" style="fill:#fff;font-size:10px">${esc(t.argv[0])}</text>`}
+  });
+  sv+=`<line x1="${xs(now)}" x2="${xs(now)}" y1="26" y2="${40+cl*30+36}" stroke="var(--acc)" stroke-width="2"/></svg>`;
+  const slow=tasks.reduce((a,b)=>b.dur>a.dur?b:a,tasks[0]),maxWait=Math.max(...tasks.map(t=>t.wait));
+  // lost update demo
+  const rnd=lcg(77),state={v:0,c:[{ph:0,x:0},{ph:0,x:0}]};const seq=[];let guard=0;
+  while((state.c[0].ph<10||state.c[1].ph<10)&&guard++<100){const k=rnd()<0.5?0:1,c=state.c[k];if(c.ph>=10)continue;if(c.ph%2===0){c.x=state.v}else state.v=c.x+1;c.ph++;seq.push(k)}
+  return`<div class="g2"><div><div class="caption">Bytes arrive in <b>${nchunks}</b> TCP chunk(s) of ${chunk} B; the parser has completed <b>${done}/3</b> frame(s) of a pipelined batch (last one is a binary-safe value containing CRLF).</div>
+   <div class="resp">${respColored(str,arrived,chunk)}</div>
+   <div class="chips" style="margin-top:6px">${group.map((a,i)=>`<span class="chip" style="${i<done?'background:var(--p2)':'opacity:.4'}">${i<done?'✔ ':''}${esc(short(cmdStr(a.map(vis)),44))}</span>`).join('')}</div>
+   <div class="note">A frame executes only when complete; a torn or fragmented frame waits for more bytes without corrupting the next one. Length prefixes (<span class="mono">$N</span>) make values binary-safe.</div></div>
+   <div><h3 style="margin-top:0">Single event loop: queue wait vs duration</h3>${sv}
+   <div class="chips"><span class="chip">slowest: ${esc(slow.argv[0])} ${slow.dur.toFixed(1)} ms</span><span class="chip ${maxWait>1?'bad':''}">longest queue wait: ${maxWait.toFixed(2)} ms</span><span class="chip">${cl} clients → 1 executor</span></div>
+   <div class="note">Red dashed = time spent queued behind other commands. Every command runs to completion before the next starts, so no locks are needed; a slow command (like KEYS with ${S.srv.db.size} keys) delays everyone.</div></div></div>
+   <h3>Atomicity: 2 clients × 5 increments</h3><div class="g2"><div class="box"><b>INCR (executed serially)</b><div class="big ok">10</div><div class="note">No lost updates.</div></div>
+   <div class="box"><b>Client-side GET, then SET x+1 (interleaved)</b><div class="big bad">${state.v}</div><div class="note">step order: <span class="mono">${seq.map(k=>k?'B':'A').join('')}</span></div><div class="note">Both read the same value, both write x+1: updates are lost. Atomicity comes from one command, not from the single thread alone.</div></div></div>`;
+}
+
+/* =========================================================
+   PHASE 2: TYPED KEYSPACE (F02)
+   ========================================================= */
+const TYPE_COL={string:'var(--t0)',hash:'var(--t2)',list:'var(--t1)',set:'var(--t3)',zset:'var(--t5)',stream:'var(--t6)'};
+const BIGO={GET:'O(1)',SET:'O(1)',INCR:'O(1)',HGET:'O(1)',HSET:'O(1)/field',HGETALL:'O(N)',LPUSH:'O(1)/elem',LRANGE:'O(S+N)',SADD:'O(1)/elem',SMEMBERS:'O(N)',ZADD:'O(log N)',ZRANGE:'O(log N + M)',ZRANK:'O(log N)',KEYS:'O(N) whole keyspace',DEL:'O(1)/key',XADD:'O(1)',XRANGE:'O(log N + M)',FLUSHALL:'O(N)'};
+const ATTEMPTS={wrongtype:()=>['LPUSH',[...S.srv.db.entries()].find(([k,e])=>e.type==='hash'||e.type==='string')?.[0]||'x','item'],notint:()=>['INCR',[...S.srv.db.entries()].find(([k,e])=>e.type==='string'&&!/^-?\d+$/.test(e.val))?.[0]||'session:1'],hset:()=>['HSET',[...S.srv.db.keys()].find(k=>S.srv.db.get(k).type==='set')||'recent','f','v'],zadd:()=>['ZADD',[...S.srv.db.keys()].find(k=>S.srv.db.get(k).type==='zset')||'z','abc','m']};
+OPT.attempt='wrongtype';OPT.ksel='';
+function draw2(p){
+  const srv=S.srv,all=[...srv.db.entries()].sort((a,b)=>cmp(a[1].type,b[1].type)||cmp(a[0],b[0])),k=p>=1?all.length:Math.ceil(p*all.length);
+  const byType={};all.forEach(([key,e])=>byType[e.type]=(byType[e.type]||0)+1);
+  const shown=all.slice(0,k).slice(-14),selKey=all.some(x=>x[0]===OPT.ksel)?OPT.ksel:(all[0]||[''])[0],se=srv.db.get(selKey);
+  const before=digest(srv),av=ATTEMPTS[OPT.attempt]();const r=srv.exec(av);const after=digest(srv);
+  const tot=srv.used();
+  return`<div class="caption">${k}/${all.length} keys. ${Object.entries(byType).map(([t,n])=>`<span class="tag" style="background:${TYPE_COL[t]}">${t} ${n}</span>`).join(' ')} · approx. memory <b>${tot}</b> B</div>
+  <div class="g2"><div><table><tr><th>key</th><th>type</th><th class="n">bytes</th><th>TTL</th><th>holds</th></tr>${shown.map(([key,e])=>`<tr><td class="mono">${esc(short(key,26))}</td><td><span class="tag" style="background:${TYPE_COL[e.type]}">${e.type}</span></td><td class="n">${srv.bytes(key,e)}</td><td>${e.exp==null?'-':Math.ceil((e.exp-srv.now)/1000)+'s'}</td><td class="mono">${esc(short(summ(e),28))}</td></tr>`).join('')}</table></div>
+  <div>${se?`<h3 style="margin-top:0">Byte accounting for <span class="mono">${esc(short(selKey,24))}</span></h3>${(()=>{const kb=selKey.length,vb=vbytes(se),mb=48,t=kb+vb+mb;return`<div style="display:flex;height:22px;border-radius:5px;overflow:hidden;margin:6px 0"><div style="width:${kb/t*100}%;background:var(--t0)" title="key"></div><div style="width:${vb/t*100}%;background:var(--t2)" title="value"></div><div style="width:${mb/t*100}%;background:var(--t7)" title="metadata"></div></div><div class="chips"><span class="chip">key ${kb} B</span><span class="chip">value ${vb} B</span><span class="chip">metadata ~${mb} B</span><span class="chip"><b>${t} B</b></span></div>`})()}`:''}
+  <h3>Wrong-type guard</h3><div class="caption ${r.t==='e'?'good':'bad'}"><span class="mono">${esc(cmdStr(av))}</span> → <b>${esc(fmtReply(r))}</b><br>Keyspace digest before/after: ${before===after?'<b class="ok">unchanged ✔</b>':'<b class="bad">CHANGED</b>'}</div></div></div>
+  <div class="note">Each type is a purpose-built structure: byte strings, field maps, linked lists, hash sets, score-ordered sets (skip list in Redis), append-only streams. A command validates the key's type <i>before</i> mutating, so errors leave state untouched.</div>`;
+}
+function summ(e){switch(e.type){case'string':return e.val;case'hash':return[...e.val.entries()].slice(0,3).map(x=>x.join('=')).join(' ')+(e.val.size>3?' …':'');case'list':return e.val.length+' items: '+e.val.slice(0,3).join(',');case'set':return e.val.size+' members';case'zset':return e.val.size+' members';case'stream':return e.val.entries.length+' entries'}return''}
+
+/* =========================================================
+   PHASE 3: EXPIRATION (F03)
+   ========================================================= */
+function expirySim(tkeys,t0,tEnd,active){
+  const rnd=lcg(tkeys.length*13+1),live=tkeys.map(k=>({...k,gone:false,lazy:false})),cycles=[];const series=[];
+  for(let t=t0;t<=tEnd;t+=100){
+    if(active){
+      let rep=0,budget=0;
+      for(;;){
+        const pool=live.filter(k=>!k.gone);if(!pool.length)break;
+        const n=Math.min(20,pool.length),sample=[];const tmp=pool.slice();for(let i=0;i<n;i++)sample.push(tmp.splice(Math.floor(rnd()*tmp.length),1)[0]);
+        const ex=sample.filter(k=>k.exp<=t);ex.forEach(k=>k.gone=true);
+        cycles.push({t,sampled:n,expired:ex.length,rep});budget+=n*0.2;rep++;
+        if(ex.length/n<=0.25||rep>=16||budget>=25)break;
+      }
+    }
+    series.push({t,held:live.filter(k=>!k.gone&&k.exp<=t).reduce((a,k)=>a+k.bytes,0),gone:live.filter(k=>k.gone).length});
+  }
+  return{live,cycles,series};
+}
+function draw3(p){
+  const srv=S.srv,tk=[...srv.db.entries()].filter(([k,e])=>e.exp!=null).map(([k,e])=>({key:k,exp:e.exp,bytes:srv.bytes(k,e)})).sort((a,b)=>a.exp-b.exp);
+  if(!tk.length)return'<div class="box">No keys have a TTL. Set “Rows with TTL” above to 30% or more.</div>';
+  const t0=srv.now,tEnd=Math.max(...tk.map(x=>x.exp))+1500,T=t0+p*(tEnd-t0);
+  const sim=expirySim(tk,t0,tEnd,OPT.active),upto=sim.series.filter(s=>s.t<=T),cur=upto[upto.length-1]||sim.series[0];
+  const cyc=sim.cycles.filter(c=>c.t<=T).slice(-6);
+  const W=640,H=Math.min(26+tk.length*12,330),xs=t=>10+(t-t0)/(tEnd-t0)*W;
+  let sv=`<svg viewBox="0 0 680 ${H}" style="max-height:${H+10}px">`;
+  tk.forEach((k,i)=>{const y=16+i*12,st=k.exp<=T?(reclaimedBy(k,T,OPT.active,tk,t0,tEnd)?'reclaimed':'expired'):'live';
+    sv+=`<line x1="${xs(t0)}" x2="${xs(k.exp)}" y1="${y}" y2="${y}" stroke="${st==='live'?'var(--ok)':st==='expired'?'var(--bad)':'var(--line)'}" stroke-width="5"/><circle cx="${xs(k.exp)}" cy="${y}" r="3.5" fill="${st==='reclaimed'?'var(--mut)':'var(--bad)'}"/>`});
+  sv+=`<line x1="${xs(T)}" x2="${xs(T)}" y1="4" y2="${H-4}" stroke="var(--acc)" stroke-width="2"/></svg>`;
+  const mx=Math.max(1,...sim.series.map(s=>s.held));let chart=`<svg viewBox="0 0 680 80" style="max-height:90px"><polyline fill="none" stroke="var(--bad)" stroke-width="2" points="${sim.series.filter(s=>s.t<=T).map(s=>`${xs(s.t)},${70-s.held/mx*60}`).join(' ')}"/><text x="10" y="12" style="fill:var(--mut);font-size:10px">memory held by expired-but-not-reclaimed keys (max ${mx} B)</text></svg>`;
+  const gk=tk.find(k=>k.exp<=T)||tk[0],rr=I_(gk.exp<=T?-2:Math.ceil((gk.exp-T)/1000));
+  return`<div class="caption">t = +${((T-t0)/1000).toFixed(1)}s · ${tk.filter(k=>k.exp<=T).length}/${tk.length} deadlines passed · <b>${cur.gone}</b> reclaimed by the active cycle · held in RAM but invisible: <b class="bad">${cur.held} B</b></div>
+  <div class="g2"><div>${sv}<div class="chips"><span class="chip" style="border-color:var(--ok)">live</span><span class="chip" style="border-color:var(--bad)">expired, still in memory</span><span class="chip">reclaimed</span></div></div>
+  <div>${chart}<h3>Active expire cycle (every 100 ms)</h3>${OPT.active?`<table><tr><th class="n">t+ms</th><th class="n">sampled</th><th class="n">expired</th><th>loop</th></tr>${cyc.map(c=>`<tr><td class="n">${c.t-t0}</td><td class="n">${c.sampled}</td><td class="n">${c.expired}</td><td>${c.rep?'repeat #'+c.rep+' (>25% expired)':'first pass'}</td></tr>`).join('')||'<tr><td colspan="4">waiting for first cycle…</td></tr>'}</table>`:'<div class="note bad">Active cycle is OFF: expired keys are only reclaimed when somebody touches them, so untouched keys keep their memory forever.</div>'}</div></div>
+  <div class="caption ${rr.v===-2?'good':''}">Access check at this instant: <span class="mono">TTL ${esc(gk.key)}</span> → <b>${esc(fmtReply(rr))}</b> (${rr.v===-2?'key is logically gone even if the cycle has not freed it':'still alive'}). Deadlines are absolute timestamps, so a read can never return an expired value.</div>`;
+}
+const _rc={};
+function reclaimedBy(k,T,active,tk,t0,tEnd){if(!active)return false;const id=active+'|'+tk.length+'|'+Math.floor(T/100)+'|'+t0;if(!_rc[id]){_rc[id]=new Set(expirySim(tk,t0,Math.min(T,tEnd),true).live.filter(z=>z.gone).map(z=>z.key));const ks=Object.keys(_rc);if(ks.length>400)delete _rc[ks[0]]}return _rc[id].has(k.key)}
+
+/* =========================================================
+   PHASE 4: MEMORY + EVICTION (F04)
+   ========================================================= */
+function evictSim(pol,universe,cap,samples,trace){
+  const cache=new Map(),rnd=lcg(4242);let used=0,hit=0,miss=0,evict=0,oom=0;const log=[];
+  const mark=[];
+  trace.forEach((ki,n)=>{
+    const u=universe[ki];let ev=null,st='';
+    if(cache.has(ki)){hit++;const c=cache.get(ki);c.lru=n;if(rnd()<1/(c.lfu*2+1))c.lfu=Math.min(255,c.lfu+1);st='hit'}
+    else{miss++;
+      let ok=true;
+      while(used+u.bytes>cap){
+        if(pol==='noeviction'){oom++;ok=false;st='oom';break}
+        const keys=[...cache.keys()];if(!keys.length){ok=false;break}let v;
+        if(pol==='exact-lru')v=keys.reduce((a,b)=>cache.get(b).lru<cache.get(a).lru?b:a);
+        else{const sm=[];for(let i=0;i<Math.min(samples,keys.length);i++)sm.push(keys[Math.floor(rnd()*keys.length)]);v=pol==='sampled-lru'?sm.reduce((a,b)=>cache.get(b).lru<cache.get(a).lru?b:a):sm.reduce((a,b)=>{const x=cache.get(a),y=cache.get(b);return y.lfu<x.lfu||(y.lfu===x.lfu&&y.lru<x.lru)?b:a})}
+        used-=universe[v].bytes;cache.delete(v);evict++;ev=v;
+      }
+      if(ok){cache.set(ki,{lru:n,lfu:1});used+=u.bytes;st=ev!==null?'evict':'miss'}
+    }
+    if(n%50===49)cache.forEach(c=>c.lfu=Math.max(1,c.lfu-1));
+    mark.push({st,ev,hits:hit,n:n+1,keys:new Map([...cache].map(([k,c])=>[k,{lru:c.lru,lfu:c.lfu}])).size});
+    log.push({n,ki,st,ev,hit,miss});
+  });
+  return{hit,miss,evict,oom,used,rate:hit/(hit+miss||1),log,final:new Map(cache)};
+}
+function evictSetup(){
+  const srv=S.srv;let uni=[...srv.db.entries()].filter(([k,e])=>e.type!=='stream').map(([k,e])=>({key:k,bytes:srv.bytes(k,e)}));
+  if(uni.length<40){const r=lcg(9);for(let i=uni.length;i<60;i++)uni.push({key:'cache:'+i,bytes:60+Math.floor(r()*140)})}
+  uni=uni.slice(0,80);const rnd=lcg(31),N=uni.length,trace=[];
+  for(let i=0;i<600;i++){let ki;const off=i<300?0:Math.floor(N*0.5);if(OPT.wl==='uniform')ki=Math.floor(rnd()*N);else if(OPT.wl==='hot'){ki=(rnd()<0.8?Math.floor(rnd()*Math.ceil(N*0.2)):Math.floor(rnd()*N))}else{ki=Math.min(N-1,Math.floor(Math.pow(rnd(),3)*N))}if(OPT.wl!=='uniform')ki=(ki+off)%N;trace.push(ki)}
+  const total=uni.reduce((a,u)=>a+u.bytes,0);return{uni,trace,cap:Math.floor(total*OPT.mem/100),total};
+}
+function draw4(p){
+  const{uni,trace,cap,total}=evictSetup(),pols=['noeviction','exact-lru','sampled-lru','sampled-lfu'],res={};pols.forEach(x=>res[x]=evictSim(x,uni,cap,OPT.samples,trace));
+  const R=res[OPT.pol],n=p>=1?trace.length:Math.max(1,Math.ceil(p*trace.length)),L=R.log[n-1];
+  const part=evictSim(OPT.pol,uni,cap,OPT.samples,trace.slice(0,n)),cache=part.final;
+  const maxL=Math.max(1,...[...cache.values()].map(c=>c.lfu));
+  const tiles=uni.map((u,i)=>{const c=cache.get(i);const heat=c?(OPT.pol==='sampled-lfu'?c.lfu/maxL:1-(n-c.lru)/Math.max(n,1)):0;const isEv=L&&L.ev===i,isNew=L&&L.ki===i;return`<span class="tile" title="${esc(u.key)} ${u.bytes}B${c?' lru@'+c.lru+' lfu '+c.lfu:''}" style="background:${c?`color-mix(in srgb,var(--ok) ${20+heat*70}%,var(--card))`:'var(--bg)'};${isEv?'outline:2px solid var(--bad)':isNew?'outline:2px solid var(--acc)':''}">${i}</span>`}).join('');
+  const spark=(()=>{let pts=[];let h=0,m=0;for(let i=0;i<n;i++){const l=R.log[i];if(l.st==='hit')h++;else m++;if(i%6===0)pts.push(`${10+i/trace.length*640},${60-h/(h+m)*50}`)}return`<svg viewBox="0 0 680 70" style="max-height:80px"><polyline fill="none" stroke="var(--acc)" stroke-width="2" points="${pts.join(' ')}"/><text x="10" y="10" style="fill:var(--mut);font-size:10px">running hit rate</text></svg>`})();
+  return`<div class="caption">Request ${n}/${trace.length} · key #${L.ki} → <b>${L.st==='hit'?'hit':L.st==='oom'?'<span class="bad">OOM: write rejected (noeviction)</span>':L.st==='evict'?'miss, evicted #'+L.ev+' to make room':'miss, admitted'}</b> · budget ${cap} B (${OPT.mem}% of ${total} B) · cached ${cache.size}/${uni.length} keys</div>
+  <div class="g2"><div>${tiles}<div class="note">Green = cached (brighter = ${OPT.pol==='sampled-lfu'?'more frequent':'more recent'}), red outline = just evicted, orange = requested.</div>${spark}</div>
+  <div><table><tr><th>policy</th><th class="n">hit rate</th><th class="n">evictions</th><th class="n">rejected writes</th></tr>${pols.map(x=>`<tr style="${x===OPT.pol?'background:var(--p0)':''}"><td><b>${x}</b></td><td class="n">${(res[x].rate*100).toFixed(1)}%</td><td class="n">${res[x].evict}</td><td class="n">${res[x].oom}</td></tr>`).join('')}</table>
+  <div class="note"><b>noeviction</b> keeps old data and rejects new writes when full. <b>exact-lru</b> is the textbook baseline (needs a global ordering); Redis instead <b>samples</b> ${OPT.samples} random keys and evicts the worst of them, which approximates it cheaply. <b>sampled-lfu</b> favors frequently used keys, which wins when a few keys are hot. Expiry (chapter 3) and eviction are different: eviction removes <i>live</i> keys.</div></div></div>`;
+}
+
+/* =========================================================
+   PHASE 5: PERSISTENCE (F05)
+   ========================================================= */
+function replayWrites(recs,upto){const r=new Redis();let i=0;for(const w of recs){if(i++>=upto)break;r.now=w.t;w.aof.forEach(a=>r.exec(a))}return r}
+function persistModel(){
+  const W=S.writes,n=W.length,c=Math.floor(OPT.crashPct/100*n),aof=W.map(w=>w.aof.map(respCmd).join(''));
+  const t=i=>W[i]?W[i].t:0,tc_=c>0?t(c-1):0,t0=W[0]?W[0].t:0;
+  const cnt=(lim)=>{let d=0;for(let i=0;i<c;i++)if(t(i)<=lim)d++;return d};
+  const K=OPT.snapK,snapIdx=K>0?Math.floor(c/K)*K:0;
+  const modes={};
+  modes['AOF always']=c;
+  modes['AOF everysec']=cnt(t0+Math.floor((tc_-t0)/1000)*1000);
+  modes['AOF no (OS flush ~30 s)']=cnt(t0+Math.floor((tc_-t0)/30000)*30000);
+  modes['RDB only (every '+(K||'∞')+' writes)']=snapIdx;
+  return{n,c,aof,modes,snapIdx,K,t0,tc_};
+}
+function draw5(p){
+  const M=persistModel(),W=S.writes;if(!M.n)return'<div class="box">No write commands.</div>';
+  const fs=OPT.fsync;const durable=fs==='always'?M.modes['AOF always']:fs==='everysec'?M.modes['AOF everysec']:fs==='no'?M.modes['AOF no (OS flush ~30 s)']:M.snapIdx;
+  const torn=OPT.crashMode==='torn';
+  // real AOF bytes, cut at durable boundary (+ half a record when torn)
+  let bytes='';for(let i=0;i<durable;i++)bytes+=M.aof[i];
+  let tail='';if(torn&&durable<M.n&&M.aof[durable])tail=M.aof[durable].slice(0,Math.max(5,Math.floor(M.aof[durable].length/2)));
+  const stream=enc8.encode(bytes+tail),pr=parseResp(stream);
+  const recsDurable=W.slice(0,durable).reduce((a,w)=>a+w.aof.length,0);
+  const replayed=replayWrites(W,durable),ref=replayWrites(W,durable);
+  // recover via parsed AOF bytes
+  let rec=new Redis();if(fs!=='rdb'){let i=0,fr=pr.frames,wi=0,left=fr.length;W.forEach((w,wi2)=>{});
+    // apply parsed frames with timestamps of owning write
+    let fi=0;for(let wi3=0;wi3<durable&&fi<fr.length;wi3++){rec.now=W[wi3].t;for(const a of W[wi3].aof){if(fi<fr.length){rec.exec(fr[fi].argv);fi++}}}}
+  const okAof=fs==='rdb'?true:digest(rec)===digest(ref);
+  // snapshot
+  const snapRows=snapObj(replayWrites(W,M.snapIdx)),chk=fnvStr(J(snapRows)),corrupt=OPT.corrupt;
+  const snapOK=!corrupt;
+  const lost=M.c-(fs==='rdb'?(snapOK?M.snapIdx:0):durable),shown=Math.ceil(clamp(p/0.8,0,1)*M.n);
+  const px=i=>10+i/Math.max(1,M.n)*640;
+  let tl=`<svg viewBox="0 0 680 110" style="max-height:120px"><line x1="10" x2="650" y1="50" y2="50" stroke="var(--line)" stroke-width="2"/>`;
+  for(let i=0;i<Math.min(shown,M.n);i++){const after=i>=M.c,isDur=i<durable;tl+=`<circle cx="${px(i)}" cy="50" r="3.5" fill="${after?'var(--line)':isDur?'var(--ok)':'var(--bad)'}"/>`}
+  if(M.K>0)for(let i=M.K;i<=M.n;i+=M.K)if(i<=shown)tl+=`<path d="M${px(i)},24 l6,8 l-6,8 l-6,-8z" fill="var(--acc2)"><title>snapshot after write ${i}</title></path>`;
+  if(p>=0.8)tl+=`<line x1="${px(M.c)}" x2="${px(M.c)}" y1="12" y2="92" stroke="var(--acc)" stroke-width="3"/><text x="${px(M.c)+4}" y="14" style="fill:var(--acc);font-weight:700">crash</text><rect x="${px(durable)}" y="58" width="${Math.max(0,px(M.c)-px(durable))}" height="14" fill="var(--bad)" opacity=".35"/><text x="${px(durable)}" y="86" style="fill:var(--bad);font-size:10.5px">${lost} write(s) lost</text>`;
+  tl+=`</svg><div class="legend2"><span>write #1 … #${M.n}</span><span><i style="background:var(--ok)"></i>durable</span><span><i style="background:var(--bad)"></i>acknowledged but lost</span><span style="color:var(--acc2)">◆ RDB snapshot</span></div>`;
+  const tornTxt=torn?`The last record was cut mid-append (${tail.length} of ${(M.aof[durable]||'').length} bytes written). The parser stops at the last <b>complete</b> record (${pr.frames.length} frames) and ignores the torn tail.`:'';
+  const lastRec=durable>0?M.aof[durable-1].replace(/\r\n/g,'⏎'):'';
+  const modesT=Object.entries(M.modes).map(([k,d])=>`<tr style="${(fs==='always'&&k==='AOF always')||(fs==='everysec'&&k==='AOF everysec')||(fs==='no'&&k.startsWith('AOF no'))||(fs==='rdb'&&k.startsWith('RDB'))?'background:var(--p0)':''}"><td><b>${k}</b></td><td class="n">${d}</td><td class="n ${M.c-d?'bad':'ok'}">${M.c-d}</td></tr>`).join('');
+  const ttlExample=W.find(w=>w.aof.some(a=>a[0]==='PEXPIREAT'));
+  return`<div class="caption ${p>=1&&okAof?'good':''}">${p<0.8?'Writes are appended to the log as they are acknowledged…':`Crash after write ${M.c}/${M.n}. Policy <b>${fs==='rdb'?'RDB snapshot only':'AOF fsync '+fs}</b>: ${durable} writes are on disk → recovery ${p>=1?(okAof?'<b class="ok">reproduces exactly the durable prefix ✔</b>':'<b class="bad">MISMATCH</b>'):'in progress…'} ${lost?`<span class="bad">${lost} acknowledged write(s) lost</span>`:'no acknowledged write lost'}`}</div>${tl}
+  <div class="g2"><div><table><tr><th>mode</th><th class="n">durable writes</th><th class="n">lost</th></tr>${modesT}</table>
+  <div class="note"><b>always</b> fsyncs before replying (slowest, no loss); <b>everysec</b> bounds loss to about a second; <b>no</b> lets the OS decide; <b>RDB</b> only has the last point-in-time snapshot.</div>
+  <h3>Snapshot (RDB-style)</h3><div class="chips"><span class="chip">after write ${M.snapIdx}</span><span class="chip">${snapRows.length} keys</span><span class="chip">checksum ${chk.toString(16)}</span><span class="chip ${snapOK?'ok':'bad'}">${snapOK?'checksum ✔ → published':'corrupted → checksum mismatch, rejected'}</span></div></div>
+  <div><h3 style="margin-top:0">AOF records near the crash</h3><pre class="mono">${esc(M.aof.slice(Math.max(0,durable-3),durable).map(r=>r.replace(/\r\n/g,'⏎')).join('\n'))}${tail?'\n<torn>'+esc(tail.replace(/\r\n/g,'⏎'))+'</torn>':''}</pre><div class="note">${tornTxt}</div>
+  <div class="note">${ttlExample?`Expiry is stored as an <b>absolute</b> deadline: <span class="mono">${esc(cmdStr(ttlExample.aof.find(a=>a[0]==='PEXPIREAT')))}</span> instead of a relative TTL, so replaying later does not extend the key's life.`:''}</div></div></div>`;
+}
+
+/* =========================================================
+   PHASE 6: REPLICATION (F06)
+   ========================================================= */
+const LAT={low:[8,25],med:[15,45],high:[40,120]};
+function replSim(o){
+  const W=S.writes,bytes=S.wbytes,lat=LAT[o.lat],rnd=lcg(W.length*17+3);
+  const prim=[];let off=0;W.forEach((w,i)=>{off+=bytes[i];prim.push({t:w.t,off,i})});
+  const tmax=(prim.length?prim[prim.length-1].t:0)+400,t0=W[0]?W[0].t:0;
+  const dsStart=t0+Math.floor(o.discFrom*(tmax-t0)),dsEnd=t0+Math.floor(o.discTo*(tmax-t0));
+  const reps=[0,1].map(r=>{
+    const events=[];let rs=null,dup=0,full=false,missing=0,resyncAt=null;
+    const disc=o.discR===r+1;
+    prim.forEach(pr=>{
+      const send=pr.t,arr=send+lat[r]+Math.floor(rnd()*12);
+      if(disc&&send>=dsStart&&send<dsEnd)return;
+      events.push({t:arr,off:pr.off,i:pr.i,k:'stream'});
+    });
+    if(disc){
+      const before=events.filter(e=>e.t<=dsEnd&&prim[e.i].t<dsStart).pop(),ro=before?before.off:0,pOff=(prim.filter(p=>p.t<dsEnd).pop()||{off:0}).off;
+      missing=pOff-ro;const mrecs=prim.filter(p=>p.t>=dsStart&&p.t<dsEnd);
+      if(missing<=o.backlog){full=false;resyncAt=dsEnd+lat[r]*2;mrecs.forEach(p=>events.push({t:resyncAt,off:p.off,i:p.i,k:'partial'}));if(before){events.push({t:resyncAt,off:before.off,i:before.i,k:'dup'});dup++}events.forEach(e=>{if(e.k==='stream'&&e.t>dsEnd&&e.t<resyncAt)e.t=resyncAt+1})}
+      else{full=true;const snapMs=200+Math.floor(S.srv.used()/40);resyncAt=dsEnd+lat[r]*2+snapMs;mrecs.forEach(p=>events.push({t:resyncAt,off:p.off,i:p.i,k:'full'}));events.forEach(e=>{if(e.k==='stream'&&e.t>dsEnd&&e.t<resyncAt)e.t=resyncAt+1})}
+      rs={kind:full?'full':'partial',missing,at:resyncAt,disc:[dsStart,dsEnd]};
+    }
+    events.sort((a,b)=>a.t-b.t||a.off-b.off);
+    const applied=[];let cur=0;events.forEach(e=>{if(e.off>cur){cur=e.off;applied.push({t:e.t,off:cur,i:e.i,k:e.k})}});
+    return{events,applied,rs,dup,id:r};
+  });
+  const offAt=(r,t)=>{let o2=0;for(const a of reps[r].applied){if(a.t<=t)o2=a.off;else break}return o2};
+  const pOffAt=t=>{let o2=0;for(const a of prim){if(a.t<=t)o2=a.off;else break}return o2};
+  return{prim,reps,offAt,pOffAt,tmax,t0,dsStart,dsEnd,total:off};
+}
+function draw6(p){
+  const W=S.writes;if(!W.length)return'<div class="box">No write commands.</div>';
+  const sim=replSim(OPT),T=sim.t0+p*(sim.tmax+800-sim.t0),W_=640,xs=t=>10+(t-sim.t0)/(sim.tmax+800-sim.t0)*W_;
+  const series=(f)=>{const pts=[];for(let t=sim.t0;t<=Math.min(T,sim.tmax+800);t+=25)pts.push(`${xs(t)},${100-(f(t))/Math.max(1,sim.total)*90}`);return pts.join(' ')};
+  let chart=`<svg viewBox="0 0 680 120" style="max-height:130px"><polyline fill="none" stroke="var(--acc)" stroke-width="2.5" points="${series(t=>sim.pOffAt(t))}"/><polyline fill="none" stroke="var(--t2)" stroke-width="2" points="${series(t=>sim.offAt(0,t))}"/><polyline fill="none" stroke="var(--t3)" stroke-width="2" points="${series(t=>sim.offAt(1,t))}"/>`;
+  if(OPT.discR)chart+=`<rect x="${xs(sim.dsStart)}" y="4" width="${xs(sim.dsEnd)-xs(sim.dsStart)}" height="104" fill="var(--bad)" opacity=".1"/><text x="${xs(sim.dsStart)+3}" y="14" style="fill:var(--bad);font-size:10px">R${OPT.discR} disconnected</text>`;
+  chart+=`<line x1="${xs(T)}" x2="${xs(T)}" y1="4" y2="110" stroke="var(--ink)" opacity=".4"/></svg><div class="legend2"><span>replication offset (bytes) over time:</span><span><i style="background:var(--acc)"></i>primary</span><span><i style="background:var(--t2)"></i>replica 1</span><span><i style="background:var(--t3)"></i>replica 2</span></div>`;
+  const po=sim.pOffAt(T),o1=sim.offAt(0,T),o2=sim.offAt(1,T);
+  const rs=sim.reps.map(r=>r.rs).find(Boolean);
+  const nodes=`<svg viewBox="0 0 420 124" style="max-height:170px">${[26,98].map((y,i)=>{const dis=OPT.discR===i+1&&T>=sim.dsStart&&T<sim.dsEnd;const fl=((T/90)%1);return`<line x1="150" y1="62" x2="270" y2="${y}" stroke="${dis?'var(--bad)':'var(--line)'}" stroke-width="2" ${dis?'stroke-dasharray="3 4"':''}/>${dis?`<text x="210" y="${(62+y)/2+(i?14:-6)}" text-anchor="middle" style="fill:var(--bad);font-size:10px;font-weight:700">link down</text>`:`<circle cx="${150+120*fl}" cy="${62+(y-62)*fl}" r="5" fill="var(--acc)"/>`}`}).join('')}${[[80,62,'primary',po,'var(--acc)',null],[340,26,'replica 1',o1,'var(--t2)',po-o1],[340,98,'replica 2',o2,'var(--t3)',po-o2]].map(([x,y,l,o,c,lag])=>`<rect x="${x-70}" y="${y-24}" width="140" height="48" rx="9" fill="var(--card)" stroke="${c}" stroke-width="3"/><text x="${x}" y="${y-7}" text-anchor="middle" font-weight="700">${l}</text><text x="${x}" y="${y+8}" text-anchor="middle" style="font-size:10.5px">offset ${o}</text>${lag==null?'':`<text x="${x}" y="${y+20}" text-anchor="middle" style="font-size:10.5px;fill:${lag?'var(--bad)':'var(--mut)'}">lag ${lag} B</text>`}`).join('')}</svg>`;
+  const finalOK=sim.reps.every(r=>{const rr=new Redis();const seen=new Set();let cur=0,dups=0;r.applied.forEach(a=>{if(a.off>cur){cur=a.off;rr.now=W[a.i].t;W[a.i].aof.forEach(x=>rr.exec(x))}});return digest(rr)===digest(replayWrites(W,W.length))});
+  const resTxt=rs?(rs.kind==='partial'?`R${OPT.discR} reconnected with offset ${po-rs.missing}: the primary still had the missing ${rs.missing} B in its backlog (${OPT.backlog} B) → <b class="ok">partial resync</b> (${sim.reps[OPT.discR-1].dup} duplicate record skipped by offset).`:`R${OPT.discR} was ${rs.missing} B behind but the backlog holds only ${OPT.backlog} B → <b class="bad">full resync</b>: snapshot transfer, then the stream continues.`):'';
+  return`<div class="caption">t = +${Math.round(T-sim.t0)} ms · primary offset <b>${po}</b> B · lag R1 ${po-o1} B, R2 ${po-o2} B</div>${nodes}${chart}
+  ${resTxt?`<div class="caption ${rs.kind==='partial'?'good':'bad'}">${resTxt}</div>`:''}
+  <div class="chips"><span class="chip ${finalOK?'ok':'bad'}">${finalOK?'✔ replicas converge to the primary state after catch-up':'✘ replicas differ'}</span><span class="chip">${W.length} writes · ${sim.total} B stream</span></div>
+  <div class="note">Every write gets a byte offset in an ordered stream. A replica applies only records beyond its own offset (duplicates are skipped), so reconnecting is safe. Replication is <b>asynchronous</b>: the primary acknowledges before replicas have the write, which is the window failover (chapter 8) can lose.</div>`;
+}
+
+/* =========================================================
+   PHASE 7: TRANSACTIONS & PIPELINING (F07)
+   ========================================================= */
+const SCEN={
+  pipeline:{title:'Pipelining is NOT atomic',init:[['SET','a','0']],steps:[['A',['INCR','a']],['A',['INCR','a']],['B',['GET','a']],['A',['INCR','a']]],verdict:'Client A sent 3 INCRs in one pipeline, but B’s GET ran between them and saw an intermediate value. Pipelining only saves round trips.'},
+  multi:{title:'MULTI / EXEC runs without interleaving',init:[['SET','a','0']],steps:[['A',['MULTI']],['A',['INCR','a']],['B',['GET','a']],['A',['INCR','a']],['A',['INCR','a']],['A',['EXEC']],['B',['GET','a']]],verdict:'A’s commands were only queued until EXEC. B saw 0 before the block and 3 after: never an in-between value.'},
+  watch:{title:'WATCH: optimistic conflict → abort',init:[['SET','bal','100']],steps:[['A',['WATCH','bal']],['A',['GET','bal']],['B',['SET','bal','50']],['A',['MULTI']],['A',['SET','bal','90']],['A',['EXEC']],['A',['GET','bal']]],verdict:'B changed the watched key after A read it, so EXEC returned (nil) and applied nothing. A must retry with a fresh read.'},
+  expire:{title:'WATCH aborts when the key expires',init:[['SET','tmp','1','PX','100']],steps:[['A',['WATCH','tmp']],['SLEEP',150],['A',['MULTI']],['A',['SET','tmp','2']],['A',['EXEC']],['A',['GET','tmp']]],verdict:'The watched key expired in between (a change), so the transaction aborted: expiry counts as a modification.'},
+};
+function runScen(name){
+  const sc=SCEN[name],r=new Redis();r.now=1000;sc.init.forEach(a=>r.exec(a));const cl={A:{},B:{}},out=[];
+  sc.steps.forEach(([c,a],i)=>{if(c==='SLEEP'){r.now+=a;out.push({i,c:'-',txt:`⏱ +${a} ms pass`,reply:null});return}
+    const rep=r.exec(a,cl[c]);out.push({i,c,argv:a,reply:rep,db:JSON.stringify([...r.db.entries()].map(([k,e])=>[k,e.val]))})});
+  return{sc,out,state:[...r.db.entries()].map(([k,e])=>k+'='+(e.val)).join(', ')};
+}
+function draw7(p){
+  const R=runScen(OPT.sc),k=p>=1?R.out.length:Math.ceil(p*R.out.length);
+  const rtt=OPT.rtt,N=OPT.nq,seqT=N*rtt,pipT=rtt+N*0.05,mx=seqT;
+  const lane=c=>R.out.slice(0,k).filter(x=>x.c===c);
+  return`<div class="caption">${esc(R.sc.title)}</div>
+  <div class="g2"><div><table><tr><th>#</th><th>client</th><th>command</th><th>reply</th></tr>${R.out.slice(0,k).map(x=>`<tr style="background:${x.c==='A'?'var(--p0)':x.c==='B'?'var(--p1)':'transparent'}"><td>${x.i+1}</td><td><b>${x.c}</b></td><td class="mono">${x.argv?esc(cmdStr(x.argv)):esc(x.txt)}</td><td class="mono">${x.reply?esc(fmtReply(x.reply)):''}</td></tr>`).join('')}</table></div>
+  <div><div class="caption ${p>=1?'good':''}" style="${p>=1?'':'visibility:hidden'}">${esc(R.sc.verdict)}</div><div class="note">Final state: <span class="mono">${esc(R.state)||'(empty)'}</span></div>
+  <h3>Pipelining saves round trips</h3><div class="lrow"><b style="min-width:110px">${N} sequential</b><span class="bar2" style="width:${seqT/mx*55}%;background:var(--bad)"></span><span class="mono">${seqT} ms</span></div><div class="lrow"><b style="min-width:110px">${N} pipelined</b><span class="bar2" style="width:${Math.max(1,pipT/mx*55)}%;background:var(--ok)"></span><span class="mono">${pipT.toFixed(1)} ms</span></div>
+  <div class="note">Round trip ${rtt} ms. A pipeline sends many commands before reading replies: faster, but other clients' commands can still run between them. Only MULTI/EXEC makes the queued commands run back-to-back; WATCH adds an optimistic version check.</div></div></div>`;
+}
+
+/* =========================================================
+   PHASE 8: FAILOVER / SENTINEL (F08)
+   ========================================================= */
+function draw8(p){
+  const W=S.writes;if(W.length<2)return'<div class="box">Need some write commands.</div>';
+  const sim=replSim({...OPT,discR:0}),tCrash=sim.t0+Math.floor(OPT.crashAt*(sim.tmax-sim.t0)),off1=sim.offAt(0,tCrash),off2=sim.offAt(1,tCrash),offP=sim.pOffAt(tCrash);
+  const best=off1>=off2?0:1,bestOff=Math.max(off1,off2),lostB=offP-bestOff;
+  const lostW=sim.prim.filter(x=>x.off>bestOff&&x.t<=tCrash).map(x=>W[x.i]);
+  const da=OPT.downAfter,q=OPT.quorum,pingOff=[0,310,640];
+  // each sentinel last got a PONG at the last ping before crash
+  const sd=pingOff.map(o=>{const lastPing=Math.floor((tCrash-o)/1000)*1000+o;return lastPing+da}).sort((a,b)=>a-b);
+  const odown=sd[q-1]+100,leaderAt=odown+160,promoteAt=leaderAt+80,reconf=promoteAt+120,notify=reconf+100,revive=notify+1500;
+  const ev=[[tCrash,'primary crashes (stops answering PING)','bad'],[sd[0],`sentinel 1 marks it SDOWN (no PONG for ${da} ms)`,''],[sd[1],'sentinel 2 SDOWN',''],[sd[2],'sentinel 3 SDOWN',''],
+    [odown,`quorum ${q}/3 agree → ODOWN (objectively down)`,'bad'],[leaderAt,'sentinel 1 wins the failover election: epoch+1 with 2/3 votes',''],
+    [promoteAt,`promote ${nodeName(best+1)} (highest offset ${bestOff}) → REPLICAOF NO ONE`,'good'],[reconf,`${nodeName(2-best)} repointed to the new primary`,''],[notify,'clients learn the new primary via “get-master-addr” / switch-master (versioned by epoch)','good'],
+    [revive,'old primary returns, sees a higher epoch → fenced and demoted to replica; its extra writes are discarded','bad']].sort((x,y)=>x[0]-y[0]);
+  const span=revive-tCrash+500,T=tCrash-200+p*span,xs=t=>20+(t-(tCrash-200))/span*620;
+  let tl=`<svg viewBox="0 0 680 70"><line x1="20" x2="640" y1="36" y2="36" stroke="var(--line)" stroke-width="3"/>${ev.map(([t,tx,c],i)=>t<=T?`<circle cx="${xs(t)}" cy="36" r="6" fill="${c==='bad'?'var(--bad)':c==='good'?'var(--ok)':'var(--acc2)'}"><title>${esc(tx)}</title></circle>`:'').join('')}<line x1="${xs(T)}" x2="${xs(T)}" y1="10" y2="60" stroke="var(--acc)" stroke-width="2"/></svg>`;
+  const shown=ev.filter(e=>e[0]<=T),stable=T>=notify;
+  const roles=[['primary',T<tCrash?'primary':T<revive?'DOWN':'replica (demoted)'],[nodeName(1),T>=promoteAt&&best===0?'NEW PRIMARY':'replica '+(T<promoteAt?'':'')],[nodeName(2),T>=promoteAt&&best===1?'NEW PRIMARY':'replica']];
+  return`<div class="caption ${stable?'good':'bad'}">t = +${Math.round(T-tCrash)} ms from the crash · ${stable?'a single primary is writable again: <b>'+nodeName(best+1)+'</b>':T>=tCrash?'<b>no writable primary</b> until promotion':'primary healthy'}</div>${tl}
+  <div class="g2"><div><div class="grid" style="grid-template-columns:repeat(3,1fr)">${[0,1,2].map(i=>{const nm=nodeName(i),role=i===0?(T<tCrash?'PRIMARY':T<revive?'DOWN':'replica (fenced)'):(T>=promoteAt&&best===i-1?'NEW PRIMARY':'replica'),off=i===0?offP:i===1?off1:off2;return`<div class="box" style="border:2px solid ${role==='NEW PRIMARY'?'var(--ok)':role==='DOWN'?'var(--bad)':'var(--line)'};text-align:center"><b>${nm}</b><div class="note">${role}</div><div class="mono">offset ${off}</div></div>`}).join('')}</div>
+   <h3>Events</h3>${shown.map(([t,tx,c])=>`<div class="row ${c==='bad'?'bad':''}">+${Math.round(t-tCrash)} ms · ${esc(tx)}</div>`).join('')}</div>
+  <div><h3 style="margin-top:0">Possible data loss</h3><div class="chips"><span class="chip">primary offset at crash ${offP}</span><span class="chip">${nodeName(1)} ${off1}</span><span class="chip">${nodeName(2)} ${off2}</span></div>
+   <div class="caption ${lostW.length?'bad':'good'}" style="margin-top:8px">${lostW.length?`<b>${lostW.length} acknowledged write(s) (${lostB} B) never reached the promoted replica</b> and are lost:<br><span class="mono">${esc(lostW.slice(0,4).map(w=>cmdStr(w.argv)).join(' | '))}${lostW.length>4?' …':''}</span>`:'The promoted replica had everything: nothing lost.'}</div>
+   <div class="note">Detection needs <b>${q}</b> of 3 sentinels to agree (quorum), each after <b>${da} ms</b> of silence. The most up-to-date replica (highest offset) is promoted; the old primary is fenced by a higher epoch so only one primary is writable. Replication is async, so recent writes can be lost: raise replica ack requirements or accept the window.</div></div></div>`;
+}
+
+/* =========================================================
+   PHASE 9: CLUSTER (F09)
+   ========================================================= */
+function crc16(bytes){let crc=0;for(const b of bytes){crc^=b<<8;for(let i=0;i<8;i++)crc=(crc&0x8000)?((crc<<1)^0x1021)&0xffff:(crc<<1)&0xffff}return crc}
+function slotOf(key){const m=/\{([^}]*)\}/.exec(key);const k=m&&m[1].length?m[1]:key;return crc16(enc8.encode(k))%16384}
+const slotNode=(s,n)=>Math.min(n-1,Math.floor(s*n/16384));
+function draw9(p){
+  const keys=[...S.srv.db.keys()].sort(),n=OPT.cnodes,key=keys.includes(OPT.ckey)?OPT.ckey:keys[0],sl=slotOf(key),own=slotNode(sl,n),cl=Math.min(OPT.cclient,n-1);
+  const cnt=Array(n).fill(0);keys.forEach(k=>cnt[slotNode(slotOf(k),n)]++);const mx=Math.max(1,...cnt);
+  const range=i=>[Math.ceil(i*16384/n),Math.ceil((i+1)*16384/n)-1];
+  // migration: slot with most keys
+  const bySlot={};keys.forEach(k=>{const s=slotOf(k);(bySlot[s]=bySlot[s]||[]).push(k)});
+  let ms=OPT.migSlot>=0?OPT.migSlot:+(Object.keys(bySlot).sort((a,b)=>bySlot[b].length-bySlot[a].length)[0]),mk=(bySlot[ms]||[]).slice(0,8);
+  const src=slotNode(ms,n),dst=(src+1)%n,step=p>=1?mk.length+2:Math.floor(p*(mk.length+3)),moved=Math.min(mk.length,Math.max(0,step-1)),state=step===0?'stable':step<=mk.length+1?'migrating':'committed';
+  const probe=(moved>0?mk[moved-1]:mk[0])||key;
+  const probeIdx=mk.indexOf(probe),probeMoved=probeIdx<moved;
+  const resp=state==='committed'?`MOVED ${ms} node ${dst} (slot owner changed)`:state==='stable'?'served by owner':(probeMoved?'-ASK '+ms+' (key already moved to target)':'served by source (key still here)');
+  const crossA=key,crossB=keys.find(k=>slotOf(k)!==slotOf(key))||key,tagged=['{'+key+'}a','{'+key+'}b'];
+  const redirect=own===cl?`served by node ${cl}`:`-MOVED ${sl} node ${own}`;
+  return`<div class="g2"><div><h3 style="margin-top:0">Key → slot → owner</h3><div class="note" style="margin:0 0 4px">slot = CRC16(key or {hash tag}) mod 16384</div>
+   <div class="caption"><span class="mono">${esc(key)}</span> → CRC16 <span class="mono">0x${crc16(enc8.encode((/\{([^}]*)\}/.exec(key)||[])[1]||key)).toString(16).padStart(4,'0')}</span> → slot <b>${sl}</b> → node <b>${own}</b> (owns ${range(own).join('–')})</div>
+   ${Array.from({length:n},(_,i)=>`<div class="lrow"><b style="color:${tc(i)}">node ${i}</b><span class="bar2" style="width:${cnt[i]/mx*50}%;background:${tc(i)}"></span><span class="mono">${cnt[i]} keys · slots ${range(i).join('–')}</span></div>`).join('')}
+   <h3>Client talks to node ${cl}</h3><div class="caption ${own===cl?'good':''}"><span class="mono">GET ${esc(short(key,24))}</span> → <b>${redirect}</b><br>${own===cl?'':'A redirect only tells the client where to go: it does not move any data.'}</div>
+   <h3>Multi-key commands</h3><table><tr><th>command</th><th>slots</th><th>result</th></tr><tr><td class="mono">MGET ${esc(short(crossA,12))} ${esc(short(crossB,12))}</td><td>${slotOf(crossA)}, ${slotOf(crossB)}</td><td>${slotOf(crossA)===slotOf(crossB)?'<span class="ok">same slot: ok</span>':'<b class="bad">CROSSSLOT error</b>'}</td></tr>
+   <tr><td class="mono">MGET ${esc(tagged[0])} ${esc(tagged[1])}</td><td>${slotOf(tagged[0])}, ${slotOf(tagged[1])}</td><td><span class="ok">hash tag → same slot: ok</span></td></tr></table></div>
+  <div><h3 style="margin-top:0">Online migration of slot ${ms} (node ${src} → node ${dst})</h3>
+   <div class="caption ${state==='committed'?'good':''}">${state==='stable'?'Stable: node '+src+' owns the slot.':state==='migrating'?`Slot is <b>MIGRATING</b> on node ${src} and <b>IMPORTING</b> on node ${dst}. Keys move one by one (value + TTL), writes keep being accepted.`:`Ownership <b>committed</b> to node ${dst} (config epoch bumped). Node ${src} now answers MOVED.`}</div>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="col" style="background:${pc(src)}"><h4>source node ${src}</h4>${mk.slice(moved).map(k=>`<span class="row">${esc(short(k,22))}</span>`).join('')||'<span class="note">empty</span>'}</div><div class="col" style="background:${pc(dst)}"><h4>target node ${dst}</h4>${mk.slice(0,moved).map(k=>`<span class="row">${esc(short(k,22))}${S.srv.db.get(k)&&S.srv.db.get(k).exp!=null?' ⏱ TTL kept':''}</span>`).join('')||'<span class="note">empty</span>'}</div></div>
+   <div class="caption" style="margin-top:8px">A client asks node ${src} for <span class="mono">${esc(short(probe,20))}</span> → <b>${esc(resp)}</b></div>
+   <div class="note">Hash slots (16384) are fixed; moving data = copying keys, then switching the slot owner. ASK is a one-shot redirect during migration; MOVED is the permanent one after the commit. Hash tags like <span class="mono">{user1}</span> force related keys into one slot so multi-key commands work.</div></div></div>`;
+}
+
+/* =========================================================
+   PHASE 10: STREAMS & CONSUMER GROUPS (F10)
+   ========================================================= */
+function streamScript(){
+  const r=new Redis();r.now=50000;const out=[];const log=(desc,argv,cl)=>{const rep=r.exec(argv);out.push({desc,argv,rep,snap:snapStream(r)});return rep};
+  const rows=S.rows.slice(0,8),cols=S.columns.slice(0,3);
+  rows.forEach((row,i)=>{r.now+=100;log(i===0?'Producer appends events (ids = time-seq, monotonic)':'',['XADD','ev','*',...cols.flatMap(c=>[c,String(row[c])])])});
+  r.now+=100;log('Create consumer group g, reading from the beginning',['XGROUP','CREATE','ev','g','0']);
+  const cons=['c1','c2','c3'].slice(0,OPT.ccons);
+  cons.forEach((c,i)=>{r.now+=200;log(`${c} reads 2 new entries; they become pending for ${c}`,['XREADGROUP','GROUP','g',c,'COUNT','2','STREAMS','ev','>'])});
+  const crash=cons[clamp(OPT.ccrash-1,0,cons.length-1)];
+  cons.filter(c=>c!==crash).forEach(c=>{const e=r.db.get('ev').val.groups.get('g');[...e.pel.entries()].filter(([s,pp])=>pp.c===c).forEach(([s])=>{r.now+=50;log(`${c} processes and acknowledges ${s}`,['XACK','ev','g',s])})});
+  if(OPT.trim>0){r.now+=50;log(`Retention is explicit: XTRIM MAXLEN ${OPT.trim} (may cut entries that are still pending)`,['XTRIM','ev','MAXLEN',String(OPT.trim)])}
+  r.now+=OPT.minIdle+500;log(`${crash} crashed: its entries stay pending. After ${OPT.minIdle} ms idle another consumer claims them`,['XAUTOCLAIM','ev','g',cons.find(c=>c!==crash)||crash,String(OPT.minIdle),'0-0']);
+  const g=r.db.get('ev').val.groups.get('g'),taker=cons.find(c=>c!==crash)||crash;
+  [...g.pel.keys()].forEach(s=>{r.now+=50;log(`${taker} finishes reclaimed work, acknowledges ${s}`,['XACK','ev','g',s])});
+  r.now+=100;log('Consumers read the remaining entries',['XREADGROUP','GROUP','g',taker,'COUNT','10','STREAMS','ev','>']);
+  [...g.pel.keys()].forEach(s=>{r.now+=50;log(`${taker} acks ${s}`,['XACK','ev','g',s])});
+  return out;
+}
+function snapStream(r){const e=r.db.get('ev');if(!e)return null;const s=e.val,g=s.groups.get('g');return{ents:s.entries.map(x=>idStr(x.id)),last:g?idStr(g.last):null,pel:g?[...g.pel.entries()].map(([id,p])=>({id,c:p.c,n:p.n,idle:r.now-p.t})):[],cons:g?[...g.cons]:[],now:r.now}}
+function draw10(p){
+  const steps=streamScript(),k=p>=1?steps.length:Math.max(1,Math.ceil(p*steps.length)),st=steps[k-1],sn=st.snap;
+  const cons=sn.cons,colOf=c=>tc(['c1','c2','c3'].indexOf(c));
+  const pelById=Object.fromEntries(sn.pel.map(x=>[x.id,x]));
+  const ents=sn.ents.map(id=>{const pe=pelById[id],after=sn.last&&cmpId(parseId(id),parseId(sn.last))>0;return`<span class="ent" style="border-color:${pe?colOf(pe.c):after?'var(--line)':'var(--ok)'};${after?'opacity:.55':''}" title="${id}">${id.split('-')[0].slice(-4)}-${id.split('-')[1]}${pe?`<br><small style="color:${colOf(pe.c)}">${pe.c} · try ${pe.n}</small>`:after?'<br><small>unread</small>':'<br><small class="ok">acked</small>'}</span>`}).join('');
+  const dangling=sn.pel.filter(x=>!sn.ents.includes(x.id));
+  return`<div class="caption ${/crashed/.test(st.desc)?'bad':''}">Step ${k}/${steps.length}: ${esc(st.desc||'(continuing)')}<br><span class="mono">${esc(short(cmdStr(st.argv),90))}</span> → <span class="mono">${esc(short(fmtReply(st.rep).replace(/\n/g,' '),90))}</span></div>
+  <div style="margin:6px 0"><b style="font-size:12px">stream <span class="mono">ev</span></b> (oldest → newest): ${ents||'<span class="note">empty</span>'}</div>
+  <div class="g2"><div><h3 style="margin-top:0">Group g · pending entries list (PEL)</h3><table><tr><th>entry</th><th>owner</th><th class="n">deliveries</th><th class="n">idle ms</th></tr>${sn.pel.map(x=>`<tr><td class="mono">${x.id}</td><td style="color:${colOf(x.c)}"><b>${x.c}</b></td><td class="n">${x.n}</td><td class="n">${x.idle}</td></tr>`).join('')||'<tr><td colspan="4">nothing pending: all delivered entries are acknowledged</td></tr>'}</table>
+   ${dangling.length?`<div class="note bad">${dangling.length} pending entr${dangling.length>1?'ies were':'y was'} trimmed from history: still in the PEL but the payload is gone (XAUTOCLAIM would report it as deleted).</div>`:''}</div>
+  <div><div class="chips">${cons.map(c=>`<span class="chip" style="border-color:${colOf(c)}">${c}</span>`).join('')}<span class="chip">last-delivered-id ${sn.last||'-'}</span></div>
+   <div class="note">Entries have monotonically increasing IDs. A consumer group tracks <b>delivery</b> (last-delivered-id and the PEL) separately from <b>retention</b> (the stream itself): an entry stays pending until XACKed, so work held by a crashed consumer can be reclaimed after an idle timeout. Delivery is at-least-once, never exactly-once. Trimming is explicit.</div></div></div>`;
+}
+
+/* =========================================================
+   PHASES TABLE + CONTROLS
+   ========================================================= */
+const PHASES=[
+ {t:'RESP & event loop',s:'bytes → frames → 1 executor',f:'F01',dur:6000,draw:draw1,b:'Commands arrive as RESP frames over TCP, possibly fragmented or pipelined. A parser completes whole frames and one thread executes them one at a time: that single-writer rule is why a command is atomic, and why a slow command delays everyone.'},
+ {t:'Typed keyspace',s:'strings · hashes · lists · sets · zsets',f:'F02',dur:5000,draw:draw2,b:'The keyspace maps key → typed value. Each type is a purpose-built structure and every command checks the type first (WRONGTYPE) before touching anything. Your rows are loaded here.'},
+ {t:'Key expiration',s:'lazy + active cycle',f:'F03',dur:7000,draw:draw3,b:'A TTL is an absolute deadline. An expired key is invisible immediately (checked on access), but its memory is only freed when touched or found by a bounded sampling cycle that runs ten times a second.'},
+ {t:'Memory & eviction',s:'maxmemory · sampled LRU/LFU',f:'F04',dur:8000,draw:draw4,b:'With a byte budget, admitting a key may require removing a live one. Redis samples a few keys instead of keeping a global order; compare policies on the same request trace.'},
+ {t:'Persistence',s:'AOF · RDB · crash recovery',f:'F05',dur:7000,draw:draw5,b:'Durability is a policy: snapshots lose everything after the last one; the append-only log loses only what was not yet fsynced. Recovery replays complete records and rejects a torn tail.'},
+ {t:'Replication',s:'offsets · backlog · resync',f:'F06',dur:7000,draw:draw6,b:'Replicas follow an ordered stream of writes identified by byte offsets. After a disconnect they resume from the backlog (partial) or re-sync from a snapshot (full). Replication is asynchronous.'},
+ {t:'Transactions',s:'pipeline · MULTI · WATCH',f:'F07',dur:6000,draw:draw7,b:'Pipelining batches network round trips but is not atomic. MULTI/EXEC runs queued commands without interleaving, and WATCH adds an optimistic check that aborts if a key changed.'},
+ {t:'Failover',s:'sentinels · promotion · fencing',f:'F08',dur:8000,draw:draw8,b:'Sentinels detect a dead primary (SDOWN then quorum ODOWN), elect a leader, promote the most up-to-date replica, fence the old primary with a higher epoch and tell clients. Async replication means some acknowledged writes may be lost.'},
+ {t:'Cluster slots',s:'CRC16 · redirects · resharding',f:'F09',dur:7000,draw:draw9,b:'Keys hash to one of 16,384 slots; slots are assigned to nodes. A redirect only tells a client where to go; moving a slot means copying keys (and TTLs) before switching the owner.'},
+ {t:'Streams',s:'entry ids · consumer groups',f:'F10',dur:9000,draw:draw10,b:'A stream is an ordered, ID-addressed log. Consumer groups track which entries are delivered and which are still pending, so crashed consumers’ work can be reclaimed.'},
+];
+function ctlHTML(k){
+  if(!S||S.error)return'';
+  const sel=(key,opts,val)=>`<select data-opt="${key}">${opts.map(([v,l])=>`<option value="${v}" ${String(v)===String(val)?'selected':''}>${esc(l)}</option>`).join('')}</select>`;
+  const rng=(key,min,max,step,val,suffix='')=>`<input type="range" data-opt="${key}" min="${min}" max="${max}" step="${step}" value="${val}" style="width:120px"> ${val}${suffix}`;
+  if(k===0){const pool=S.cmds.slice(S.nLoad);return`<label>Command ${sel('p1cmd',pool.map((c,i)=>[i,short(cmdStr(c.argv),26)]),OPT.p1cmd)}</label><label>TCP chunk (bytes) ${rng('chunk',1,40,1,OPT.chunk)}</label><label>Clients ${sel('clients',[1,2,3,4].map(x=>[x,x]),OPT.clients)}</label>`}
+  if(k===1)return`<label>Try a bad command ${sel('attempt',[['wrongtype','LPUSH on a hash/string'],['notint','INCR on a non-number'],['hset','HSET on a set'],['zadd','ZADD with a non-numeric score']],OPT.attempt)}</label>`;
+  if(k===2)return`<label><input type="checkbox" data-opt="active" ${OPT.active?'checked':''}> active expire cycle</label><span class="note">Tip: raise “Rows with TTL” under “Use your own data” at the top.</span>`;
+  if(k===3)return`<label>Policy ${sel('pol',['noeviction','exact-lru','sampled-lru','sampled-lfu'].map(x=>[x,x]),OPT.pol)}</label><label>maxmemory ${rng('mem',10,100,5,OPT.mem,'%')}</label><label>samples ${rng('samples',1,10,1,OPT.samples)}</label><label>Access pattern ${sel('wl',[['zipf','skewed, hot set shifts mid-run'],['hot','80/20, hot set shifts mid-run'],['uniform','uniform']],OPT.wl)}</label>`;
+  if(k===4)return`<label>Persistence ${sel('fsync',[['always','AOF fsync always'],['everysec','AOF everysec'],['no','AOF no'],['rdb','RDB snapshot only']],OPT.fsync)}</label><label>Snapshot every ${sel('snapK',[0,5,10,25].map(x=>[x,x?x+' writes':'off']),OPT.snapK)}</label><label>Crash at ${rng('crashPct',10,100,5,OPT.crashPct,'%')}</label><label>Crash type ${sel('crashMode',[['clean','between records'],['torn','mid-record (torn tail)']],OPT.crashMode)}</label><label><input type="checkbox" data-opt="corrupt" ${OPT.corrupt?'checked':''}> corrupt snapshot</label>`;
+  if(k===5)return`<label>Network ${sel('lat',[['low','fast'],['med','medium'],['high','slow']],OPT.lat)}</label><label>Disconnect ${sel('discR',[[0,'none'],[1,'replica 1'],[2,'replica 2']],OPT.discR)}</label><label>from ${rng('discFrom',0.1,0.7,0.05,OPT.discFrom)}</label><label>to ${rng('discTo',0.3,0.95,0.05,OPT.discTo)}</label><label>Backlog ${sel('backlog',[200,1000,5000,50000].map(x=>[x,x+' B']),OPT.backlog)}</label>`;
+  if(k===6)return`<label>Scenario ${sel('sc',[['pipeline','pipeline ≠ atomic'],['multi','MULTI/EXEC'],['watch','WATCH conflict'],['expire','WATCH + expiry']],OPT.sc)}</label><label>Round trip ${rng('rtt',1,100,1,OPT.rtt,' ms')}</label><label>Commands ${rng('nq',2,100,1,OPT.nq)}</label>`;
+  if(k===7)return`<label>Crash at ${rng('crashAt',0.2,1,0.05,OPT.crashAt)} of the write timeline</label><label>down-after ${sel('downAfter',[1000,3000,5000,10000].map(x=>[x,x+' ms']),OPT.downAfter)}</label><label>quorum ${sel('quorum',[1,2,3].map(x=>[x,x+'/3']),OPT.quorum)}</label>`;
+  if(k===8){const keys=[...S.srv.db.keys()].sort();return`<label>Key ${sel('ckey',keys.slice(0,100).map(x=>[x,x]),OPT.ckey||keys[0])}</label><label>Nodes ${sel('cnodes',[3,4,5,6].map(x=>[x,x]),OPT.cnodes)}</label><label>Client connected to ${sel('cclient',[...Array(OPT.cnodes).keys()].map(x=>[x,'node '+x]),OPT.cclient)}</label>`}
+  if(k===9)return`<label>Consumers ${sel('ccons',[2,3].map(x=>[x,x]),OPT.ccons)}</label><label>Crashing consumer ${sel('ccrash',[1,2,3].slice(0,OPT.ccons).map(x=>[x,'c'+x]),OPT.ccrash)}</label><label>min-idle ${sel('minIdle',[2000,5000,10000].map(x=>[x,x+' ms']),OPT.minIdle)}</label><label>Trim ${sel('trim',[[0,'no trim'],[6,'MAXLEN 6'],[3,'MAXLEN 3']],OPT.trim)}</label>`;
+  return'';
+}
+const NUMOPT=['p1cmd','chunk','clients','mem','samples','crashPct','snapK','discR','discFrom','discTo','backlog','rtt','nq','crashAt','downAfter','quorum','cnodes','cclient','ccons','ccrash','minIdle','trim'];
+$('#phCtl').addEventListener('change',e=>{
+  const t=e.target.closest('[data-opt]');if(!t)return;const key=t.dataset.opt;
+  OPT[key]=t.type==='checkbox'?t.checked:NUMOPT.includes(key)?+t.value:t.value;
+  if(key==='cnodes')OPT.cclient=0;
+  if(key==='ccons')OPT.ccrash=Math.min(OPT.ccrash,OPT.ccons);
+  stopAll();rebuildKeep();
+});
+function rebuildKeep(){showPhase(cur)}
+
+/* =========================================================
+   RENDER / WIRING
+   ========================================================= */
+
+function fillSel(sel,opts,keep,pref){const old=keep?$(sel).value:null;$(sel).innerHTML=opts.map(o=>`<option>${esc(o)}</option>`).join('');$(sel).value=opts.includes(old)?old:(opts.includes(pref)?pref:opts[0])}
+function onData(auto,prefix){
+  const text=$('#src').value;let ds;
+  try{const pf=$('#fmt').value==='auto'?detect(text):$('#fmt').value;ds={...parseWhole(text,pf),pf}}catch(e){ds={rows:[],columns:[],err:e.message}}
+  const cols=ds.columns;
+  $('#srcInfo').innerHTML=ds.err?`<span class="bad">${esc(ds.err)}</span>`:`${ds.rows.length} rows · ${cols.length} columns (${esc(cols.join(', '))}) · parsed as ${ds.pf}`;
+  const kc=cols.find(k=>/^(id|sku)$/i.test(k))||cols.find(k=>new Set(ds.rows.map(r=>r[k])).size===ds.rows.length)||cols[0];
+  fillSel('#kcol',cols,!auto,kc);if(auto&&prefix!==undefined)$('#prefix').value=prefix;
+  if(auto&&!ds.err&&ds.rows.length){const c=cfg();$('#script').value=defaultScript(c,ds.rows)}
+}
+function refresh(dataChanged,auto,prefix){
+  if(dataChanged)onData(auto,prefix);
+  S=build();
+  $('#statLine').textContent=S&&!S.error?`${S.cmds.length} commands executed · ${S.srv.db.size} keys · ${S.writes.length} writes`:'';
+  OPT.p1cmd=0;showPhase(cur);ddCost();conReset(true);
+}
+$('#src').addEventListener('input',()=>{stopAll();refresh(true,false)});
+$('#fmt').addEventListener('change',()=>{stopAll();refresh(true,false)});
+['#kcol','#prefix','#ltype','#ttlp'].forEach(s=>{$(s).addEventListener('change',()=>{stopAll();const c=cfg();if(DSrows())$('#script').value=defaultScript(c,DSrows());refresh(false)})});
+$('#script').addEventListener('change',()=>{stopAll();refresh(false)});
+function DSrows(){try{const t=$('#src').value;return parseWhole(t,$('#fmt').value==='auto'?detect(t):$('#fmt').value).rows}catch{return null}}
+$$('[data-sample]').forEach(b=>b.onclick=()=>{const sm=SAMPLES[b.dataset.sample];$('#src').value=sm.t();$('#fmt').value=sm.f;stopAll();refresh(true,true,sm.p)});
+$('#file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$('#src').value=r.result;const n=f.name.toLowerCase();$('#fmt').value=n.endsWith('.csv')?'csv':(n.endsWith('.jsonl')||n.endsWith('.ndjson'))?'jsonl':n.endsWith('.json')?'json':'auto';stopAll();refresh(true,true,n.replace(/\.[^.]+$/,'').replace(/[^a-z0-9]/gi,'').slice(0,12)||'row')};r.readAsText(f)};
+
+/* =========================================================
+   CONSOLE + COST TABLE
+   ========================================================= */
+let CON=null;
+function conReset(silent){
+  if(!S||S.error){$('#con').innerHTML='';return}
+  CON=buildServer(cfg(),S.rows).srv;CON.now+=1000;
+  $('#con').innerHTML=silent?'<div class="m">Connected to the loaded keyspace. Try: KEYS *, TYPE user:1, TTL user:2 …</div>':'<div class="m">Data reset.</div>';
+}
+function conRun(){
+  const line=$('#cli').value.trim();if(!line||!CON)return;const argv=tokenize(line);
+  const r=CON.exec(argv,CON._cl||(CON._cl={}));const c=CON.cost;
+  const el=$('#con');el.innerHTML+=`<div class="q">&gt; ${esc(line)}</div><div class="${r.t==='e'?'e':''}">${esc(fmtReply(r))}</div><div class="m">cost ${c.toFixed?c.toFixed(1):c} units · RESP request ${esc(vis(respCmd(argv)))} → ${esc(vis(respReply(r)).slice(0,80))}</div>`;
+  el.scrollTop=el.scrollHeight;$('#cli').value='';
+}
+$('#cliRun').onclick=conRun;$('#cli').addEventListener('keydown',e=>{if(e.key==='Enter')conRun()});$('#cliReset').onclick=()=>conReset(false);
+function ddCost(){
+  $('#ddCost').innerHTML=`<table><tr><th>command</th><th>complexity</th><th>why it matters</th></tr>${Object.entries(BIGO).map(([c,o])=>`<tr><td class="mono">${c}</td><td>${o}</td><td>${/N\)/.test(o)&&!/log/.test(o)?'<span class="bad">scales with data size: blocks the single thread</span>':'cheap'}</td></tr>`).join('')}</table><div class="note">Because one thread runs everything, an O(N) command over a big collection stalls every other client. Prefer SCAN-style incremental commands and bounded ranges.</div>`;
+}
+
+/* =========================================================
+   ARCHITECTURE OVERVIEW (components + relationships)
+   ========================================================= */
+const OVS={"w": 1000, "h": 430, "groups": [{"x": 190, "y": 55, "w": 570, "h": 345, "label": "Redis primary: one process, one executor thread"}], "nodes": [{"id": "client", "x": 10, "y": 190, "w": 120, "h": 64, "label": "Clients", "sub": "many connections", "desc": "Any number of clients open TCP connections and send commands. Everything they send funnels into one executor."}, {"id": "cluster", "x": 10, "y": 60, "w": 130, "h": 64, "label": "Cluster slots", "sub": "CRC16 \u2192 node", "desc": "In cluster mode the key is hashed to one of 16,384 slots and the client is routed (or redirected) to the node that owns that slot.", "phase": 8}, {"id": "resp", "x": 210, "y": 90, "w": 130, "h": 60, "label": "RESP parser", "sub": "bytes \u2192 frames", "desc": "Turns a stream of bytes (possibly fragmented or pipelined) into complete command frames. Incomplete frames wait for more bytes.", "phase": 0}, {"id": "loop", "x": 400, "y": 90, "w": 150, "h": 60, "label": "Event loop", "sub": "1 command at a time", "desc": "The single thread that runs each command to completion. This is the source of atomicity, and of head-of-line blocking by slow commands.", "phase": 0}, {"id": "tx", "x": 595, "y": 90, "w": 150, "h": 60, "label": "MULTI / WATCH", "sub": "atomic batch", "desc": "Queues commands until EXEC, then runs them back-to-back with no interleaving. WATCH aborts the batch if a watched key changed.", "phase": 6}, {"id": "exp", "x": 210, "y": 215, "w": 130, "h": 60, "label": "Expiry", "sub": "TTL deadlines", "desc": "Absolute deadlines on keys. Checked on access (lazy) and swept by a bounded active cycle.", "phase": 2}, {"id": "ks", "x": 400, "y": 210, "w": 150, "h": 70, "label": "Keyspace", "sub": "typed values", "desc": "The map from key to a typed value: string, hash, list, set, sorted set, stream. Every command validates the type first.", "phase": 1}, {"id": "streams", "x": 595, "y": 215, "w": 150, "h": 60, "label": "Streams", "sub": "groups \u00b7 PEL", "desc": "An ID-ordered log stored as one value type, with consumer groups that track pending deliveries.", "phase": 9}, {"id": "evict", "x": 210, "y": 325, "w": 130, "h": 60, "label": "Eviction", "sub": "maxmemory", "desc": "When the byte budget is full, removes live keys (sampled LRU/LFU) to admit new data. Different from expiry.", "phase": 3}, {"id": "persist", "x": 400, "y": 325, "w": 150, "h": 60, "label": "AOF / RDB", "sub": "durability", "desc": "Every write is appended to a log (and/or snapshotted) under an fsync policy so state can be rebuilt after a crash.", "phase": 4}, {"id": "repl", "x": 595, "y": 325, "w": 150, "h": 60, "label": "Replication", "sub": "offsets \u00b7 backlog", "desc": "Each write gets a byte offset in an ordered stream that replicas consume; a bounded backlog allows partial resync.", "phase": 5}, {"id": "replicas", "x": 830, "y": 325, "w": 150, "h": 60, "label": "Replicas", "sub": "follow the stream", "desc": "Copies that apply the primary's writes asynchronously. Candidates for promotion on failure.", "phase": 5}, {"id": "sentinel", "x": 830, "y": 90, "w": 150, "h": 64, "label": "Sentinels", "sub": "detect \u00b7 promote", "desc": "Monitor the primary, agree it is down by quorum, elect a leader, promote the most up-to-date replica and fence the old primary.", "phase": 7}], "edges": [{"from": "client", "to": "cluster", "label": "which node?", "kind": "ctl"}, {"from": "cluster", "to": "resp", "label": "route", "kind": "ctl"}, {"from": "client", "to": "resp", "label": "RESP bytes", "kind": "data"}, {"from": "resp", "to": "loop", "label": "frames", "kind": "data"}, {"from": "loop", "to": "tx", "label": "queue", "kind": "ctl"}, {"from": "loop", "to": "ks", "label": "reads / writes", "kind": "data"}, {"from": "exp", "to": "ks", "label": "deadline", "kind": "ctl"}, {"from": "evict", "to": "ks", "label": "evicts", "kind": "ctl"}, {"from": "ks", "to": "streams", "label": "type", "kind": "ctl"}, {"from": "ks", "to": "persist", "label": "every write", "kind": "data"}, {"from": "ks", "to": "repl", "label": "write stream", "kind": "data"}, {"from": "repl", "to": "replicas", "label": "stream", "kind": "data"}, {"from": "sentinel", "to": "replicas", "label": "monitor", "kind": "ctl"}, {"from": "sentinel", "to": "loop", "label": "PING \u00b7 fence", "kind": "ctl", "bend": 110}], "flow": [{"n": "client", "t": "A client sends SET k v."}, {"n": "cluster", "t": "In cluster mode, CRC16(k) mod 16384 picks the node that owns the slot."}, {"n": "resp", "t": "The bytes complete a RESP frame."}, {"n": "loop", "t": "The single executor runs the command to completion: atomic."}, {"n": "ks", "t": "The typed value is written to the keyspace (and any TTL recorded)."}, {"n": "persist", "t": "The write is appended to the AOF under the fsync policy."}, {"n": "repl", "t": "The same write gets a replication offset."}, {"n": "replicas", "t": "Replicas apply it later (asynchronously): this gap is what failover can lose."}]};
+
+/* =========================================================
+   INIT
+   ========================================================= */
+$('#src').value=SAMPLES.users.t();$('#fmt').value='csv';$('#prefix').value='user';
+refresh(true,true,'user');
+
+/* ================= v2: live simulation, accordion, packets ================= */
+const DETAIL=[
+{how:"Redis reads bytes from sockets via an event loop (ae, using epoll/kqueue), appends them to a per-client query buffer, and the RESP parser turns complete frames into argv arrays. Commands then run one at a time on the main thread, so each command is atomic. Redis 6+ can use io-threads for socket reads/writes, but execution stays single-threaded.",
+ pros:["Single executor means no locks, no data races, and every command is atomic by construction.","Pipelining lets many frames share one TCP round trip, so throughput reaches hundreds of thousands of ops/sec per core.","Simple, predictable latency model: cost of a command is its own CPU time plus queue ahead of it.","RESP is trivial to parse and implement in any client language."],
+ cons:["One slow command (KEYS, SMEMBERS on a huge set, big Lua script) stalls every client.","Only one core executes commands; scaling CPU means sharding (Cluster) or replicas for reads.","A client that never reads its replies can balloon the output buffer and the server's memory.","Large values and large pipelines raise tail latency for everyone sharing the loop."],
+ fails:[{m:"Blocked event loop",s:"Latency spikes across all clients; SLOWLOG shows KEYS, SMEMBERS, SORT or a long EVAL; latency-monitor events fire.",x:"Replace KEYS with SCAN, split big keys, use UNLINK instead of DEL, keep Lua short, move heavy reads to replicas."},
+ {m:"Client output buffer overflow",s:"Clients get disconnected; INFO shows rising client_recent_max_output_buffer and memory growth from slow pub/sub or replica consumers.",x:"Tune client-output-buffer-limit per class (normal, replica, pubsub); fix slow consumers; avoid huge replies."},
+ {m:"Connection exhaustion",s:"Errors like max number of clients reached; connected_clients near maxclients; rejected_connections grows.",x:"Use connection pooling, raise maxclients and OS file descriptor limits, set timeout to drop idle clients."},
+ {m:"Protocol error from bad client framing",s:"Logs show Protocol error and the connection is closed; fragmented or oversized bulk strings are rejected (proto-max-bulk-len).",x:"Fix the client library, check proto-max-bulk-len and query buffer limits, avoid sending giant single arguments."}],
+ watch:["SLOWLOG GET and slowlog-log-slower-than: entries over a few ms mean someone is blocking the loop.","INFO stats instantaneous_ops_per_sec and LATENCY DOCTOR; bad is a flat ops rate with rising latency.","INFO clients: connected_clients, blocked_clients, client_recent_max_input/output_buffer.","INFO commandstats: usec_per_call outliers show which command dominates CPU."]},
+
+{how:"The keyspace is a hash table (dict) from key to a redisObject carrying a type and an encoding. Each type picks a compact encoding when small (listpack for small hashes, lists, zsets; intset for small integer sets) and converts to a real structure when thresholds are crossed (hashtable, quicklist, skiplist plus dict). Every command checks the type first and returns WRONGTYPE on mismatch.",
+ pros:["Purpose-built structures give O(1) or O(log N) operations such as ZADD, HINCRBY, LPUSH, SADD.","Small-object encodings (listpack, intset) save a lot of memory versus pointer-heavy structures.","The type check makes misuse fail fast instead of corrupting data.","Rich commands (ZRANGEBYSCORE, SINTER) push logic to the server, saving round trips."],
+ cons:["Encoding conversion is one-way in practice and can suddenly raise memory and CPU for a key.","Big collections have O(N) commands (SMEMBERS, LRANGE 0 -1, HGETALL) that block the event loop.","No secondary indexes or queries beyond what the type offers; you design access patterns up front.","Per-key overhead (dict entry, object header, expire entry) is significant for millions of tiny keys."],
+ fails:[{m:"WRONGTYPE error",s:"Clients see WRONGTYPE Operation against a key holding the wrong kind of value after a key-naming collision or deploy bug.",x:"Namespace keys by type and app, check TYPE during debugging, avoid reusing key names across data models."},
+ {m:"Big key",s:"One key with millions of members; DEL or SMEMBERS causes a latency spike; memory is uneven across cluster nodes.",x:"Find with redis-cli --bigkeys or MEMORY USAGE, shard into smaller keys, use UNLINK and SSCAN/HSCAN, enable lazyfree-lazy-user-del."},
+ {m:"Encoding blow-up",s:"Memory jumps after a hash or zset passes hash-max-listpack-entries or value size limits and converts to a hashtable or skiplist.",x:"Check OBJECT ENCODING, tune the *-max-listpack-* settings deliberately, bucket large hashes into many small ones."},
+ {m:"Hot key",s:"One key takes most traffic; one node (or the single thread) saturates while others idle.",x:"Cache hot keys client-side (client tracking), replicate reads, or split the key into several suffixed copies."}],
+ watch:["redis-cli --bigkeys, MEMORY USAGE key, OBJECT ENCODING key to spot oversized or converted keys.","INFO keyspace: keys and expires counts per db; INFO memory used_memory and mem_fragmentation_ratio.","INFO commandstats for O(N) commands (smembers, hgetall, lrange) with high usec_per_call."]},
+
+{how:"EXPIRE and PEXPIRE store an absolute millisecond deadline in a separate expires dict. Redis deletes expired keys two ways: lazily when a command touches the key, and actively through activeExpireCycle, which runs hz times per second (default 10), samples keys with TTLs, deletes expired ones, and repeats if more than about 25 percent of the sample was expired, within a CPU time budget. Replicas do not expire on their own; they wait for the primary's DEL.",
+ pros:["Expired keys are invisible instantly, because every access checks the deadline first.","Sampling keeps expiry cost bounded and spread over time instead of scanning the whole keyspace.","Absolute deadlines survive restarts and replication without drift concerns.","Simple cache and session semantics with SET EX, GETEX, and TTL commands."],
+ cons:["Memory is not freed at the exact deadline; untouched expired keys linger until sampled.","Mass expiry at the same second creates a burst of deletes that can stall the loop.","Expiry depends on wall-clock time, so clock jumps or skew between nodes matter.","Replica correctness relies on the primary sending DELs; replicas may still serve or hide logically expired keys differently across versions."],
+ fails:[{m:"Expiry storm",s:"Latency spike at a round timestamp when millions of keys with identical TTLs expire together.",x:"Add random jitter to TTLs, enable lazyfree-lazy-expire, lower active-expire-effort or spread key creation."},
+ {m:"Expired keys hoard memory",s:"used_memory stays high; expired_keys grows slowly while many keys are past deadline but untouched.",x:"Raise hz or active-expire-effort, scan keys to force lazy expiry, or reduce TTL cardinality."},
+ {m:"Persistent keys by mistake",s:"A SET without EX or a rewrite that drops the TTL leaves keys that never expire; memory climbs until eviction.",x:"Use SET key val EX n, check TTL on samples, alert when expires is far below keys in INFO keyspace."},
+ {m:"Clock skew or jump",s:"Keys vanish early or live too long after NTP step or restore from backup on a node with a different clock.",x:"Keep NTP healthy on all nodes, avoid restoring snapshots with stale TTL assumptions, review after failover."}],
+ watch:["INFO stats expired_keys and expired_stale_perc: high stale percentage means many dead keys are waiting.","INFO keyspace: avg_ttl and the gap between keys and expires.","LATENCY LATEST for expire-cycle events; bad is periodic spikes aligned to round times."]},
+
+{how:"When maxmemory is set and used memory exceeds it, Redis evicts keys before executing writes according to maxmemory-policy. Approximate LRU and LFU do not keep a global ordering: they sample maxmemory-samples keys (default 5), keep a small eviction pool, and remove the best candidate. LRU uses a 24-bit last-access clock in each object; LFU uses a logarithmic counter with decay (lfu-log-factor, lfu-decay-time).",
+ pros:["Sampling gives near-true LRU quality at constant cost with no per-access list maintenance.","LFU resists scan pollution and keeps genuinely popular keys through bursts of one-off reads.","Policies like volatile-ttl or allkeys-lru let one engine act as a bounded cache.","Raising maxmemory-samples trades CPU for accuracy in a tunable way."],
+ cons:["Approximate: a recently used key can be evicted, and quality depends on sample size.","noeviction turns memory pressure into write errors (OOM command not allowed) instead of data loss.","Eviction cost is paid inside write commands, adding latency exactly when memory is tight.","maxmemory does not count replica or AOF-rewrite buffers and fork copy-on-write, so RSS can exceed it."],
+ fails:[{m:"Eviction storm",s:"Writes slow down and evicted_keys spikes when a big value or burst of writes forces many evictions in one command.",x:"Give headroom (maxmemory below RAM), avoid huge values, enable lazyfree-lazy-eviction, spread load."},
+ {m:"OOM with noeviction",s:"Clients get OOM command not allowed when used memory > maxmemory; reads still work.",x:"Raise maxmemory, switch to an allkeys-* or volatile-* policy suited to the workload, or add shards."},
+ {m:"volatile-* policy with no TTLs",s:"Memory is full but nothing is evictable, so writes fail like noeviction.",x:"Use allkeys-* policies for caches, or make sure evictable keys really carry TTLs."},
+ {m:"Swap or OOM-kill from fragmentation",s:"RSS is well above used_memory (mem_fragmentation_ratio over 1.5) and the kernel starts swapping or the OOM killer fires.",x:"Enable activedefrag, restart in a controlled failover, leave RAM headroom for fork and buffers, disable swap."}],
+ watch:["INFO stats evicted_keys and keyspace_hits vs keyspace_misses; a rising miss ratio with evictions means the cache is too small.","INFO memory used_memory, maxmemory, mem_fragmentation_ratio, used_memory_rss.","MEMORY STATS and MEMORY DOCTOR for overhead breakdown.","Alert on OOM errors from clients and on used_memory near maxmemory."]},
+
+{how:"RDB writes point-in-time snapshots by forking a child (BGSAVE, or save rules like save 3600 1) that dumps a copy-on-write view to dump.rdb. AOF appends every write command to a log, flushed per appendfsync (always, everysec, or no), and is compacted by BGREWRITEAOF; Redis 7 uses multi-part AOF with a base file plus incremental files. On restart Redis loads the AOF if enabled, and aof-load-truncated lets it discard a partial last record.",
+ pros:["RDB files are compact, fast to load, and ideal for backups and fast replica bootstrap.","AOF with everysec bounds loss to roughly one second of writes at low cost.","AOF is an ordered, human-inspectable log; redis-check-aof can repair a torn tail.","Combining both (aof-use-rdb-preamble) gives fast load plus fine-grained durability."],
+ cons:["RDB loses everything since the last snapshot; AOF everysec can lose about a second, no can lose more.","fork() stalls the main thread in proportion to page-table size, and copy-on-write can double memory on write-heavy loads.","appendfsync always is durable but cuts throughput sharply due to disk fsync latency.","AOF grows large between rewrites; rewrites and snapshots cost disk I/O and memory."],
+ fails:[{m:"Fork latency spike",s:"Latency freezes of hundreds of ms during BGSAVE or rewrite on large datasets; INFO latest_fork_usec is large.",x:"Keep instances smaller, avoid THP (disable transparent huge pages), use faster hosts, schedule saves off-peak or snapshot on replicas."},
+ {m:"Copy-on-write memory blowup",s:"Memory nearly doubles during a save under heavy writes; OOM killer terminates redis-server.",x:"Reserve RAM headroom, set vm.overcommit_memory=1, reduce write rate during snapshots."},
+ {m:"Torn or corrupt AOF/RDB",s:"Startup fails or logs Bad file format or unexpected end of AOF after a crash or full disk.",x:"Run redis-check-aof --fix or redis-check-rdb, keep aof-load-truncated yes, retain older backups, monitor disk space."},
+ {m:"Disk stall blocks writes",s:"Slow fsync makes everysec writes wait; Asynchronous AOF fsync is taking too long appears in logs.",x:"Use fast local disks, avoid sharing I/O with rewrites, check no-appendfsync-on-rewrite trade-off."}],
+ watch:["INFO persistence: rdb_last_bgsave_status, aof_last_write_status, rdb_changes_since_last_save, aof_delayed_fsync.","INFO stats latest_fork_usec; bad is tens of ms per GB or more.","Disk free space and aof_current_size vs aof_base_size to know when rewrites are due.","Test restore regularly; an untested backup is not a backup."]},
+
+{how:"A replica connects with PSYNC replid offset. The primary assigns every write a byte offset in a replication stream and keeps a bounded repl-backlog-size buffer. If the replica's offset is still inside the backlog, it gets a partial resync; otherwise the primary forks a child, ships an RDB (full sync), then streams buffered writes. Replication is asynchronous: the primary replies to the client before replicas confirm.",
+ pros:["Replicas offer read scaling and a hot copy for failover and backups.","Partial resync via the backlog makes short network blips cheap.","Offsets plus replid make the stream position unambiguous, even across promotions.","Replicas can take RDB/AOF persistence off the primary."],
+ cons:["Asynchronous: acknowledged writes can be lost if the primary dies before replicas receive them (WAIT narrows but does not close this).","Replicas can serve stale reads and lag under heavy writes.","Full resync costs a fork on the primary, a big network transfer, and a long load on the replica.","A too-small backlog turns every disconnect into an expensive full sync."],
+ fails:[{m:"Resync loop",s:"Replica repeatedly does full syncs; the primary forks again and again; logs show Partial resync not possible.",x:"Increase repl-backlog-size, raise client-output-buffer-limit replica, fix flaky network, check repl-timeout."},
+ {m:"Replica lag",s:"Reads return old data; master_repl_offset minus slave_repl_offset keeps growing; replica output buffer fills.",x:"Reduce write bursts and big values, give replicas better hardware, check the network, use WAIT for critical writes."},
+ {m:"Lost writes on primary crash",s:"After failover, recently acknowledged writes are missing on the new primary.",x:"Accept as design; use WAIT numreplicas, min-replicas-to-write and min-replicas-max-lag to bound the loss window."},
+ {m:"Primary fork memory pressure on full sync",s:"Many replicas syncing at once cause repeated forks, memory spikes and latency.",x:"Stagger replica starts, use repl-diskless-sync with a delay so one RDB serves many replicas, or chain replicas."}],
+ watch:["INFO replication: master_repl_offset vs each replica's offset and lag; connected_slaves and state=online.","INFO stats sync_full, sync_partial_ok, sync_partial_err; frequent sync_full is bad.","repl_backlog_size vs write rate: backlog should cover your longest expected disconnect.","Replica master_link_status should be up; down means it is serving stale data."]},
+
+{how:"Pipelining just sends many commands without waiting for replies; it saves round trips but other clients' commands can interleave and nothing is atomic. MULTI queues commands and EXEC runs them back-to-back with no other client in between. WATCH marks keys; if any is modified before EXEC (including by expiry or eviction), EXEC returns nil and nothing runs. There is no rollback: a command that fails at runtime does not undo earlier ones.",
+ pros:["Pipelining cuts latency-bound workloads dramatically: 100 commands cost about one round trip.","MULTI/EXEC gives isolation without locks because the executor is single-threaded.","WATCH enables lock-free optimistic check-and-set patterns.","Lua scripts and Functions (EVAL, FCALL) give atomic read-modify-write with branching when MULTI is not enough."],
+ cons:["No rollback: a runtime error in the middle leaves earlier commands applied.","A large MULTI or pipeline blocks the loop and buffers lots of memory on the server.","WATCH retries can livelock on hot keys; there is no blocking or fairness.","In Cluster, all keys in a transaction or script must be in the same slot."],
+ fails:[{m:"Assuming pipeline is atomic",s:"Interleaved writes from other clients break an invariant between two commands sent in one pipeline.",x:"Wrap in MULTI/EXEC or use a Lua script / function when atomicity is required."},
+ {m:"EXEC aborted by WATCH",s:"EXEC returns nil under contention; throughput collapses as clients retry the same hot key.",x:"Retry with backoff, shrink the watched set, or move the logic into a Lua script."},
+ {m:"Partial transaction effect",s:"EXECABORT on queue-time errors, or some commands fail at EXEC time while others already applied.",x:"Validate types and arguments first, design idempotent commands, test error paths."},
+ {m:"CROSSSLOT in Cluster",s:"MULTI or script fails with CROSSSLOT Keys in request don't hash to the same slot.",x:"Use hash tags like {user:1}:cart so related keys share a slot, or redesign to single-key operations."}],
+ watch:["INFO stats total_commands_processed vs connections: pipelining shows many commands per read.","INFO commandstats for exec, multi, watch failure patterns; rejected_calls and failed_calls.","INFO clients client_recent_max_input_buffer and SLOWLOG for huge pipelines or scripts.","Application metrics: WATCH retry rate; rising means contention."]},
+
+{how:"Redis Sentinel runs as separate processes that PING the primary. After down-after-milliseconds without a valid reply, a sentinel marks it SDOWN; when quorum sentinels agree it becomes ODOWN. The sentinels elect a leader by majority and a config epoch, which picks the replica with the best priority, replication offset and run id, issues REPLICAOF NO ONE, reconfigures other replicas, and publishes the new primary to clients. The old primary is demoted when it returns.",
+ pros:["Automatic detection and promotion without a human, usually within seconds.","Quorum for ODOWN avoids a single sentinel's bad view triggering failover; majority is needed to authorize it.","Epochs fence stale decisions; the old primary is reconfigured as a replica when it comes back.","Clients discover the current primary through Sentinel, so apps need no hardcoded addresses."],
+ cons:["Replication is async, so promotion can lose recently acknowledged writes.","Network partitions can create a short split brain where the old primary still accepts writes until it is demoted.","Sentinel gives HA only, not sharding; each dataset still lives on one primary.","Misconfigured quorum or too few sentinels (need 3 across failure domains) causes false failovers or none."],
+ fails:[{m:"Split brain",s:"Old primary keeps accepting writes in a partitioned minority; those writes are discarded when it rejoins as a replica.",x:"Set min-replicas-to-write and min-replicas-max-lag so an isolated primary stops accepting writes; place sentinels in separate failure domains."},
+ {m:"Failover flapping",s:"Repeated switch-overs after brief stalls, such as a fork pause or GC-like freeze, longer than down-after-milliseconds.",x:"Raise down-after-milliseconds above worst-case fork latency, fix the latency source, tune failover-timeout."},
+ {m:"Lost acknowledged writes",s:"Data written just before the crash is missing on the promoted replica.",x:"Use WAIT for critical writes, keep replicas close and caught up, accept bounded loss as a design property."},
+ {m:"Clients keep using the old primary",s:"Writes fail with READONLY or go to a demoted node because the client cached the address.",x:"Use Sentinel-aware clients, subscribe to +switch-master, and reconnect on READONLY errors."}],
+ watch:["SENTINEL masters and SENTINEL replicas: flags, num-other-sentinels, and quorum health.","Sentinel logs for +sdown, +odown, +failover-state-*, +switch-master events.","INFO replication on replicas: offset lag decides who gets promoted and how much is lost.","Alert if fewer than quorum sentinels are reachable; failover cannot happen."]},
+
+{how:"Cluster mode maps each key to one of 16,384 hash slots with CRC16(key) mod 16384 (only the part inside {hash tags} if present). Each master owns a set of slots; nodes gossip state over the cluster bus. A request for a key the node does not own gets a MOVED redirect, and during migration ASK; smart clients cache the slot map. Resharding moves slots with MIGRATE key by key, marking slots MIGRATING on the source and IMPORTING on the target before the owner switches.",
+ pros:["Horizontal scale of memory and throughput by adding masters and moving slots.","Fixed slot space makes rebalancing incremental and online, without rehashing all keys.","Built-in failover per shard through replicas and node majority voting.","Clients route directly to the owner after learning the map, so there is no proxy hop."],
+ cons:["Multi-key commands, transactions and scripts need all keys in one slot (CROSSSLOT otherwise).","Only database 0; no cross-slot SCAN or KEYS across the cluster in one call.","Hot keys and big keys cannot be spread by the cluster; one slot lives on one node.","Resharding adds load, and large keys make MIGRATE block the source for a while."],
+ fails:[{m:"CROSSSLOT errors",s:"MGET, SINTER, MULTI or Lua across unrelated keys fails with CROSSSLOT.",x:"Design keys with hash tags {tag} so related keys share a slot, or split into per-key calls."},
+ {m:"MOVED storms after resharding or failover",s:"Clients with stale slot maps bounce between nodes; latency and error rates rise.",x:"Use cluster-aware clients that refresh the map on MOVED, avoid manual redirect loops, throttle resharding."},
+ {m:"Slot unavailable (CLUSTERDOWN)",s:"Cluster reports state fail when a master with no replica is down or slots are uncovered; writes return CLUSTERDOWN.",x:"Run at least one replica per master, keep cluster-require-full-coverage choice deliberate, repair with redis-cli --cluster fix."},
+ {m:"Big key or hot slot during migration",s:"MIGRATE of a huge key blocks the source node and times out; one shard is overloaded.",x:"Split big keys beforehand, use a small --cluster-pipeline and timeouts, rebalance by weight and traffic, not slot count only."}],
+ watch:["CLUSTER INFO: cluster_state ok, cluster_slots_assigned 16384, slots_pfail and slots_fail zero.","CLUSTER NODES: node flags, master-replica pairing, slots in migrating/importing state.","redis-cli --cluster check for slot coverage and open slots; per-node memory and ops balance.","Client metrics: MOVED/ASK counts; a sustained high rate means stale routing."]},
+
+{how:"A stream (XADD, XRANGE, XREAD) is an append-only log of entries with IDs like millisecondTime-sequence, stored in a radix tree of listpacks. A consumer group (XGROUP CREATE, XREADGROUP) tracks last-delivered-id and a Pending Entries List (PEL) per consumer; XACK removes an entry from the PEL. If a consumer dies, others take over its pending entries with XAUTOCLAIM or XCLAIM after a min-idle-time. XADD ... MAXLEN or XTRIM bounds the log size.",
+ pros:["Durable, replayable log: multiple readers can read from any ID independently.","Consumer groups share work across consumers with per-entry acknowledgement and at-least-once delivery.","The PEL exposes unacknowledged work, making crashed-consumer recovery explicit via XPENDING and XAUTOCLAIM.","Approximate trimming (MAXLEN ~) is cheap because it removes whole nodes."],
+ cons:["At-least-once only: after a claim an entry can be processed twice, so handlers must be idempotent.","Memory-resident like everything else; the log grows until you trim, and trimming can drop unread entries.","No built-in dead-letter queue; you must inspect delivery counts yourself.","Ordering is per stream; one stream lives on one node, which limits scaling a single hot stream."],
+ fails:[{m:"Stuck pending entries",s:"XPENDING shows a growing PEL with large idle times because a consumer crashed or never ACKs.",x:"Run XAUTOCLAIM with a sensible min-idle-time, always XACK after processing, alert on pending count and oldest idle."},
+ {m:"Trim drops unread data",s:"Consumers lag behind MAXLEN and lose entries; XREADGROUP skips ahead or returns gaps.",x:"Size MAXLEN or MINID from the slowest consumer's lag, monitor lag, avoid trimming past last-delivered-id."},
+ {m:"Poison message redelivery loop",s:"One bad entry is claimed and fails forever; its delivery counter in XPENDING keeps rising.",x:"Cap retries by delivery count, move the entry to a dead-letter stream, XACK and XDEL it."},
+ {m:"Unbounded stream memory",s:"used_memory grows steadily; XLEN is in the millions with no trimming policy.",x:"Set MAXLEN ~ or MINID on XADD, or schedule XTRIM; consider a retention window by time."}],
+ watch:["XINFO STREAM and XINFO GROUPS: length, last-generated-id, lag, pending, consumers.","XPENDING stream group: pending count and oldest idle time; growth means stuck consumers.","XINFO CONSUMERS: idle per consumer; large idle means dead or stalled.","INFO memory and MEMORY USAGE stream to keep the retention policy honest."]}
+];
+
+(function(){
+const SIMM={
+ id:'redis',nodeLabel:'nodes (1 primary + replicas)',nodeRange:[2,4,3],
+ settings:[{id:'lag',label:'replication lag',opts:['low','high'],def:'low'}],
+ menu:[{op:'S',label:'SET (insert/update)',args:[{n:'key',d:'user:1',w:70},{n:'value',d:'alice',w:70}]},{op:'D',label:'DEL (delete)',args:[{n:'key',d:'user:1',w:70}]},{op:'G',label:'GET (read)',args:[{n:'key',d:'user:1',w:70},{n:'node#',d:'0',w:44}]},{op:'K',label:'kill primary',args:[]},{op:'H',label:'restart node',args:[{n:'node#',d:'0',w:44}]}],
+ scenarios:[
+  {name:'insert → update → delete',desc:'Every write is executed atomically on the primary, appended to the AOF, then streamed asynchronously to replicas by byte offset. GET from a replica can be briefly stale.',acts:['0 S user:1 alice','1500 S user:2 bob','3000 S user:1 alice-v2','4500 G user:1 1','6200 D user:2','7600 G user:2 0']},
+  {name:'primary failure (async replication)',desc:'The primary dies after acknowledging writes that its replicas have not received yet. The sentinel promotes the most up-to-date replica; the unreplicated writes are lost. Try “high” lag.',acts:['0 S a 1','1200 S b 2','2400 S c 3','2900 K','6500 S d 4','8000 G c 0','8000 G a 1']},
+ ],
+ topo(n){
+  const nodes=[{id:'cli',x:14,y:160,w:90,h:70,label:'Client'},{id:'s0',x:360,y:6,w:150,h:46,label:'Sentinel',badge:'monitor'},{id:'aof',x:150,y:310,w:140,h:90,label:'AOF / disk'}];
+  const bw=Math.min(170,Math.floor(560/n)-14),x0=190+(560-n*(bw+14))/2;
+  for(let i=0;i<n;i++)nodes.push({id:'r'+i,x:x0+i*(bw+14),y:100,w:bw,h:190,label:'node '+i,badge:st=>st.role['r'+i]});
+  const edges=[];for(let i=0;i<n;i++){edges.push(['cli','r'+i],['s0','r'+i]);if(i>0)edges.push(['r0','r'+i])}edges.push(['r0','aof'],['s0','cli']);
+  return{nodes,edges,w:900,h:420,zones:[{x:x0-12,y:80,w:n*(bw+14)+10,h:226,label:'Redis · 1 primary + replicas · single-threaded command execution'}]};
+ },
+ init(n){const st={status:{cli:'up',s0:'up',aof:'up'},kv:{},off:{},role:{},aof:[],primary:0,n};for(let i=0;i<n;i++){st.status['r'+i]='up';st.kv['r'+i]={};st.off['r'+i]=0;st.role['r'+i]=i===0?'primary':'replica'}return st},
+ apply(st,f){const id='r'+f.n;switch(f.op){case'set':st.kv[id][f.k]=f.v;st.off[id]=f.o;break;case'del':delete st.kv[id][f.k];st.off[id]=f.o;break;case'down':st.status[id]='down';break;case'up':st.status[id]='up';break;case'primary':st.primary=f.n;Object.keys(st.role).forEach(k=>{if(k!==id&&st.role[k]==='primary')st.role[k]='replica'});st.role[id]='primary';break;case'aof':st.aof.push(f.c);if(st.aof.length>40)st.aof.shift();break;case'copy':st.kv[id]={...f.kv};st.off[id]=f.o;break;case'demote':st.role[id]='replica';break}},
+ fxText(f){return{set:`node ${f.n}: ${f.k}=${f.v} (offset ${f.o})`,del:`node ${f.n}: DEL ${f.k} (offset ${f.o})`,down:`node ${f.n} down`,up:`node ${f.n} up`,primary:`node ${f.n} becomes primary`,aof:'AOF record appended',copy:`node ${f.n} full resync`,demote:`node ${f.n} becomes replica`}[f.op]||f.op},
+ run(acts,n,set){
+  const W=SIMM.init(n),ev=[],pend=[],ap=f=>SIMM.apply(W,f),lag=set.lag==='high'?1700:550;
+  const push=e=>{ev.push(e);if(e.fx.length)pend.push({at:e.t+e.d,e});return e};
+  const flush=t=>{pend.sort((x,y)=>x.at-y.at);while(pend.length&&pend[0].at<=t){pend.shift().e.fx.forEach(ap)}};
+  for(const a of acts){const t=a.t;flush(t);const P=W.primary,pid='r'+P;
+   if(a.op==='S'||a.op==='D'){
+    const k=a.args[0]||'k',v=a.args[1]||'v',del=a.op==='D';
+    if(W.status[pid]==='down'){push(E(t,500,'cli','cli',`${del?'DEL':'SET'} ${k}: connection refused (no primary yet)`,'fail',[],'Until the sentinel promotes a replica there is no writable node.'));continue}
+    flush(t+500);const existed=W.kv[pid][k]!==undefined,o=W.off[pid]+1+pend.filter(x=>x.e.from===pid&&x.e.fx.some(f=>f.op==='set'||f.op==='del')&&x.e.kind==='info').length;
+    push(E(t,500,'cli',pid,del?`DEL ${k}`:`${existed?'SET (update)':'SET (insert)'} ${k} ${v}`,'write',[],'The command queues behind other clients; one thread executes commands one at a time, so each command is atomic.'));
+    push(E(t+500,0,pid,pid,del?`apply DEL (offset ${o})`:`apply SET (offset ${o})`,'info',[del?{op:'del',n:P,k,o}:{op:'set',n:P,k,v,o}],'The primary applies the command to its in-memory keyspace and assigns the next replication offset.'));
+    push(E(t+500,350,pid,'aof',`append ${del?'DEL':'SET'} to AOF`,'info',[{op:'aof',c:`${del?'DEL':'SET'} ${k}${del?'':' '+v}`}],'AOF: every write is appended to a log (fsync every second by default) and replayed after a crash.'));
+    push(E(t+500,400,pid,'cli',del?':1':'+OK','ack',[],'The client is answered before replicas have the write: replication is asynchronous.'));
+    let i=0;for(let r=0;r<n;r++){if(r===P||W.status['r'+r]==='down')continue;push(E(t+700+i*150,lag,pid,'r'+r,`replicate offset ${o}`,'repl',[del?{op:'del',n:r,k,o}:{op:'set',n:r,k,v,o}],'Replicas apply the primary\'s write stream in order, so they lag behind by the network/queue delay.'));i++}
+   }
+   if(a.op==='G'){const k=a.args[0]||'k',r=+(a.args[1]||0),id='r'+r;if(r>=n)continue;
+    if(W.status[id]==='down'){push(E(t,400,'cli','cli',`GET ${k}: node ${r} is down`,'fail',[],'The node does not answer.'));continue}
+    push(E(t,400,'cli',id,`GET ${k}`,'read',[],r===W.primary?'Reads from the primary always see the latest write.':'Reads from a replica are allowed but may be stale: it applies writes after the primary.'));
+    flush(t+400);const val=W.kv[id][k],pv=W.kv['r'+W.primary][k],stale=r!==W.primary&&val!==pv;
+    push(E(t+400,450,id,'cli',`${val===undefined?'(nil)':'"'+val+'"'}${stale?' ← STALE':''}`,stale?'fail':'data',[],stale?`The primary already has ${pv===undefined?'no such key':'"'+pv+'"'}: this replica has not applied that write yet (replication lag).`:'Value matches the primary.'))}
+   if(a.op==='K'){const e=push(E(t,0,'s0',pid,`primary (node ${P}) crashes`,'fail',[{op:'down',n:P}],'The primary process dies. Everything not yet streamed to replicas exists only on the dead node.'));flush(t);
+    for(let i=pend.length-1;i>=0;i--){const x=pend[i].e;if(x.from===pid&&x.kind==='repl'){x.msg+=' ✕ cut off';x.kind='fail';x.fx=[];x.cause='The primary died before this write reached the replica.';pend.splice(i,1)}}
+    push(E(t+700,500,'s0',pid,'PING timeout','ctl',[],'Sentinels ping the primary; after down-after-milliseconds without a reply a sentinel flags it subjectively down.'));
+    push(E(t+1500,0,'s0','s0','ODOWN: quorum agrees primary is down','ctl',[],'A quorum of sentinels must agree before failover starts, so one sentinel\'s network glitch cannot trigger it.'));
+    flush(t+1500);const cand=[...Array(n).keys()].filter(r=>r!==P&&W.status['r'+r]==='up').sort((x,y)=>W.off['r'+y]-W.off['r'+x])[0];
+    if(cand===undefined){push(E(t+1700,0,'s0','s0','no replica available: failover impossible','fail',[],'Without a replica there is nothing to promote.'));continue}
+    const lost=W.off[pid]-W.off['r'+cand];
+    push(E(t+2000,500,'s0','r'+cand,`promote node ${cand} (highest offset ${W.off['r'+cand]})`,'ctl',[{op:'primary',n:cand}],'The most up-to-date replica (highest replication offset) is promoted. The old primary is fenced if it returns.'));
+    if(lost>0)push(E(t+2500,0,'s0','s0',`${lost} acknowledged write(s) LOST (never replicated)`,'fail',[],'Asynchronous replication: the client was acked before the replica had the write. This is the window a failover can lose.'));
+    for(let r=0;r<n;r++)if(r!==P&&r!==cand&&W.status['r'+r]==='up')push(E(t+2600,300,'s0','r'+r,`REPLICAOF node ${cand}`,'ctl',[],'The other replicas start following the new primary.'));
+    flush(t+2600)}
+   if(a.op==='H'){const r=+(a.args[0]||0),id='r'+r;if(r>=n)continue;push(E(t,0,'s0',id,`node ${r} restarts`,'info',[{op:'up',n:r},{op:'demote',n:r}],'The node rejoins as a replica of the current primary.'));flush(t);
+    push(E(t+300,700,'r'+W.primary,id,'full resync (RDB + stream)','repl',[{op:'copy',n:r,kv:{...W.kv['r'+W.primary]},o:W.off['r'+W.primary]}],'A returning node discards its own (possibly divergent) data and copies the primary\'s dataset.'));flush(t+1000)}
+  }
+  return{events:ev};
+ },
+ lines(id,st){
+  if(id==='aof')return st.aof.slice(-5).map(c=>c);
+  if(id==='s0')return[`primary = node ${st.primary}`];
+  if(id[0]==='r'){const kv=st.kv[id],keys=Object.keys(kv);return[`offset ${st.off[id]} · ${keys.length} key(s)`,...keys.slice(0,9).map(k=>`${k} = ${kv[k]}`)]}
+  return[];
+ },
+ detail(id,st){if(id[0]==='r')return[`role ${st.role[id]}`,`replication offset ${st.off[id]}`,...Object.entries(st.kv[id]).map(([k,v])=>`${k} = ${v}`)];if(id==='aof')return st.aof;return SIMM.lines(id,st)}
+};
+
+Lab.sim(SIMM);})();
+
+Lab.start({phases:PHASES,detail:DETAIL,ovs:OVS,ctl:ctlHTML,state:()=>S});
+</script>
+</body>
+</html>

@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spark Feature 01 – RDD Visualizer</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2230;--mut:#667085;--line:#d9dee7;--acc:#e25a1c;--acc2:#2f6fed;--ok:#1a9b5a;--bad:#d64545;
+--p0:#dbe9ff;--p1:#ffe6cf;--p2:#d9f4e3;--p3:#f1defa;--p4:#fff3b8;--p5:#ffd9de}
+@media(prefers-color-scheme:dark){:root{--bg:#10141c;--card:#181e29;--ink:#e8ecf3;--mut:#93a0b5;--line:#2b3445;--acc:#ff7a3d;--acc2:#6c9bff;--ok:#43c783;--bad:#ff6b6b;
+--p0:#1f3556;--p1:#53361c;--p2:#1d4630;--p3:#44274f;--p4:#524a17;--p5:#552630}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:28px 16px 8px;max-width:1040px;margin:auto}
+h1{margin:0 0 4px;font-size:26px}h1 span{color:var(--acc)}
+header p{margin:0;color:var(--mut)}
+main{max-width:1040px;margin:auto;padding:8px 16px 60px}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-top:18px}
+section h2{margin:0 0 4px;font-size:18px}
+section h2 em{font-style:normal;background:var(--acc);color:#fff;border-radius:6px;padding:1px 8px;font-size:12px;margin-right:8px;vertical-align:2px}
+.sub{color:var(--mut);margin:0 0 14px}
+button,select,input[type=text],textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 12px}
+button{cursor:pointer}button:hover{border-color:var(--acc)}
+button.primary{background:var(--acc);color:#fff;border-color:var(--acc)}
+button.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+label{color:var(--mut);font-size:13px}
+code,.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+.stat{border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:13px}
+.stat b{font-size:18px;display:block}
+.zero b{color:var(--ok)}
+svg text{font-family:ui-monospace,Menlo,monospace;font-size:12px;fill:var(--ink)}
+.node rect{fill:var(--card);stroke:var(--line);stroke-width:1.5}
+.node.sel rect{stroke:var(--acc);stroke-width:3}
+.node{cursor:pointer}
+.row{display:inline-block;padding:3px 8px;margin:2px;border-radius:6px;border:1px solid var(--line);font-family:ui-monospace,monospace;font-size:12px;background:var(--bg)}
+.flow{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:700px){.flow{grid-template-columns:1fr}}
+.col{border:1px dashed var(--line);border-radius:8px;padding:8px;min-height:60px}
+.col h4{margin:0 0 6px;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.parts{display:flex;gap:8px;flex-wrap:wrap}
+.part{flex:1;min-width:120px;border:2px solid var(--line);border-radius:8px;padding:6px}
+.part h4{margin:0 0 4px;font-size:12px}
+.bytes{display:flex;flex-wrap:wrap;gap:1px;font-family:ui-monospace,monospace;font-size:12px;margin:8px 0}
+.b{width:19px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:3px;position:relative;background:var(--bg)}
+.b.nl{outline:1px solid var(--acc)}
+.b.cut{box-shadow:-3px 0 0 var(--bad)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin:6px 0}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:-2px}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;margin:0;font-size:12.5px}
+table{border-collapse:collapse;width:100%;font-size:13px}td,th{border:1px solid var(--line);padding:4px 8px;text-align:left}
+.note{font-size:13px;color:var(--mut);margin-top:8px}
+.tag{display:inline-block;font-size:11px;padding:1px 6px;border-radius:5px;background:var(--acc2);color:#fff}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+.lab-back{display:inline-block;margin:0 0 10px;font-size:14px;color:var(--acc2);text-decoration:none}.lab-back:hover{text-decoration:underline}
+.leadin{background:var(--card);border-radius:10px;padding:10px 14px;margin:12px 0 0;font-size:14.5px;border:1px solid var(--line);border-left:5px solid var(--acc);color:var(--ink)}
+.leadin b.t{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--acc);margin-bottom:2px}
+.svgscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.swipe{display:none;font-size:12px;color:var(--mut);text-align:center}
+@media(max-width:640px){.swipe{display:block}button,select{min-height:38px}}
+textarea{max-width:100%}
+.bar label{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
+.row{max-width:100%;overflow-wrap:anywhere;white-space:normal}
+td,th{overflow-wrap:anywhere}
+.part{min-width:min(120px,100%)}
+</style>
+</head>
+<body>
+<header>
+  <a class="lab-back" href="04-spark-internals-end-to-end.html">&larr; Back to the Spark tour</a>
+  <h1><span>Spark</span> Feature 01 · RDD API &amp; Partitioned Sources</h1>
+  <p>An RDD is a lazy <i>description</i> of partitioned data plus its dependencies, not data already materialized in memory.</p>
+  <div class="leadin"><b class="t">The problem this page solves</b>A Spark job starts from data far too big for one reader. Before anything runs, the engine must describe the work lazily, so nothing is read until it is needed, and cut the input into partitions that can be read independently without splitting or duplicating a record. Below you can poke at both: the lazy lineage, and how memory rows and file bytes become partitions.</div>
+</header>
+<main>
+
+<!-- 1 -->
+<section id="s1">
+  <h2><em>UC-02</em>Lazy lineage &amp; branching</h2>
+  <p class="sub">Pick an RDD (tap a node), then add a transformation. The parent never changes, so you can branch. Watch the counters: source I/O and closure calls always stay at 0.</p>
+  <div class="bar">
+    <button data-op="Map">Map</button><button data-op="Filter">Filter</button>
+    <button data-op="FlatMap">FlatMap</button><button data-op="KeyBy">KeyBy</button>
+    <span>|</span>
+    <button data-op="Union">Union with</button><select id="uSel"></select>
+    <span>|</span>
+    <button id="rst">Reset</button>
+  </div>
+  <div class="svgscroll"><svg id="dag" width="100%" role="img" aria-label="RDD lineage graph"></svg></div><div class="swipe">&larr; swipe the graph &rarr;</div>
+  <div class="stats">
+    <div class="stat zero"><b id="stIO">0</b>source file opens</div>
+    <div class="stat zero"><b id="stFn">0</b>closure calls</div>
+    <div class="stat"><b id="stN">1</b>RDDs created</div>
+    <div class="stat"><b id="stP">3</b>partitions in the selected RDD</div>
+  </div>
+  <p class="note">Union concatenates the partitions of both parents in order (no shuffle): its partition count is the sum of both. Every other op keeps the parent's partition count (a 1-to-1 narrow dependency).</p>
+</section>
+
+<!-- 2 -->
+<section id="s2">
+  <h2><em>UC-02</em>How many output rows does one input row produce?</h2>
+  <p class="sub">Try each transformation on the same input (this illustrates the semantics: Feature 01 has no action that executes anything yet).</p>
+  <div class="bar" id="opTabs"></div>
+  <div class="mono" id="opCode" style="margin-bottom:8px"></div>
+  <div class="flow">
+    <div class="col"><h4>Input rows</h4><div id="opIn"></div></div>
+    <div class="col"><h4>Output rows</h4><div id="opOut"></div></div>
+  </div>
+  <p class="note" id="opNote"></p>
+</section>
+
+<!-- 3 -->
+<section id="s3">
+  <h2><em>UC-03</em>Memory partitioning</h2>
+  <p class="sub">Rows are split into contiguous partitions whose sizes differ by at most 1.</p>
+  <div class="bar">
+    <label>Rows <input id="mN" type="range" min="1" max="20" value="10"> <b id="mNv">10</b></label>
+    <label>Partitions <input id="mP" type="range" min="1" max="8" value="3"> <b id="mPv">3</b></label>
+  </div>
+  <div class="parts" id="mParts"></div>
+</section>
+
+<!-- 4 -->
+<section id="s4">
+  <h2><em>UC-04</em>File byte ranges: every line exactly once</h2>
+  <p class="sub">The file is split by bytes, so a boundary can cut through a line. The rule: a partition owns every line that <b>starts</b> inside its byte range, and reads past the boundary to finish it.</p>
+  <div class="bar">
+    <label>Partitions <input id="fP" type="range" min="1" max="6" value="3"> <b id="fPv">3</b></label>
+    <label>Newline <select id="fNL"><option value="\n">LF</option><option value="\r\n">CRLF</option></select></label>
+    <label><input type="checkbox" id="fTrail"> ends with a newline</label>
+  </div>
+  <textarea id="fText" rows="4" style="width:100%" class="mono">alice,30
+bob,25
+carol,41
+dave,19
+eve,35</textarea>
+  <div class="legend" id="fLegend"></div>
+  <div class="bytes" id="fBytes"></div>
+  <div class="parts" id="fParts"></div>
+  <p class="note" id="fCheck"></p>
+</section>
+
+<!-- 5 -->
+<section id="s5">
+  <h2><em>UC-05</em>Source record decoding</h2>
+  <p class="sub">A complete line (bytes) becomes a <code>Row</code> according to the source kind. All three feed the same Row handler contract.</p>
+  <div class="bar" id="dTabs"></div>
+  <div class="flow">
+    <div class="col"><h4>Complete lines</h4><pre id="dIn"></pre></div>
+    <div class="col"><h4>Row stream</h4><pre id="dOut"></pre></div>
+  </div>
+  <p class="note" id="dNote"></p>
+</section>
+
+<!-- 6 -->
+<section id="s6">
+  <h2><em>UC-06</em>Observability: <code>Describe()</code> snapshot</h2>
+  <p class="sub">A metadata snapshot of the RDD selected in section 1 (ID, parents, partitions). It never exposes the internal graph or any closure.</p>
+  <pre id="desc"></pre>
+  <p class="note">Mapping Spark: <code>RDD.toDebugString</code> ↔ <code>Describe()</code>; <code>SparkContext</code> assigning IDs ↔ <code>Context</code>.</p>
+</section>
+
+<section>
+  <h2>What Feature 01 covers</h2>
+  <table>
+    <tr><th class="ok">Included</th><th class="bad">Not yet</th></tr>
+    <tr><td>SourceSpec (memory/JSONL/text/CSV), lazy lineage, reading one source partition, Describe()</td>
+        <td>Actions (Collect/Count), running closures, DAGScheduler/stages/tasks, shuffle/ReduceByKey/join, cache, HDFS/S3</td></tr>
+  </table>
+</section>
+</main>
+
+<script>
+const $=s=>document.querySelector(s);
+const PC=['--p0','--p1','--p2','--p3','--p4','--p5'];
+const pc=i=>`var(${PC[i%PC.length]})`;
+
+/* ---------- 1. Lineage ---------- */
+let nodes,sel;
+function reset(){nodes=[{id:0,op:'Source',parents:[],parts:3,label:'memory[3 parts]'}];sel=0;draw1()}
+function depth(n){return n.parents.length?1+Math.max(...n.parents.map(p=>depth(nodes[p]))):0}
+function draw1(){
+  const lv={};nodes.forEach(n=>{n.d=depth(n);(lv[n.d]=lv[n.d]||[]).push(n)});
+  const W=130,H=44,gx=60,gy=18;const maxRows=Math.max(...Object.values(lv).map(a=>a.length));
+  nodes.forEach(n=>{const i=lv[n.d].indexOf(n);n.x=10+n.d*(W+gx);n.y=10+i*(H+gy)});
+  const dm=Math.max(...nodes.map(n=>n.d));
+  const svg=$('#dag');svg.style.height='auto';svg.style.minWidth=Math.round(Math.min(20+(dm+1)*(W+gx),900)*0.75)+'px';svg.style.maxHeight=(20+maxRows*(H+gy))*1.3+'px';
+  svg.setAttribute('viewBox',`0 0 ${20+(dm+1)*(W+gx)} ${20+maxRows*(H+gy)}`);
+  let h='<defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0L8,4L0,8z" fill="#8a94a6"/></marker></defs>';
+  nodes.forEach(n=>n.parents.forEach(p=>{const a=nodes[p];
+    h+=`<path d="M${a.x+W},${a.y+H/2} C${a.x+W+30},${a.y+H/2} ${n.x-30},${n.y+H/2} ${n.x},${n.y+H/2}" fill="none" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#ar)"/>`}));
+  nodes.forEach(n=>{h+=`<g class="node ${n.id===sel?'sel':''}" data-id="${n.id}"><rect x="${n.x}" y="${n.y}" width="${W}" height="${H}" rx="8"/>
+   <text x="${n.x+8}" y="${n.y+18}" font-weight="700">RDD#${n.id} ${n.op}</text>
+   <text x="${n.x+8}" y="${n.y+35}" style="fill:var(--mut)">${n.parts} partitions</text></g>`});
+  svg.innerHTML=h;
+  svg.querySelectorAll('.node').forEach(g=>g.onclick=()=>{sel=+g.dataset.id;draw1()});
+  $('#stN').textContent=nodes.length;$('#stP').textContent=nodes[sel].parts;
+  const u=$('#uSel');u.innerHTML=nodes.filter(n=>n.id!==sel).map(n=>`<option value="${n.id}">RDD#${n.id}</option>`).join('');
+  describe();
+}
+document.querySelectorAll('#s1 button[data-op]').forEach(b=>b.onclick=()=>{
+  const op=b.dataset.op,p=nodes[sel];
+  if(op==='Union'){const o=nodes[+$('#uSel').value];if(!o)return;
+    nodes.push({id:nodes.length,op,parents:[sel,o.id],parts:p.parts+o.parts})}
+  else nodes.push({id:nodes.length,op,parents:[sel],parts:p.parts});
+  sel=nodes.length-1;draw1();
+});
+$('#rst').onclick=reset;
+
+/* ---------- 6. Describe ---------- */
+function describe(){
+  const n=nodes[sel];
+  const d={id:n.id,kind:n.op==='Source'?'source':n.op.toLowerCase(),parents:n.parents,
+    numPartitions:n.parts,partitions:Array.from({length:n.parts},(_,i)=>({index:i,
+      ...(n.op==='Source'?{source:'memory',rows:'~'}:{})}))};
+  const lin=[];(function w(x){lin.push(`RDD#${x.id} ${x.op}`);x.parents.forEach(p=>w(nodes[p]))})(n);
+  $('#desc').textContent=JSON.stringify(d,null,2)+'\n\n// lineage (debug string)\n'+lin.map((l,i)=>' '.repeat(i?2:0)+(i?'+- ':'')+l).join('\n');
+}
+
+/* ---------- 2. Op semantics ---------- */
+const inRows=[{n:'alice',a:30},{n:'bob',a:17},{n:'carol',a:41},{n:'dave',a:12}];
+const OPS={
+ Map:{code:'rdd.Map(r => {name: upper(r.n)})',run:r=>[{n:r.n.toUpperCase()}],note:'Exactly 1 new row per input.'},
+ Filter:{code:'rdd.Filter(r => r.a >= 18)',run:r=>r.a>=18?[r]:[],note:'0 or 1 row: keeps the row unchanged when the predicate is true.'},
+ FlatMap:{code:'rdd.FlatMap(r => split(r.n, chunks of 2))',run:r=>r.n.match(/.{1,2}/g).map(s=>({tok:s})),note:'0 to N rows per input.'},
+ KeyBy:{code:'rdd.KeyBy(r => r.a >= 18 ? "adult":"minor")',run:r=>[{key:r.a>=18?'adult':'minor',row:r.n}],note:'Only attaches a key. Equal keys are not grouped yet: ReduceByKey and the shuffle belong to Feature 02.'}
+};
+const fmt=r=>Object.entries(r).map(([k,v])=>`${k}:${v}`).join(' ');
+function drawOp(k){
+  document.querySelectorAll('#opTabs button').forEach(b=>b.classList.toggle('on',b.textContent===k));
+  const o=OPS[k];$('#opCode').textContent=o.code;
+  $('#opIn').innerHTML=inRows.map((r,i)=>`<span class="row" style="background:${pc(i)}">${fmt(r)}</span>`).join('<br>');
+  $('#opOut').innerHTML=inRows.map((r,i)=>{const out=o.run(r);
+    return out.length?out.map(x=>`<span class="row" style="background:${pc(i)}">${fmt(x)}</span>`).join(''):`<span class="row bad">∅ dropped (input ${i})</span>`}).join('<br>');
+  $('#opNote').textContent=o.note;
+}
+$('#opTabs').innerHTML=Object.keys(OPS).map(k=>`<button>${k}</button>`).join('');
+document.querySelectorAll('#opTabs button').forEach(b=>b.onclick=()=>drawOp(b.textContent));
+drawOp('Map');
+
+/* ---------- 3. Memory partitioning ---------- */
+function drawMem(){
+  const N=+$('#mN').value,P=+$('#mP').value;$('#mNv').textContent=N;$('#mPv').textContent=P;
+  const base=Math.floor(N/P),extra=N%P;let s=0,h='';
+  for(let p=0;p<P;p++){const sz=base+(p<extra?1:0);
+    h+=`<div class="part" style="background:${pc(p)}"><h4>partition ${p} · ${sz} rows</h4>`+
+      Array.from({length:sz},(_,i)=>`<span class="row">row ${s+i}</span>`).join('')+(sz?'':'<i class="note">empty</i>')+'</div>';s+=sz}
+  $('#mParts').innerHTML=h;
+}
+$('#mN').oninput=$('#mP').oninput=drawMem;drawMem();
+
+/* ---------- 4. File byte ranges ---------- */
+function drawFile(){
+  const P=+$('#fP').value;$('#fPv').textContent=P;
+  const nl=$('#fNL').value;
+  let text=$('#fText').value.replace(/\r?\n/g,'\n');if($('#fTrail').checked&&!text.endsWith('\n'))text+='\n';
+  text=text.split('\n').join(nl);
+  const L=text.length;
+  const ranges=Array.from({length:P},(_,i)=>[Math.floor(L*i/P),Math.floor(L*(i+1)/P)]);
+  // lines
+  const lines=[];let st=0;
+  for(let i=0;i<L;i++){if(text[i]==='\n'){let e=i+1;let c=i;if(i>0&&text[i-1]==='\r')c=i-1;lines.push({s:st,e,txt:text.slice(st,c)});st=e}}
+  if(st<L)lines.push({s:st,e:L,txt:text.slice(st)});
+  const owner=pos=>ranges.findIndex(r=>pos>=r[0]&&pos<r[1]);
+  const per=Array.from({length:P},()=>[]);
+  lines.forEach((ln,i)=>{ln.p=owner(ln.s);per[ln.p].push(ln)});
+  let b='';for(let i=0;i<L;i++){const c=text[i];const p=owner(i);
+    const isCut=ranges.some((r,k)=>k>0&&r[0]===i);
+    b+=`<div class="b ${c==='\n'||c==='\r'?'nl':''} ${isCut?'cut':''}" style="background:${pc(p)}" title="byte ${i}">${c==='\n'?'↵':c==='\r'?'␍':c.replace(' ','·')}</div>`}
+  $('#fBytes').innerHTML=b;
+  $('#fLegend').innerHTML=ranges.map((r,i)=>`<span><i style="background:${pc(i)}"></i>partition ${i}: bytes [${r[0]}, ${r[1]})</span>`).join('')+'<span><i style="background:transparent;border-left:3px solid var(--bad);border-radius:0"></i>range boundary</span>';
+  $('#fParts').innerHTML=per.map((a,i)=>`<div class="part" style="background:${pc(i)}"><h4>partition ${i} reads ${a.length} line(s)</h4>`+
+    a.map(l=>{const cross=l.e>ranges[i][1];return `<div class="row">${JSON.stringify(l.txt)}${cross?' <span class="tag">reads past boundary</span>':''}</div>`}).join('')+'</div>').join('');
+  const tot=per.reduce((s,a)=>s+a.length,0);
+  $('#fCheck').innerHTML=tot===lines.length?`<span class="ok">✔ ${lines.length} lines in the file = ${tot} lines streamed: every line exactly once.</span>`:`<span class="bad">✘ mismatch</span>`;
+}
+['fP','fNL','fTrail','fText'].forEach(id=>$('#'+id).oninput=drawFile);drawFile();
+
+/* ---------- 5. Decoding ---------- */
+const DEC={
+ JSONL:{in:'{"id":1,"name":"alice"}\n{"id":2,"name":"bob"}',out:'{id:1, name:"alice"}\n{id:2, name:"bob"}',note:'Each line is one JSON object, which becomes a Row by field.'},
+ Text:{in:'hello spark\nlazy rdd',out:'{line:"hello spark"}\n{line:"lazy rdd"}',note:'Each line becomes a one-column Row holding the raw text.'},
+ CSV:{in:'id,name\n1,alice\n2,bob',out:'{id:"1", name:"alice"}\n{id:"2", name:"bob"}',note:'The header gives the column names. Simple CSV: no multi-line records, no quoted newlines.'}
+};
+function drawDec(k){document.querySelectorAll('#dTabs button').forEach(b=>b.classList.toggle('on',b.textContent===k));
+  $('#dIn').textContent=DEC[k].in;$('#dOut').textContent=DEC[k].out;$('#dNote').textContent=DEC[k].note}
+$('#dTabs').innerHTML=Object.keys(DEC).map(k=>`<button>${k}</button>`).join('');
+document.querySelectorAll('#dTabs button').forEach(b=>b.onclick=()=>drawDec(b.textContent));
+drawDec('JSONL');
+
+reset();
+</script>
+</body>
+</html>
