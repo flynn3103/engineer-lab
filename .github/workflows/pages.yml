@@ -1,0 +1,57 @@
+name: Deploy to GitHub Pages
+
+# Publishes the static playgrounds (index.html, assets/, */visualize/) on every push to main
+# that touches them. Requires Settings -> Pages -> Source = "GitHub Actions".
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'assets/**'
+      - '**/visualize/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble site
+        run: |
+          missing=0
+          for f in index.html assets/lab.css assets/lab.js; do
+            [ -f "$f" ] || { echo "::error::$f is not on this branch, so the site would be incomplete"; missing=1; }
+          done
+          # every system card on the home page must have its page
+          for href in $(grep -o 'href="[^"]*visualize/[^"]*\.html"' index.html | cut -d'"' -f2); do
+            [ -f "$href" ] || { echo "::error::index.html links to $href, which is not on this branch"; missing=1; }
+          done
+          [ "$missing" = 0 ] || exit 1
+          mkdir -p _site/assets
+          cp index.html _site/
+          cp assets/*.css assets/*.js _site/assets/
+          for d in */visualize; do mkdir -p "_site/$d"; cp -r "$d"/. "_site/$d"/; done
+          touch _site/.nojekyll
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
