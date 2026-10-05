@@ -3,7 +3,9 @@
  *  - Lab.morph      patches the DOM in place instead of replacing innerHTML, so animated SVG and
  *                   controls keep their identity (no flicker, no lost focus, no restarted CSS animation)
  *  - one scheduler  animate()/stopAll(): starting anything cancels whatever else is running
- *  - page shell     problem → map → chapters → build checklist → capstone (built from STORY)
+ *  - page shell     problem → map → chapters → build checklist → end-to-end run (built from STORY)
+ *  - ops panel      per chapter: "Tune at scale" lab (sliders → model(v) → cards/bars/verdict), case studies, prod params
+ *  - deep dives     STORY.extras[{id,title,sub,ch}] are moved into the chapter they belong to (no separate section)
  *  - overview map   generic renderer for an OVS topology
  *  - cluster sim    generic player for a SIMM model
  *
@@ -118,11 +120,12 @@ L.mount = function (story) {
   const paras = (P.scene || []).map(t => `<p>${t}</p>`).join('');
   const musts = (P.musts || []).map(t => `<li><span>${t}</span></li>`).join('');
   const brk = P.naive ? `<div class="callout warn"><b class="t">${P.naive.title || 'The obvious first attempt'}</b>${P.naive.text || ''}${P.naive.breaks ? '<ul>' + P.naive.breaks.map(b => `<li>${b}</li>`).join('') + '</ul>' : ''}</div>` : '';
-  const ex = (story.extras || []).map(e => `<details class="dd"><summary>${e.title}${e.sub ? `<small>${e.sub}</small>` : ''}</summary><div id="${e.id}" class="ddb"></div></details>`).join('');
+  // deep dives live inside the chapter they belong to: build them once in a hidden store, renderStatic() moves them
+  const ex = (story.extras || []).map(e => `<details class="dd" data-ch="${[].concat(e.ch == null ? 0 : e.ch).join(',')}"><summary>${e.title}${e.sub ? `<small>${e.sub}</small>` : ''}</summary><div id="${e.id}" class="ddb"></div></details>`).join('');
   app.innerHTML = `
   <div class="topbar"><div class="wrap">
     <a class="home" href="../../index.html">← Engineer Lab</a><b>${esc(story.system || document.title)}</b>
-    <nav aria-label="Page sections"><a href="#problem">Problem</a><a href="#overview">Map</a><a href="#chapters">Chapters</a><a href="#build">Build it</a><a href="#capstone">Capstone</a></nav>
+    <nav aria-label="Page sections"><a href="#problem">Problem</a><a href="#overview">Map</a><a href="#chapters">Chapters</a><a href="#build">Build it</a><a href="#capstone">End-to-end</a></nav>
   </div></div>
   <div class="wrap">
     <header class="hero" id="problem">
@@ -143,7 +146,7 @@ L.mount = function (story) {
       <div class="sec-h"><div class="kick">Overview</div><h2>${(story.overview && story.overview.title) || 'The whole system on one page'}</h2>
         <p>${(story.overview && story.overview.lead) || 'Before the details, see how the pieces connect. Press <b>Trace a request</b> to follow one request through, or tap a component to see what it receives and sends.'}</p></div>
       <div class="card">
-        <div class="ovhead"><button class="primary" id="ovTrace">▶ Trace a request</button><button id="ovClear" class="ghost">Reset</button><span class="note" id="ovCap" style="margin:0"></span></div>
+        <div class="ovhead"><button id="ovBack" class="ghost" hidden>← Overview</button><b id="ovCrumb"></b><button class="primary" id="ovTrace">▶ Trace a request</button><button id="ovClear" class="ghost">Reset</button><span class="note" id="ovCap" style="margin:0"></span></div>
         <div class="svgscroll"><div id="ovView"></div></div><div class="swipehint">← swipe the map →</div>
         <ol class="ovsteps" id="ovSteps" aria-label="Request steps"></ol>
         <div class="ovchips" id="ovChips" aria-label="Components"></div>
@@ -172,6 +175,8 @@ L.mount = function (story) {
         </div>
         <div class="lbk build"><div class="stepno"><i>5</i>Build it yourself</div><div id="chBuild"></div></div>
         <div class="lbk"><div class="stepno"><i>6</i>Trade-offs &amp; failure modes</div><div id="chTrade"></div></div>
+        <div class="lbk ops" id="chOpsBox"><div class="stepno"><i>7</i>Operate it in production</div><div id="chOps"></div></div>
+        <div class="lbk deep" id="chDeepBox" hidden><div class="stepno"><i>8</i>Go deeper</div><div id="chDeep"></div></div>
         <div class="ch-nav"><button id="prev"></button><button id="nextB"></button></div>
       </article>
     </section>
@@ -183,14 +188,16 @@ L.mount = function (story) {
     </section>
 
     <section class="sec sim" id="capstone">
-      <div class="sec-h"><div class="kick">Capstone</div><h2>${(story.capstone && story.capstone.title) || 'Put it together: a live cluster'}</h2>
-        <p>${(story.capstone && story.capstone.lead) || 'Everything from the chapters, running at once. Play a scenario, scrub the timeline, click any node or event to see why it happened, then break something.'}</p></div>
+      <div class="sec-h"><div class="kick">End-to-end</div><h2>${(story.capstone && story.capstone.title) || 'Run it end to end, at scale'}</h2>
+        <p>${(story.capstone && story.capstone.lead) || 'Everything from the chapters, running at once on a production-sized workload. Pick an incident, change the cluster size and the real parameters, and watch the result change. Tap any node or event to see why it happened.'}</p></div>
       <div class="card">
         <div class="ctl"><label>Scenario <select id="simScn"></select></label><label><span id="simNL">nodes</span> <select id="simN"></select></label><span id="simSet" class="ctl" style="margin:0"></span></div>
         <p class="scn" id="simDesc"></p>
+        <div class="gauges" id="simGauge" aria-label="Live metrics"></div>
         <div class="player"><button class="primary" id="simPlay">▶ Play</button><button id="simStep">Step ›</button><button id="simReset" aria-label="Back to start">⏮</button><label>Speed <select id="simSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label></div>
         <div class="simbox"><svg id="simSvg" role="img" aria-label="Cluster simulation"></svg></div>
         <div class="timeline" style="margin-top:6px"><input type="range" id="simT" min="0" max="1000" value="0" step="10" aria-label="Timeline"><span class="mono" id="simTv"></span></div>
+        <div id="simRes"></div>
         <div id="simInsp" class="box simnow"></div>
         <div class="simgrid"><div><h4 style="font-size:13px;margin:0 0 6px">Event log <span class="note" style="font-weight:400">tap an event to see why</span></h4><div id="simLog" class="simlog"></div></div>
           <div><details class="adv"><summary>Edit the script &amp; add your own actions</summary>
@@ -199,12 +206,114 @@ L.mount = function (story) {
       </div>
     </section>
 
-    ${ex ? `<section class="sec" id="extras"><div class="sec-h"><div class="kick">Extras</div><h2>Deep dives</h2></div>${ex}</section>` : ''}
+    <div id="deepStore" hidden>${ex}</div>
     <footer class="foot">Part of <b>engineer-lab</b>. Everything runs in your browser; your data never leaves this page. These are learning models: simplified on purpose.</footer>
   </div>`;
   document.body.prepend(app);
   const slot = $('#dataSlot'), host = $('#dataHost');
   if (slot && host) { while (slot.firstChild) host.append(slot.firstChild); slot.remove(); }
+};
+
+
+/* ================= ops panel: tune at scale · case studies · prod parameters ================= */
+const fmt = L.fmt = {
+  n(x, d) { x = +x; if (!isFinite(x)) return '–'; const a = Math.abs(x); if (a >= 1e9) return +(x / 1e9).toFixed(d == null ? 2 : d) + 'B'; if (a >= 1e6) return +(x / 1e6).toFixed(d == null ? 2 : d) + 'M'; if (a >= 1e4) return +(x / 1e3).toFixed(d == null ? 1 : d) + 'k'; return a >= 100 ? String(Math.round(x)) : String(+x.toFixed(d == null ? 2 : d)); },
+  b(x) { x = +x; const u = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']; let i = 0; while (Math.abs(x) >= 1024 && i < u.length - 1) { x /= 1024; i++; } return (Math.abs(x) >= 100 ? Math.round(x) : +x.toFixed(1)) + ' ' + u[i]; },
+  ms(x) { x = +x; if (!isFinite(x)) return '∞'; if (x < 1) return +x.toFixed(2) + ' ms'; if (x < 1000) return Math.round(x) + ' ms'; const s = x / 1000; if (s < 90) return +s.toFixed(1) + ' s'; const m = s / 60; if (m < 90) return +m.toFixed(1) + ' min'; const h = m / 60; return +h.toFixed(1) + ' h'; },
+  pct(x, d) { return (+x * 100).toFixed(d == null ? 0 : d) + '%'; }
+};
+const OPS = { tab: {}, val: {} };
+const opsOf = k => ((L.story.chapters || [])[k] || {}).ops || null;
+function opsVals(k) {
+  const sc = (opsOf(k) || {}).scale; if (!sc) return {};
+  if (!OPS.val[k]) OPS.val[k] = Object.fromEntries(sc.inputs.map(i => [i.id, i.def]));
+  return OPS.val[k];
+}
+function opsTabs(o) { const t = []; if (o.scale) t.push(['scale', 'Tune at scale']); if ((o.cases || []).length) t.push(['cases', `Case studies (${o.cases.length})`]); if ((o.params || []).length) t.push(['params', `Prod parameters (${o.params.length})`]); return t; }
+function opsInput(i, v) {
+  const id = esc(i.id), u = i.unit ? ' ' + i.unit : '';
+  let ctl;
+  if (i.opts) {
+    const vals = i.opts.map(o => (Array.isArray(o) ? o[0] : o)), labs = i.opts.map(o => (Array.isArray(o) ? o[1] : o));
+    if (i.kind === 'select') ctl = `<select data-in="${id}" data-kind="select">${vals.map((x, j) => `<option value="${j}" ${String(x) === String(v) ? 'selected' : ''}>${esc(labs[j])}</option>`).join('')}</select>`;
+    else { const idx = Math.max(0, vals.findIndex(x => String(x) === String(v))); ctl = `<input type="range" data-in="${id}" data-kind="opts" min="0" max="${vals.length - 1}" step="1" value="${idx}" aria-label="${esc(i.label)}"><b class="sl-v">${esc(labs[idx])}</b>`; }
+  } else if (i.kind === 'check') ctl = `<input type="checkbox" data-in="${id}" data-kind="check" ${v ? 'checked' : ''}>`;
+  else ctl = `<input type="range" data-in="${id}" data-kind="range" min="${i.min}" max="${i.max}" step="${i.step || 1}" value="${v}" aria-label="${esc(i.label)}"><b class="sl-v">${esc(i.fmt ? i.fmt(v) : fmt.n(v))}${esc(u)}</b>`;
+  return `<label class="sl"><span class="sl-l">${i.label}${i.help ? `<small>${i.help}</small>` : ''}</span>${ctl}</label>`;
+}
+function opsOut(r) {
+  if (!r) return '';
+  let h = '';
+  if ((r.cards || []).length) h += `<div class="ocards">${r.cards.map(c => `<div class="oc ${c.st || ''}"><small>${c.l}</small><b>${c.v}</b>${c.n ? `<i>${c.n}</i>` : ''}</div>`).join('')}</div>`;
+  (r.charts || []).forEach(ch => {
+    const mx = ch.max || Math.max(1e-9, ...ch.bars.map(b => b.v));
+    h += `<div class="ochart"><h5>${ch.t}${ch.unit ? ` <span>${ch.unit}</span>` : ''}</h5>${ch.bars.map(b => `<div class="ob ${b.st || ''}"><span class="ol">${b.l}</span><span class="otrack"><i style="width:${Math.max(0.5, Math.min(100, b.v / mx * 100)).toFixed(1)}%"></i>${ch.mark != null ? `<u style="left:${Math.min(100, ch.mark / mx * 100).toFixed(1)}%" title="${esc(ch.markL || '')}"></u>` : ''}</span><span class="ov">${b.t != null ? b.t : fmt.n(b.v)}</span></div>`).join('')}${ch.markL ? `<div class="note" style="margin:2px 0 0">│ ${ch.markL}</div>` : ''}${ch.note ? `<div class="note" style="margin:2px 0 0">${ch.note}</div>` : ''}</div>`;
+  });
+  if (r.verdict) h += `<div class="callout ${r.verdict.st === 'bad' ? 'warn' : r.verdict.st === 'ok' ? 'good' : 'ask'}"><b class="t">${r.verdict.st === 'bad' ? 'Problem at this scale' : r.verdict.st === 'ok' ? 'Healthy at this scale' : 'Watch out'}</b>${r.verdict.h}</div>`;
+  if ((r.tips || []).length) h += `<ul class="otips">${r.tips.map(t => `<li>${t}</li>`).join('')}</ul>`;
+  return h;
+}
+function caseHTML(c, k, i) {
+  const ul = a => `<ul>${(a || []).map(x => `<li>${x}</li>`).join('')}</ul>`;
+  return `<details class="case"><summary><span class="ctag">${esc(c.tag || 'incident')}</span><b>${c.t}</b><small>${c.sym}</small></summary>
+    <div class="cbody"><div class="cgrid">
+      <div><h5>How you find it</h5>${ul(c.sig)}</div>
+      <div><h5>Root cause</h5><p>${c.cause}</p></div>
+      <div><h5>Fix now</h5>${ul(c.fix)}</div>
+      <div><h5>Prevent it (config)</h5>${ul(c.perm)}</div>
+    </div>${c.lab ? `<button class="primary" data-repro="${i}">▶ Reproduce at scale</button> <span class="note">sets the sliders in “Tune at scale” to this incident</span>` : ''}${c.src ? `<div class="note src">${c.src}</div>` : ''}</div></details>`;
+}
+function paramsHTML(o) {
+  let last = null, h = `<div class="ptwrap"><table class="pt"><tr><th>Parameter</th><th>Default</th><th>What it controls</th><th>When it is wrong</th><th>PROD rule of thumb</th></tr>`;
+  o.params.forEach(p => {
+    if (p.g && p.g !== last) { h += `<tr class="pg"><td colspan="5">${p.g}</td></tr>`; last = p.g; }
+    h += `<tr><td data-l="Parameter"><code>${p.k}</code></td><td data-l="Default">${p.d}</td><td data-l="Controls">${p.w}</td><td data-l="When wrong">${p.x}</td><td data-l="PROD">${p.p}</td></tr>`;
+  });
+  return h + '</table></div>';
+}
+function opsRender(k) {
+  const host = $('#chOps'), box = $('#chOpsBox'); if (!host) return;
+  if (k == null) k = st.cur;
+  const o = opsOf(k), tabs = o ? opsTabs(o) : [];
+  box.hidden = !tabs.length; if (!tabs.length) { host.innerHTML = ''; return; }
+  if (!OPS.tab[k] || !tabs.some(t => t[0] === OPS.tab[k])) OPS.tab[k] = tabs[0][0];
+  const tab = OPS.tab[k];
+  let body = '';
+  if (tab === 'scale') {
+    const sc = o.scale, v = opsVals(k);
+    let r = null, err = '';
+    try { r = sc.model(v); } catch (e) { err = e.message; console.error(e); }
+    body = `<p class="opsintro">${sc.intro || ''}</p>
+      ${(sc.presets || []).length ? `<div class="presets"><span class="note" style="margin:0">Try:</span>${sc.presets.map((p, i) => `<button data-preset="${i}">${p.n}</button>`).join('')}</div>` : ''}
+      <div class="slgrid">${sc.inputs.map(i => opsInput(i, v[i.id])).join('')}</div>
+      ${err ? `<div class="box bad">Model error: ${esc(err)}</div>` : opsOut(r)}
+      ${sc.watch ? `<div class="note">${sc.watch}</div>` : ''}`;
+  } else if (tab === 'cases') body = `<p class="opsintro">${o.casesIntro || 'Things that really break in production. Open one, read the symptom, then try to guess the root cause before you read it.'}</p>${o.cases.map((c, i) => caseHTML(c, k, i)).join('')}`;
+  else body = `<p class="opsintro">${o.paramsIntro || 'The knobs that matter for this chapter, with the defaults and what to do on a production cluster. Defaults are for the version noted on the page; check yours.'}</p>${paramsHTML(o)}`;
+  morph(host, `<div class="lbtabs" role="tablist">${tabs.map(t => `<button role="tab" data-ot="${t[0]}" class="${t[0] === tab ? 'act' : ''}">${t[1]}</button>`).join('')}</div>${body}`);
+}
+function deepRender(k) {
+  const host = $('#chDeep'), store = $('#deepStore'), box = $('#chDeepBox'); if (!host || !store) return;
+  [...host.querySelectorAll('details.dd')].forEach(d => store.append(d));      // park everything again (nodes keep identity)
+  const mine = [...store.querySelectorAll('details.dd')].filter(d => d.dataset.ch.split(',').includes(String(k)));
+  mine.forEach(d => host.append(d)); box.hidden = !mine.length;
+}
+L.opsInit = function () {
+  const host = $('#chOps'); if (!host) return;
+  host.addEventListener('click', e => {
+    const t = e.target.closest('[data-ot]'); if (t) { OPS.tab[st.cur] = t.dataset.ot; opsRender(); return; }
+    const p = e.target.closest('[data-preset]'); if (p) { const sc = opsOf(st.cur).scale; OPS.val[st.cur] = Object.assign(Object.fromEntries(sc.inputs.map(i => [i.id, i.def])), sc.presets[+p.dataset.preset].v); opsRender(); return; }
+    const r = e.target.closest('[data-repro]'); if (r) { const o = opsOf(st.cur), c = o.cases[+r.dataset.repro]; OPS.val[st.cur] = Object.assign(Object.fromEntries(o.scale.inputs.map(i => [i.id, i.def])), c.lab.v || c.lab); OPS.tab[st.cur] = 'scale'; opsRender(); host.scrollIntoView({ behavior: REDUCED ? 'auto' : 'smooth', block: 'start' }); }
+  });
+  const onIn = e => {
+    const el = e.target.closest('[data-in]'); if (!el) return;
+    const o = opsOf(st.cur), inp = o.scale.inputs.find(i => i.id === el.dataset.in), v = opsVals(st.cur), kind = el.dataset.kind;
+    if (kind === 'check') v[inp.id] = el.checked;
+    else if (kind === 'range') v[inp.id] = +el.value;
+    else { const vals = inp.opts.map(x => (Array.isArray(x) ? x[0] : x)); v[inp.id] = vals[+el.value]; }
+    opsRender();
+  };
+  host.addEventListener('input', onIn); host.addEventListener('change', e => { if (e.target.matches('select,[type=checkbox]')) onIn(e); });
 };
 
 /* ================= chapters ================= */
@@ -224,6 +333,7 @@ function renderStatic(k) {
   const v0 = sc.v0;
   $('#chNaive').innerHTML = v0 ? `<p><b>${v0.name || ''}</b></p>${v0.code ? `<pre><code>${esc(v0.code)}</code></pre>` : ''}<div class="callout warn" style="margin-top:10px"><b class="t">Where it breaks</b>${v0.breaks || ''}</div>` : '<p class="mut">Start simple, then see what fails.</p>';
   $('#blurb').innerHTML = (sc.design ? `<p>${sc.design}</p>` : '') + `<p${sc.design ? ' class="mut"' : ''}>${ph.b || ''}</p>`;
+  if (sc.principle) $('#blurb').insertAdjacentHTML('afterbegin', `<div class="callout principle"><b class="t">${sc.principleTitle || 'The principle if you rebuild it from scratch'}</b>${sc.principle}</div>`);
   const pr = sc.predict;
   $('#chPredict').innerHTML = pr ? `<div class="callout ask predict"><b class="t">Predict first</b><div>${pr.q}</div><div class="opts">${pr.opts.map((o, i) => `<button class="opt" data-i="${i}">${o}</button>`).join('')}</div><div class="fb callout"></div></div>` : '';
   const b = sc.build;
@@ -241,6 +351,7 @@ function renderStatic(k) {
   const pb = $('#prev'), nb = $('#nextB');
   pb.innerHTML = pv ? `<small>‹ Previous</small>${esc(pv.t)}` : ''; pb.style.visibility = pv ? '' : 'hidden';
   nb.innerHTML = nx ? `<small>Next ›</small>${esc(nx.t)}` : ''; nb.style.visibility = nx ? '' : 'hidden';
+  opsRender(k); deepRender(k);
   $('#chTabs').innerHTML = tabsHTML(k);
   const act = $('#chTabs .act'); if (act && act.scrollIntoView && st.userNav) { const bar = $('#chTabs'); bar.scrollTo({ left: act.offsetLeft - bar.clientWidth / 2 + act.clientWidth / 2, behavior: 'smooth' }); }
 }
@@ -252,7 +363,7 @@ function showPhase(k, p) {
   if (k !== shown) { renderStatic(k); shown = k; }
   morph($('#phCtl'), knobs(c.ctl ? c.ctl(k) : ''));
   paintView(p);
-  const ph = c.phases[k], sc = $('#scrub'); sc.style.display = ph.live ? 'none' : ''; sc.value = Math.round(p * 1000);
+  const ph = c.phases[k], sc = $('#scrub'); sc.style.display = (typeof ph.live === 'function' ? ph.live() : ph.live) ? 'none' : ''; sc.value = Math.round(p * 1000);
   ovRender(); playUI();
 }
 function paintView(p) {
@@ -293,8 +404,9 @@ function follow(box, svg, vbW, x, instant) {
 L.follow = follow;
 
 /* ================= overview map ================= */
-const OV = L.OV = { sel: null, k: -1, kf: null };
-let OVS = null, OVN = null;
+const OV = L.OV = { sel: null, k: -1, kf: null, zoom: null };
+let OVS = null, OVN = null, OVT = null;   // OVT = the top-level map; OVS = the map on screen (a node's `inner` map while zoomed)
+function ovUse(def) { OVS = def; OVN = Object.fromEntries(def.nodes.map(n => [n.id, n])); }
 function ovAnchor(n, tx, ty) { const cx = n.x + n.w / 2, cy = n.y + n.h / 2, dx = tx - cx, dy = ty - cy; if (!dx && !dy) return [cx, cy]; const s = Math.min((n.w / 2) / Math.abs(dx || 1e-9), (n.h / 2) / Math.abs(dy || 1e-9)); return [cx + dx * s, cy + dy * s]; }
 function ovGeom(e) {
   const a = OVN[e.from], b = OVN[e.to], ca = [a.x + a.w / 2, a.y + a.h / 2], cb = [b.x + b.w / 2, b.y + b.h / 2]; let c = null;
@@ -319,8 +431,8 @@ function ovRender() {
     s += `<g style="${dim ? 'opacity:.2' : ''}"><path d="${d}" class="ove ${e.kind || 'data'} ${on || hl ? 'act' : ''}" marker-end="url(#${on || hl ? 'ovara' : 'ovar'})"/>${on ? `<path d="${d}" class="ove flow act" style="stroke-width:5;opacity:.5"/>` : ''}<text x="${g.mid[0]}" y="${g.mid[1] - 5}" text-anchor="middle" style="font-size:10.5px;fill:${hl || on ? 'var(--brand,var(--acc))' : 'var(--mut)'};paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(e.label)}</text></g>`;
   });
   OVS.nodes.forEach(n => {
-    const ph = n.phase, cls = ['ovn', sel === n.id ? 'sel' : '', ph !== undefined && ph === curPh ? 'cur' : '', act.has(n.id) ? 'act' : ''].join(' '), dim = sel && !rel.has(n.id);
-    s += `<g class="${cls}" data-node="${n.id}" style="${dim ? 'opacity:.3' : ''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${ph !== undefined ? pc(ph) : 'var(--card)'}"/><text x="${n.x + 10}" y="${n.y + 22}" font-weight="700" style="font-size:12.5px">${esc(n.label)}</text><text x="${n.x + 10}" y="${n.y + 40}" style="font-size:10.5px;fill:var(--mut)">${esc(n.sub || '')}</text>${ph !== undefined ? `<text x="${n.x + n.w - 8}" y="${n.y + n.h - 8}" text-anchor="end" style="font-size:10px;font-weight:700;fill:var(--mut)">ch ${ph + 1}</text>` : ''}</g>`;
+    const ph = n.phase, cls = ['ovn', n.inner ? 'zoomable' : '', sel === n.id ? 'sel' : '', ph !== undefined && ph === curPh ? 'cur' : '', act.has(n.id) ? 'act' : ''].join(' '), dim = sel && !rel.has(n.id);
+    s += `<g class="${cls}" data-node="${n.id}" style="${dim ? 'opacity:.3' : ''}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${ph !== undefined ? pc(ph) : 'var(--card)'}"/><text x="${n.x + 10}" y="${n.y + 22}" font-weight="700" style="font-size:12.5px">${esc(n.label)}</text><text x="${n.x + 10}" y="${n.y + 40}" style="font-size:10.5px;fill:var(--mut)">${esc(n.sub || '')}</text>${(n.lines || []).map((l, i) => `<text x="${n.x + 10}" y="${n.y + 60 + i * 15}" style="font-size:10.5px">${esc(l)}</text>`).join('')}${n.inner ? `<text x="${n.x + n.w - 8}" y="${n.y + n.h - 8}" text-anchor="end" style="font-size:10.5px;font-weight:700;fill:var(--brand,var(--acc))">open ▸</text>` : ph !== undefined ? `<text x="${n.x + n.w - 8}" y="${n.y + n.h - 8}" text-anchor="end" style="font-size:10px;font-weight:700;fill:var(--mut)">ch ${ph + 1}</text>` : ''}</g>`;
   });
   // the travelling packet lives in the same string, so morph moves it instead of re-creating the SVG
   let fx = null;
@@ -330,21 +442,27 @@ function ovRender() {
     if (i >= 1) { const ed = findEdge(flow[i - 1].n, flow[i].n); if (ed) {
       const g = ovGeom(ed.e), ff = Math.min(1, f * 1.15), q = ed.rev ? 1 - ff : ff;
       for (let tr = 3; tr >= 1; tr--) { const qq = ed.rev ? Math.min(1, q + tr * .06) : Math.max(0, q - tr * .06), p2 = qpt(g, qq); s += `<circle cx="${p2[0]}" cy="${p2[1]}" r="${7 - tr * 1.4}" fill="var(--acc2)" opacity="${.5 - tr * .12}"/>`; }
-      const p = qpt(g, q); fx = p[0]; s += `<circle cx="${p[0]}" cy="${p[1]}" r="8" fill="var(--acc2)" stroke="#fff" stroke-width="2"/><text x="${p[0]}" y="${p[1] - 13}" text-anchor="middle" style="font-size:11px;font-weight:700;fill:var(--acc2);paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(short(flow[i].t || '', 24))}</text>`;
+      const p = qpt(g, q); fx = p[0]; s += `<circle cx="${p[0]}" cy="${p[1]}" r="8" fill="var(--acc2)" stroke="#fff" stroke-width="2"/><text x="${p[0]}" y="${p[1] - 13}" text-anchor="middle" style="font-size:11px;font-weight:700;fill:var(--acc2);paint-order:stroke;stroke:var(--card);stroke-width:4px">${esc(short(flow[i].s || flow[i].t || '', 24))}</text>`;
     } }
   }
   let svg = el.firstElementChild;
   if (!svg || svg.nodeName.toLowerCase() !== 'svg') { el.innerHTML = `<svg viewBox="0 0 ${OVS.w} ${OVS.h}" role="img" aria-label="Architecture map"></svg>`; svg = el.firstElementChild; }
+  svg.setAttribute('viewBox', `0 0 ${OVS.w} ${OVS.h}`);
   morph(svg, s);
   if (fx != null) { follow(el.parentElement, svg, OVS.w, fx, k < 0); OV.focus = false; }
   const stp = $('#ovSteps'); if (stp) morph(stp, flow.map((f, i) => `<li data-k="${i}" class="${k >= 0 && i < k ? 'done' : ''} ${k >= 0 && i === Math.min(k, flow.length - 1) ? 'cur' : ''}"><span>${esc(f.t)}</span></li>`).join(''));
   const cap = $('#ovCap');
-  if (cap) cap.innerHTML = k >= 0 ? `<b>Step ${Math.min(k, flow.length - 1) + 1}/${flow.length}:</b> ${esc(flow[Math.min(k, flow.length - 1)].t)}` : (sel ? '' : 'Tap a component to see how it connects.');
+  if (cap) cap.innerHTML = k >= 0 ? `<b>Step ${Math.min(k, flow.length - 1) + 1}/${flow.length}:</b> ${esc(flow[Math.min(k, flow.length - 1)].t)}` : (sel ? '' : (OV.zoom ? 'Tap a part to see what it does, then open its chapter.' : (OVT && OVT.nodes.some(n => n.inner) ? 'Tap a component to open it and see what is inside.' : 'Tap a component to see how it connects.')));
   const chips = $('#ovChips'); if (chips) chips.querySelectorAll('button').forEach(b => b.classList.toggle('sel', b.dataset.node === sel));
 }
 function ovInfo() {
   const el = $('#ovInfo'); if (!el) return;
   const sel = OV.sel && OVN[OV.sel];
+  if (!sel && OV.zoom && OVT) {
+    const top = OVT.nodes.find(n => n.id === OV.zoom), P = L.cfg.phases, ph = [...new Set(OVS.nodes.filter(n => n.phase !== undefined).map(n => n.phase))].sort((a, b) => a - b);
+    el.innerHTML = `<div class="callout" style="margin-top:12px"><b style="font-size:16px">${esc(top.label)}</b><p style="margin:6px 0 8px">${esc(top.desc || '')}</p>${ph.length ? `<div class="note" style="margin:0 0 6px">Learn how it works:</div><div class="ovgo">${ph.map(i => `<button class="primary" data-go="${i}">Chapter ${i + 1}: ${esc(P[i].t)} ›</button>`).join('')}</div>` : ''}</div>`;
+    return;
+  }
   if (!sel) { el.innerHTML = ''; return; }
   const ins = OVS.edges.filter(e => e.to === sel.id), outs = OVS.edges.filter(e => e.from === sel.id), P = L.cfg.phases;
   el.innerHTML = `<div class="callout" style="margin-top:12px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="font-size:16px">${esc(sel.label)}</b><span class="note" style="margin:0">${esc(sel.sub || '')}</span>${sel.phase !== undefined && P[sel.phase] ? `<button class="primary" data-go="${sel.phase}" style="margin-left:auto">Open chapter ${sel.phase + 1}: ${esc(P[sel.phase].t)} ›</button>` : ''}</div>
@@ -352,17 +470,26 @@ function ovInfo() {
     <div class="g2"><div><b style="font-size:12px">Receives</b>${ins.map(e => `<div class="row"><span class="mut">${esc(OVN[e.from].label)}</span> ─ ${esc(e.label)} ▸</div>`).join('') || '<div class="note">nothing: this is where requests enter.</div>'}</div>
     <div><b style="font-size:12px">Sends</b>${outs.map(e => `<div class="row">▸ ${esc(e.label)} ─ <span class="mut">${esc(OVN[e.to].label)}</span></div>`).join('') || '<div class="note">nothing: it is an endpoint.</div>'}</div></div></div>`;
 }
-function ovSelect(id) { stopAll(); OV.k = -1; OV.kf = null; OV.sel = OV.sel === id ? null : id; OV.focus = true; ovInfo(); ovRender(); }
+function ovChips() { $('#ovChips').innerHTML = OVS.nodes.map(n => `<button data-node="${n.id}" style="--pc:${n.phase !== undefined ? pc(n.phase) : 'var(--card)'}">${esc(n.label)}</button>`).join(''); }
+function ovCrumb() { const b = $('#ovBack'), c = $('#ovCrumb'); if (!b) return; const top = OV.zoom && OVT ? OVT.nodes.find(n => n.id === OV.zoom) : null; b.hidden = !top; c.textContent = top ? top.label : ''; c.style.display = top ? '' : 'none'; }
+function ovZoom(id) {
+  stopAll(); const n = OVN[id]; if (!n || !n.inner) return;
+  OV.zoom = id; OV.k = -1; OV.kf = null; OV.sel = null; OV.focus = false; ovUse(n.inner); ovChips(); ovCrumb(); ovInfo(); ovRender();
+  const sv = $('#ovView'); if (sv && sv.parentElement) sv.parentElement.scrollLeft = 0;
+}
+function ovBack() { stopAll(); OV.zoom = null; OV.k = -1; OV.kf = null; OV.sel = null; ovUse(OVT); ovChips(); ovCrumb(); ovInfo(); ovRender(); }
+function ovSelect(id) { if (!OV.zoom && OVN[id] && OVN[id].inner) { ovZoom(id); return; } stopAll(); OV.k = -1; OV.kf = null; OV.sel = OV.sel === id ? null : id; OV.focus = true; ovInfo(); ovRender(); }
 function ovInit() {
-  OVS = L.cfg.ovs; if (!OVS) { const s = $('#overview'); if (s) s.hidden = true; return; }
-  OVN = Object.fromEntries(OVS.nodes.map(n => [n.id, n]));
-  $('#ovChips').innerHTML = OVS.nodes.map(n => `<button data-node="${n.id}" style="--pc:${n.phase !== undefined ? pc(n.phase) : 'var(--card)'}">${esc(n.label)}</button>`).join('');
+  OVT = L.cfg.ovs; if (!OVT) { const s = $('#overview'); if (s) s.hidden = true; return; }
+  ovUse(OVT); ovChips(); ovCrumb();
+  $('#ovBack').onclick = ovBack;
   $('#ovView').addEventListener('click', e => { const n = e.target.closest('[data-node]'); if (n) ovSelect(n.dataset.node); });
   $('#ovChips').addEventListener('click', e => { const n = e.target.closest('[data-node]'); if (n) ovSelect(n.dataset.node); });
   $('#ovInfo').addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) jumpPhase(+g.dataset.go); });
   $('#ovTrace').onclick = () => { stopAll(); OV.sel = null; ovInfo(); const n = OVS.flow.length; animate(p => { OV.kf = Math.min(n - .001, p * n); OV.k = Math.floor(OV.kf); ovRender(); }, n * 1400, '#ovView'); };
   $('#ovSteps').addEventListener('click', e => { const li = e.target.closest('[data-k]'); if (!li) return; stopAll(); OV.sel = null; ovInfo(); OV.k = +li.dataset.k; OV.kf = OV.k; ovRender(); });
   $('#ovClear').onclick = () => { stopAll(); OV.k = -1; OV.kf = null; OV.sel = null; ovInfo(); ovRender(); };
+  if (!OVT.nodes.some(n => n.inner)) $('#ovBack').remove();
 }
 window.ovRender = ovRender;
 
@@ -410,6 +537,10 @@ function simDraw() {
     s += `<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${c}" stroke-width="2.5" opacity=".35"/><circle cx="${px}" cy="${py}" r="7" fill="${c}" stroke="#fff" stroke-width="1.5"/><text x="${(ax + bx) / 2}" y="${(ay + by) / 2 - 9}" text-anchor="middle" style="font-size:10.5px;fill:${c};font-weight:700;paint-order:stroke;stroke:var(--bg);stroke-width:4px">${esc(short(e.msg, 28))}</text>`;
   });
   morph(svg, s);
+  const gg = g$('simGauge');
+  if (gg) morph(gg, SIMM.gauges ? (SIMM.gauges(s0, { T, n: SIM.n, set: SIM.set, run: SIM.run }) || []).map(x => `<div class="gz ${x.st || ''}"><small>${esc(x.l)}</small><b>${esc(x.v)}</b></div>`).join('') : '');
+  const rs = g$('simRes');
+  if (rs) morph(rs, SIM.run.result ? `<div class="callout ${SIM.run.result.st === 'bad' ? 'warn' : SIM.run.result.st === 'ok' ? 'good' : 'ask'}" style="margin:10px 0"><b class="t">${esc(SIM.run.result.t || 'Result with these settings')}</b>${SIM.run.result.h}</div>` : '');
   const pk = active.find(e => e.from !== e.to && byId[e.from] && byId[e.to]);
   if (pk && SIM.play) { const f = Math.min(1, (T - pk.t) / Math.max(1, pk.d)), A = byId[pk.from], B = byId[pk.to]; follow(svg.parentElement, svg, W, (A.x + A.w / 2) + ((B.x + B.w / 2) - (A.x + A.w / 2)) * f); }
   g$('simTv').textContent = (T / 1000).toFixed(2) + ' s / ' + (SIM.end / 1000).toFixed(1) + ' s';
@@ -447,7 +578,16 @@ function simBuildControls() {
   simArgs();
 }
 function simArgs() { const o = SIMM.menu[+g$('simOp').value]; g$('simArgs').innerHTML = o.args.map((a, i) => `<input type="text" data-a="${i}" value="${esc(a.d)}" placeholder="${esc(a.n)}" aria-label="${esc(a.n)}" style="width:${a.w || 80}px">`).join(''); }
-function simLoadScenario(i) { const s = SIMM.scenarios[i]; g$('simAct').value = s.acts.join('\n'); g$('simDesc').textContent = s.desc; SIM.T = 0; SIM.sel = null; SIM.selNode = null; simRun(); simDraw(); }
+function simLoadScenario(i) {
+  const s = SIMM.scenarios[i];
+  // every scenario starts from the default cluster + settings, then applies its own (so scenarios never leak into each other)
+  SIM.n = s.n || SIMM.nodeRange[2]; g$('simN').value = String(SIM.n);
+  SIM.set = Object.assign(Object.fromEntries((SIMM.settings || []).map(x => [x.id, x.def])), s.set || {});
+  document.querySelectorAll('#simSet [data-set]').forEach(el => { el.value = SIM.set[el.dataset.set]; });
+  g$('simAct').value = s.acts.join('\n');
+  g$('simDesc').innerHTML = esc(s.desc) + (s.try ? ` <b>Try:</b> ${esc(s.try)}` : '');
+  SIM.T = 0; SIM.sel = null; SIM.selNode = null; simRun(); simDraw();
+}
 function simInit() {
   if (!g$('simSvg') || !SIMM) return;
   const pl = () => { g$('simPlay').textContent = '▶ Play'; };
@@ -509,9 +649,10 @@ L.start = function (c) {
     const io = new IntersectionObserver(es => es.forEach(e => vis.set('#' + e.target.id, e.isIntersecting)), { rootMargin: '120px' });
     ['chLab', 'ovView'].forEach(id => { const el = $('#' + id); if (el) io.observe(el); });
   }
-  ovInit();
+  ovInit(); L.opsInit();
   showPhase(st.cur);
   if (SIMM) simInit();
   const cap = $('#capstone'); if (!SIMM && cap) cap.hidden = true;
+  document.querySelectorAll('.topbar nav a[href^="#"]').forEach(a => { const t = document.getElementById(a.getAttribute('href').slice(1)); if (t && t.hidden) a.style.display = 'none'; });   // no link to a section that is not shown
 };
 })();
