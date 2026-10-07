@@ -9,7 +9,7 @@
  *  - overview map   generic renderer for an OVS topology
  *  - cluster sim    generic player for a SIMM model
  *
- * Page contract (see scylla/visualize/01-scylla-internals-end-to-end.html):
+ * Page contract (see techstack/scylla/01-scylla-internals-end-to-end.html):
  *   Lab.mount(STORY)                        first statement of the page script
  *   Lab.sim(SIMM)                           inside the simulation IIFE
  *   Lab.start({phases,detail,ovs,ctl,state, beforePlay, afterPlay})   last statement
@@ -124,7 +124,7 @@ L.mount = function (story) {
   const ex = (story.extras || []).map(e => `<details class="dd" data-ch="${[].concat(e.ch == null ? 0 : e.ch).join(',')}"><summary>${e.title}${e.sub ? `<small>${e.sub}</small>` : ''}</summary><div id="${e.id}" class="ddb"></div></details>`).join('');
   app.innerHTML = `
   <div class="topbar"><div class="wrap">
-    <a class="home" href="../../index.html">← Engineer Lab</a><b>${esc(story.system || document.title)}</b>
+    <a class="home" href="../../tech.html">← Tech Stack</a><b>${esc(story.system || document.title)}</b>
     <nav aria-label="Page sections"><a href="#problem">Problem</a><a href="#overview">Map</a><a href="#chapters">Chapters</a><a href="#build">Build it</a><a href="#capstone">End-to-end</a></nav>
   </div></div>
   <div class="wrap">
@@ -651,6 +651,7 @@ L.start = function (c) {
   }
   ovInit(); L.opsInit();
   showPhase(st.cur);
+  { const m = /^#ch(\d+)$/.exec(location.hash); if (m && +m[1] < c.phases.length) jumpPhase(+m[1]); }   // deep link from site search: tour.html#ch3
   if (SIMM) simInit();
   const cap = $('#capstone'); if (!SIMM && cap) cap.hidden = true;
   document.querySelectorAll('.topbar nav a[href^="#"]').forEach(a => { const t = document.getElementById(a.getAttribute('href').slice(1)); if (t && t.hidden) a.style.display = 'none'; });   // no link to a section that is not shown

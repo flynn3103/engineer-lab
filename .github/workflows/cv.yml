@@ -1,0 +1,60 @@
+name: Build CV
+
+# When anything under cv/ changes on main, compile cv/cv.tex and replace assets/Linh-Tran-Nhat-CV.pdf,
+# then redeploy the site (commits made with GITHUB_TOKEN do not trigger other workflows, so we dispatch it).
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cv/**'
+      - '.github/workflows/cv.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # commit the PDF
+  actions: write    # dispatch pages.yml
+
+concurrency:
+  group: cv
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile cv/cv.tex
+        uses: xu-cheng/latex-action@v3
+        with:
+          root_file: cv.tex
+          working_directory: cv
+
+      - name: Replace the published PDF
+        run: |
+          test -s cv/cv.pdf
+          cp cv/cv.pdf assets/Linh-Tran-Nhat-CV.pdf
+
+      - name: Commit the PDF if it changed
+        id: commit
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/Linh-Tran-Nhat-CV.pdf
+          if git diff --cached --quiet; then echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          git commit -m "chore(cv): rebuild Linh-Tran-Nhat-CV.pdf from cv/cv.tex"
+          git pull --rebase origin main
+          git push origin HEAD:main
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Redeploy the site with the new PDF
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref main
+
+      - name: Keep the compiled PDF as a run artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cv-pdf
+          path: cv/cv.pdf

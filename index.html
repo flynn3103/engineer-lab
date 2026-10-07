@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linh Trần Nhật · Data Platform Engineer</title>
+<meta name="description" content="Linh Trần Nhật, Data Platform Engineer. Search deep-dive research on Spark, ScyllaDB, Kafka, Redis, PostgreSQL, Kubernetes and operating system internals, plus agent skills and notes.">
+<link rel="stylesheet" href="assets/lab.css">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<div id="site-nav"></div>
+<div class="wrap">
+  <main class="home-hero">
+    <div class="kick" id="hHandle"></div>
+    <h1 id="hName"></h1>
+    <h2 id="hRole"></h2>
+    <p class="lead" id="hTag"></p>
+    <div class="me" id="me"></div>
+    <form class="searchbar" id="go" role="search" onsubmit="return false">
+      <span id="ico"></span>
+      <input id="q" type="text" inputmode="search" autocomplete="off" spellcheck="false" autofocus placeholder="Search tech stack, skills and posts…" aria-label="Search the site"><kbd>/</kbd>
+    </form>
+    <div class="suggest" id="suggest" aria-label="Suggested searches"></div>
+    <div class="status" id="status" aria-live="polite" style="margin-top:14px"></div>
+    <ul class="results home-res" id="results" hidden></ul>
+  </main>
+</div>
+<div id="site-foot"></div>
+<script src="data/profile.js"></script>
+<script src="data/systems.js"></script>
+<script src="data/tech-index.js"></script>
+<script src="data/skills.js"></script>
+<script src="data/posts.js"></script>
+<script src="assets/site.js"></script>
+<script>
+(function(){
+  const {esc,hi,search,bindSearch,norm}=Site,P=SITE_PROFILE,$=id=>document.getElementById(id),byId=Object.fromEntries(SITE_SYSTEMS.map(s=>[s.id,s]));
+  $('hHandle').textContent='@'+P.handle; $('hName').textContent=P.name; $('hRole').textContent=P.headline; $('hTag').textContent=P.tagline;
+  $('ico').innerHTML=Site.ICON;
+  $('me').innerHTML=Site.socials()+(P.links.cv?`<a class="btn primary" href="${esc(P.links.cv)}" download>${Site.ICONS.download}Download CV</a>`:'');
+  let skills=SITE_SKILLS.skills||[];
+  const all=()=>[
+    ...SITE_TECH_INDEX.map(e=>({kind:e.type==='Tour'?'Tour':'Chapter',title:e.title,summary:e.summary,body:e.body,tags:e.tags,url:e.url,sys:e.system})),
+    ...skills.map(s=>({kind:'Skill',title:s.name,summary:s.description,tags:s.tags,url:'skills.html?q='+encodeURIComponent(s.name)})),
+    ...SITE_POSTS.map(p=>({kind:'Post',title:p.title,summary:p.summary,tags:p.tags,url:p.url}))];
+  const SUG=['compaction','ISR','MVCC','shuffle','etcd','rebalance'];
+  $('suggest').innerHTML='Try '+SUG.map(x=>`<button type="button" data-q="${x}">${x}</button>`).join('');
+  $('suggest').onclick=e=>{const b=e.target.closest('button');if(!b)return;$('q').value=b.dataset.q;$('q').dispatchEvent(new Event('input'));$('q').focus()};
+  function render(){
+    const text=$('q').value.trim(),res=$('results');
+    res.hidden=!text;
+    if(!text){$('status').textContent=`${SITE_TECH_INDEX.length} tour pages · ${skills.length} skill(s) · ${SITE_POSTS.length} post(s) searchable`;return}
+    const hits=search(all(),text,[['title',6],['tags',4],['kind',2],['summary',2],['body',1]]);
+    $('status').textContent=hits.length?`${hits.length} result${hits.length>1?'s':''}`:'';
+    const toks=norm(text).split(/\s+/).filter(Boolean);
+    res.innerHTML=hits.length?hits.slice(0,30).map(({item:e})=>{const s=byId[e.sys]||{};
+      return `<li class="res"><a href="${esc(e.url)}" style="--c:${s.color||'var(--acc)'}"><span class="m"><span class="kind">${e.kind}</span></span><span class="t">${hi(e.title,toks)}</span>${e.summary?`<p class="s">${hi(e.summary.length>150?e.summary.slice(0,150)+'…':e.summary,toks)}</p>`:''}</a></li>`}).join('')
+      :`<li class="empty"><b>Nothing matches “${esc(text)}”</b>Try a broader word, such as “replication” or “index”.</li>`;
+  }
+  bindSearch($('q'),render); render();
+  fetch('https://raw.githubusercontent.com/'+SITE_SKILLS.repo+'/main/skills.json',{cache:'no-cache'}).then(r=>r.ok?r.json():Promise.reject()).then(j=>{if(j&&Array.isArray(j.skills)){skills=j.skills;render()}}).catch(()=>{});
+})();
+</script>
+</body>
+</html>

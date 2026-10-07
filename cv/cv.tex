@@ -1,0 +1,226 @@
+%------------------------
+% Ethan's Résumé Template
+% Author: necusjz
+% License: CC-BY-4.0
+%------------------------
+\documentclass[letterpaper,11pt]{article}
+
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\usepackage{fontawesome5}
+\usepackage{ragged2e}
+\usepackage{etoolbox}
+\usepackage{tikz}
+% pdfTeX-only (ATS text mapping); skipped on XeTeX/tectonic
+\ifdefined\pdfgentounicode\input{glyphtounicode}\fi
+
+% font options
+\usepackage[sc]{mathpazo}
+\linespread{1.05}  % palladio needs more leading (space between lines)
+\usepackage[T1]{fontenc}
+
+\pagestyle{fancy}
+\fancyhf{}  % clear all header and footer fields
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% adjust margins
+\addtolength{\oddsidemargin}{-0.5in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1in}
+\addtolength{\topmargin}{-.5in}
+\addtolength{\textheight}{1.0in}
+
+\urlstyle{same}
+
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+\setlength{\footskip}{5pt}
+
+% sections formatting
+\titleformat{\section}{
+  \vspace{-4pt}\scshape\raggedright\large
+}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+
+% ensure that generate pdf is machine readable/ATS parsable
+\ifdefined\pdfgentounicode\pdfgentounicode=1\fi
+
+% custom commands
+\newcommand{\cvitem}[1]{
+  \item\small{
+    {#1\vspace{-2pt}}
+  }
+}
+
+\newcommand{\cvheading}[4]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      \small#3 & \small #4 \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\cvheadingstart}{\begin{itemize}[leftmargin=0in, label={}]}
+\newcommand{\cvheadingend}{\end{itemize}}
+\newcommand{\cvitemstart}{\begin{itemize}\justifying}
+\newcommand{\cvitemend}{\end{itemize}\vspace{-5pt}}
+
+\newcommand{\cvskill}[2]{
+  \textcolor{black}{\textbf{#1}}\hfill
+  \foreach \x in {1,...,5}{%
+    \space{\ifnumgreater{\x}{#2}{\color{black!80!white!20}}{\color{black}}\faSquare}}\par%
+  \vspace{-2pt}
+}
+
+\renewcommand\labelitemii{$\vcenter{\hbox{\footnotesize$\bullet$}}$}
+
+\begin{document}
+
+% contact information
+\begin{center}
+  \textbf{\LARGE\scshape Tran Nhat Linh} \\
+  \vspace{1pt}\small
+   $\ \diamond\ $ 
+  \href{mailto:}{trannhatlinh3103@gmail.com}
+  $\ \diamond\ $ 
+  +(84) 355428421
+   $\ \diamond\ $ 
+  https://github.com/flynn3103
+\end{center}
+
+
+\section{Profile Summary}
+\cvheadingstart
+\item 
+I have 4+ years of working experience Data Engineer. Fortunately, I had chances to work with client from Europe, Switzerland and US. I'm familiar with both Agile and Waterfall Methodologies.I believe that the real hands-on experience, the fast learning capability can lead to success.
+\cvheadingend
+
+\section{Technical Skills}
+\cvheadingstart
+\item
+\cvitemstart
+  \cvitem{Database: BigQuery, ScyllaDB, Postgres, Redis, Qdrant, MongoDB, SQL Server}
+  \cvitem{Programming: Python, Go, SQL, Scala/Java}
+  \cvitem{Data Engineering: Airflow/Cloud Composer, Dataform, dbt, Kafka (CDC), Spark, Delta Lake, Databricks}
+  \cvitem{Software Development: Git, Docker, k8s, Terraform, GitHub Actions, GitlabCI, Azure Devops}
+  \cvitem{Cloud: GCP, AWS, Azure}
+  \cvitem{AI \& Agents: Claude Code skills, MCP servers, LLM tooling}
+\cvitemend
+\cvheadingend
+
+\section{Professional Experience}
+\cvheadingstart
+\cvheading
+    {Cho Tot - Carousell Group}{HCMC, Viet Nam}
+    {Data Engineer}{Jan 2026 - Present}
+  \cvitemstart
+  \cvitem{\textbf{Responsible}}
+  \cvitemstart
+    \cvitem{Maintain and extend a YAML-driven Airflow (Cloud Composer) platform that loads 50+ operational data domains into BigQuery, including CDC merge templates with automated schema evolution.}
+    \cvitem{Build Kafka-to-BigQuery/ScyllaDB/Qdrant streaming pipelines on a Scala config-driven framework; added native Avro/Debezium CDC support and error-sink handling.}
+    \cvitem{Improved reliability of Go sync services of the customer data platform (Kafka, ScyllaDB, Redis, Pub/Sub): self-healing backfills with checkpoint resume, TTL-based dual-write migration, fixes for rate-limit storms and ScyllaDB hotfixes.}
+    \cvitem{Designed a BigQuery-to-ScyllaDB reverse-ETL service in Go with a Postgres-backed durable job queue, Avro snapshots on GCS, sampled verification and an operator console.}
+    \cvitem{Built feature-store features in Dataform (SQLX) and fixed a crash-loop in the ScyllaDB SSTable bulk loader.}
+    \cvitem{Built MCP servers for Airflow and the streaming platform and extended an internal MCP gateway (Go, protobuf); authored Claude Code skills that automate pipeline ingestion, fact modelling, bug diagnosis and release verification.}
+    \cvitem{Provisioned GCP resources with Terraform (databases, buckets, service accounts) and automated team workflows with GitHub Actions.}
+    \cvitemend
+    \cvitem{\textbf{Technical stack}: Python, Go, Scala, SQL, Airflow, Dataform, Kafka, BigQuery, ScyllaDB, GCP, Terraform}
+  \cvitemend
+ \cvheading
+    {Axon Active}{HCMC, Viet Nam}
+    {Data Engineer}{2025 - Present}
+  \cvitemstart
+  \cvitem{\textbf{Responsible}}
+  \cvitemstart
+  \cvitem{Collaborated with clients from a Swiss insurance company.}
+    \cvitem{Performed maintenance and refactoring of data pipelines.}
+    \cvitem{Developed and implemented new commercial systems, as well as additional functionalities in existing systems.}
+    \cvitem{Scheduled and managed daily Databrick jobs to process commercial data.}
+    \cvitemend
+    \cvitem{\textbf{Technical stack}: PySpark, SQL, Deltalake, Databrick}
+  \cvitemend
+ \cvheading
+    {PNJ Group}{HCMC, Viet Nam}
+    {Data Engineer} {2023 - 2025}
+  \cvitemstart
+  \cvitem{\textbf{Responsible}}
+  \cvitemstart
+    \cvitem{Conducting monthly systems review for optimizing and improvement.}
+    \cvitem{\textbf{Cloud Migration}: Led the migration of commercial data from on-premise SAP HANA to AWS, enhancing scalability and reducing infrastructure costs.}
+    \cvitem{\textbf{Customer CDP Integration:} Designed and implemented a scalable AWS-based ETL pipeline to automate customer data collection, RFM calculations, and reporting.}
+    \cvitem{\textbf{Automation Toolkit for ETL \& Power BI Tracking:} Besides the main task, I'd love to build some automation tools that tracking a metadata, utilize for ETL task , documentation auto-generator for dataset, reduced manual processing time by 80\% }
+    \cvitemend
+  \cvitemend
+  \cvheading
+    {FPT Software}{HCMC, Viet Nam}
+    {Data Engineer}{2021 - 2023}
+  \cvitemstart
+   \cvitem{\textbf{Responsible}}
+  \cvitemstart
+  \cvitem{Implemented and managed microservice-based data pipelines on Kubernetes (k8s), ensuring scalability and reliability.}
+    \cvitem{ Designed and developed Technical Specification documents to ensure clear communication and alignment across teams.}
+    \cvitem{Supported bug identification and resolution in UAT and production environments}
+    \cvitem{Built automation tools for data analysts, streamlining repetitive tasks and improving team productivity}
+    \cvitemend
+  \cvitemend 
+\cvheadingend
+
+\section{Highlight Project}
+
+\cvheadingstart
+
+\cvheading
+    {Customer Loyalty Data Pipeline}{}
+    {Developed and Deployed Data Pipeline for Customer Loyalty System}{}
+  \cvitemstart 
+  \cvitem{Responsible}
+   \cvitemstart
+    \cvitem{Developed and maintained an automated CronJob for incremental data extraction, ensuring efficient and timely updates to customer loyalty data.}
+    \cvitem{Extracted and processed data from multiple sources, transforming it for analytics and reporting.}
+    \cvitem{Designed and optimized data models to support customer insights, retention strategies, and loyalty program analytics.}
+    \cvitem{Managed deployment and orchestration using GitLab CI/CD pipelines and Kubernetes (K8s), ensuring scalability and reliability.}
+    \cvitemend
+  \cvitem{Techstack: Python, Kafka Flask, GitlabCI, k8s, Granfana}
+  \cvitemend 
+  
+\cvheading
+    {CDP Data Platform on AWS}{}
+    {Implemented a serverless tech stack using Lambda, S3, and Athena for optimized performance and cost savings.}{}
+  \cvitemstart 
+  \cvitem{Responsible}
+   \cvitemstart
+    \cvitem{Led the migration of commercial data from on-premise SAP HANA to AWS, enabling improved scalability, cost-efficiency, and real-time data accessibility.}
+    \cvitem{Implemented automated data validation scripts for ensuring data quality during the migration process.}
+    \cvitem{Migrated 5TB of commercial data to AWS, adopting an event-driven architecture with AWS Lambda for real-time processing.}
+    \cvitem{Designed a two-phase migration approach with parallel systems, ensuring no downtime and maintaining data integrity.}
+    \cvitemend
+  \cvitem{Techstack: AWS Lambda, S3, Athena, Delta Tables, Event Streaming}
+  \cvitemend 
+
+\section{Certifications}
+\cvheadingstart
+\item
+\cvitemstart
+  \cvitem {\href{https://drive.google.com/file/d/1PNveklh7O6v5AkgN1LX6RdKycu_Z81jc/view}{[DP203] - Microsoft Azure Data Engineer Associate (2022)}}
+\cvitemend
+\cvheadingend
+\section{Education}
+\cvheadingstart
+  \cvheading
+    {Viet Nam Nation University of Information Technology}{HCMC, Viet Nam}
+    {Bachelor of Information System}{09/2018 - 11/2022}
+\cvheadingend
+\cvheadingend
+
+\end{document}

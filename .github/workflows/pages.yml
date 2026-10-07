@@ -1,0 +1,59 @@
+name: Deploy to GitHub Pages
+
+# Publishes the portfolio (top-level *.html, assets/, data/, techstack/) on every push to main that touches them,
+# and when cv.yml dispatches it after rebuilding the CV PDF.
+# Requires Settings -> Pages -> Source = "GitHub Actions".
+on:
+  push:
+    branches: [main]
+    paths:
+      - '*.html'
+      - 'assets/**'
+      - 'data/**'
+      - 'techstack/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble site
+        run: |
+          missing=0
+          for f in index.html tech.html skills.html blog.html assets/lab.css assets/lab.js assets/site.css assets/site.js \
+                   data/profile.js data/systems.js data/tech-index.js data/skills.js data/posts.js assets/Linh-Tran-Nhat-CV.pdf; do
+            [ -f "$f" ] || { echo "::error::$f is not on this branch, so the site would be incomplete"; missing=1; }
+          done
+          # every tour listed in data/systems.js must exist
+          while read -r href; do
+            [ -f "$href" ] || { echo "::error::data/systems.js links to $href, which is not on this branch"; missing=1; }
+          done < <(grep -o "url:'techstack/[^']*\.html'" data/systems.js | cut -d"'" -f2)
+          [ "$missing" = 0 ] || exit 1
+          mkdir -p _site
+          cp ./*.html _site/
+          cp -r assets data techstack _site/
+          touch _site/.nojekyll
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

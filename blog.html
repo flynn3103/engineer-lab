@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blog · Linh Trần Nhật</title>
+<meta name="description" content="Notes on engineering work, systems and lessons learned.">
+<link rel="stylesheet" href="assets/lab.css">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<div id="site-nav"></div>
+<div class="wrap">
+  <header class="page-hero">
+    <div class="kick">Blog</div>
+    <h1>Notes from the work</h1>
+    <p class="lead">Lessons from building and operating systems, and the experience behind the tech-stack research.</p>
+    <div class="searchbar" id="sb" hidden role="search"><span id="ico"></span><input id="q" type="text" autocomplete="off" placeholder="Search posts…" aria-label="Search posts"><kbd>/</kbd></div>
+    <div class="filters" id="tags"></div>
+  </header>
+  <main><div class="status" id="status" aria-live="polite"></div><div class="grid wide" id="posts"></div></main>
+</div>
+<div id="site-foot"></div>
+<script src="data/profile.js"></script>
+<script src="data/posts.js"></script>
+<script src="assets/site.js"></script>
+<script>
+(function(){
+  const {esc,hi,search,bindSearch,norm}=Site,PO=SITE_POSTS,$=id=>document.getElementById(id),tags=new Set(),on=new Set();
+  PO.forEach(p=>(p.tags||[]).forEach(t=>tags.add(t)));
+  if(!PO.length){$('posts').innerHTML=`<div class="empty" style="grid-column:1/-1"><b>First posts are on the way (TBU)</b>Check back soon, or follow <a href="${esc((SITE_PROFILE.links||{}).github||'#')}">GitHub</a>.</div>`;return}
+  $('sb').hidden=false;$('ico').innerHTML=Site.ICON;
+  $('tags').innerHTML=[...tags].map(t=>`<button type="button" aria-pressed="false" data-k="${esc(t)}">${esc(t)}</button>`).join('');
+  $('tags').onclick=e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k;on.has(k)?on.delete(k):on.add(k);b.setAttribute('aria-pressed',on.has(k));render()};
+  function render(){const q=$('q').value,toks=norm(q).split(/\s+/).filter(Boolean);
+    const hits=search(PO.filter(p=>!on.size||(p.tags||[]).some(t=>on.has(t))),q,[['title',6],['tags',4],['summary',1]]);
+    $('status').textContent=`${hits.length} post${hits.length===1?'':'s'}`;
+    $('posts').innerHTML=hits.map(({item:p})=>`<a class="tile post" href="${esc(p.url)}"><span class="date">${esc(p.date||'')}</span><h3>${hi(p.title,toks)}</h3><p>${hi(p.summary||'',toks)}</p><div class="chips">${(p.tags||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div></a>`).join('')}
+  bindSearch($('q'),render);render();
+})();
+</script>
+</body>
+</html>

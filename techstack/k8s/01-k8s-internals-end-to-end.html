@@ -1,0 +1,1079 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kubernetes Internals End-to-End</title>
+<link rel="stylesheet" href="../../assets/lab.css">
+<style>
+:root{--acc:#326ce5;--acc2:#e25a1c}
+@media(prefers-color-scheme:dark){:root{--acc:#6c9bff;--acc2:#ff7a3d}}
+@media(max-width:820px){.g2{grid-template-columns:1fr}}
+.pod{display:inline-block;border:2px solid var(--line);border-radius:7px;padding:1px 6px;margin:2px;font-family:ui-monospace,monospace;font-size:10.5px;background:var(--card);vertical-align:top}
+.pod.ready{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,var(--card))}.pod.run{border-color:var(--t4)}
+.pod.pend{border-style:dashed;color:var(--mut)}.pod.term{border-color:var(--bad);text-decoration:line-through;opacity:.7}.pod.err{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,var(--card))}
+.node{border:2px solid var(--line);border-radius:10px;padding:8px;background:var(--bg);min-width:0}
+.node.dead{border-color:var(--bad);opacity:.75}
+.view .row{white-space:normal;overflow-wrap:anywhere}
+.svgscroll.seq{border:1px solid var(--line);border-radius:10px;background:var(--bg);margin:6px 0 4px}
+.svgscroll.seq>svg{min-width:860px}
+.wide{overflow-x:auto;overscroll-behavior-x:contain}
+.wide>svg{min-width:600px}
+.view .node{margin-bottom:6px}
+.clusterbar{margin-top:10px}
+.view table.wrap{white-space:normal}.view table.wrap td{overflow-wrap:break-word}
+.wide>svg{max-height:none!important}
+</style>
+</head>
+<body>
+<div id="dataSlot" hidden>
+<div class="sample-row"><span class="lbl">Every chapter below runs on a manifest:</span>
+  <button data-sample="web">Web (nginx, 3 replicas)</button><button data-sample="api">API (needs SSD + big requests)</button><button data-sample="bad">Worker (bad image)</button></div>
+<div class="jobgrid clusterbar">
+  <label>Worker nodes <select id="nn"><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label>
+  <label><input type="checkbox" id="taint"> taint the last node <code>dedicated=gpu:NoSchedule</code></label>
+  <span class="note" id="statLine" style="margin:0"></span>
+</div>
+<div class="note" id="srcInfo"></div>
+<details class="mydata"><summary>Edit the manifest yourself (Deployment + Service YAML)</summary>
+  <p class="note" style="margin:0 0 8px">Change replicas, <code>resources.requests</code>, <code>readinessProbe.initialDelaySeconds</code>, <code>nodeSelector</code> or <code>rollingUpdate</code>; every chapter re-runs on it.</p>
+  <textarea id="src" rows="16" spellcheck="false"></textarea>
+</details>
+</div>
+<script src="../../assets/lab.js"></script>
+<script>
+const STORY={
+ system:'Kubernetes',
+ title:'<span>Kubernetes</span> Internals',
+ lead:'Start from a real operations problem. Watch the obvious deploy script break. Then rebuild, piece by piece, the control plane that keeps hundreds of containers running without a human in the loop.',
+ problem:{
+  scene:[
+   'You run the platform team of a marketplace: <b>40 services</b>, about <b>600 containers</b> on <b>120 machines</b>. Teams ship 50 times a day, and some machine fails roughly every other day.',
+   'Today a deploy is a bash script that SSHes into machines and runs <code>docker run</code>. Last night a machine died at 3 a.m. and the <i>checkout</i> service ran on 1 of its 3 copies until someone woke up. Your job: make the cluster run itself.'],
+  musts:[
+   '<b>Declare, don\'t command.</b> Teams say <i>"3 copies of web:1.25"</i>; the system makes it true and <b>keeps</b> it true.',
+   '<b>Self-healing.</b> A dead container or a dead machine is replaced without a human.',
+   '<b>Smart placement.</b> Containers land only on machines with enough free CPU and memory and the right labels.',
+   '<b>Zero-downtime deploys</b> with a one-command rollback, and capacity that follows the load.',
+   '<b>One safe source of truth.</b> Many people and programs change state at once: no lost updates, no unauthorised writes.'],
+  naive:{title:'Your first instinct: a smarter deploy script',text:'A script picks hosts, SSHes in, runs the containers and edits the load balancer config. It works for the demo, then:',
+   breaks:['It runs <b>once</b>. When a machine dies an hour later, nothing notices and nothing restarts.','If it crashes halfway, the cluster is left in an unknown state: 2 of 3 copies, or old and new versions mixed.','Two engineers deploying at the same time overwrite each other, and the load balancer still points at IPs that no longer exist.']},
+  quest:'Rebuild the core of Kubernetes in 10 chapters. In each one you meet a problem, try the naive fix, see it fail, then see the real design running as a small control plane in your browser.'},
+ overview:{title:'The whole control plane on one page',lead:'Before the details, see how one <code>kubectl apply</code> travels. Press <b>Trace a request</b> to follow it, or tap a component to see what it receives and sends. Notice that nothing calls anything directly: every component reads and writes objects through the API server. Colors match the chapters.'},
+ chapters:[
+  {ask:'You run <code>kubectl apply</code>. Who actually starts the containers, and when?',
+   why:'One command has to end with 3 running, reachable containers on the right machines, and must still end there if any component crashes halfway through.',
+   v0:{name:'One imperative script that does everything in order',code:'for i in 1..3:\n  host = pickHost()\n  ssh(host, "docker run web:1.25")\nlb.add(host)',breaks:'It is a one-shot sequence. If it dies after the 2nd container, nobody knows a 3rd is missing. If a host dies tomorrow, nothing re-runs the loop. There is no record of what <i>should</i> be running.'},
+   design:'Store only the <b>desired state</b> in one place, and let independent components, each watching that place, push reality one step closer to it.',
+   predict:{q:'<code>kubectl apply</code> prints <i>"deployment.apps/web created"</i>. At that moment, how many containers are running?',opts:['All of them: apply waits until the pods are up','One: apply starts the first pod and the others follow','None yet: apply only stored the desired state'],ans:2,why:'apply returns as soon as the Deployment object is persisted. In the sequence below, the first container starts seconds later, after the controllers, the scheduler and a kubelet have each reacted to a watch event.'},
+   build:{intro:'The skeleton every later chapter plugs into:',
+    steps:['<b>Object model.</b> Every resource is <code>{kind, metadata, spec, status}</code>: <code>spec</code> is what you want, <code>status</code> is what is.','<b>One store, one front door.</b> Clients only write <code>spec</code> through the API server (chapter 2), which persists it (chapter 3).','<b>Watchers.</b> Each component subscribes to the kinds it cares about and writes the next piece of state: Deployment &rarr; ReplicaSet &rarr; Pods &rarr; <code>nodeName</code> &rarr; container &rarr; endpoints.','<b>No direct calls.</b> Components never talk to each other, only to the API server, so any one of them can crash and restart alone.'],
+    code:'kubectl:    PUT desired object -> return\ncontroller: on change(obj): write next object\nscheduler:  on unbound pod: write pod.nodeName\nkubelet:    on pod for me: start it, write status',
+    rule:'The store holds the <b>only truth</b>. Every component can be killed and restarted at any time and must rebuild everything it needs from the store.'}},
+  {ask:'Anyone with network access can write cluster state. How do you stop bad or malicious objects?',
+   why:'One malformed Deployment, say a selector that matches no pod, would make controllers loop forever. One leaked credential with write access is a full cluster takeover.',
+   v0:{name:'Let every client write straight to the database',code:'db.put("/deployments/web", yaml)   // anyone, any shape',breaks:'No identity, no permissions, no defaults, no validation. A Deployment whose selector does not match its labels is stored, and the ReplicaSet controller keeps creating pods it can never count.'},
+   design:'Put <b>one gatekeeper</b> in front of the store: every request passes the same chain, and the first failing stage rejects it before anything is written.',
+   predict:{q:'Bob may create Deployments, but his manifest has <code>selector: app=web</code> while the pod labels say <code>app=other</code>. Pick <i>selector &ne; labels</i> below. What happens?',opts:['It is stored; the ReplicaSet simply never finds its pods','It is rejected with 422 at validation, and nothing reaches etcd','It is rejected with 403 by RBAC'],ans:1,why:'Bob passes authentication and RBAC, defaults are filled in, then schema validation refuses a selector that does not match the template labels (HTTP 422 Invalid). Nothing is persisted, so no controller ever sees it.'},
+   build:{steps:['<b>Authenticate:</b> map the bearer token or client certificate to a user and groups, or answer 401.','<b>Authorize (RBAC):</b> does any role bound to this user allow <code>verb</code> on <code>resource</code> in this namespace? If not, 403.','<b>Mutating admission:</b> fill defaults and inject fields (for example a sidecar).','<b>Validate</b> the final object (422), then run <b>validating admission</b> (quotas, policies).','<b>Persist</b> with the resourceVersion check (chapter 3), then fan the change out to watchers.'],
+    code:'user = authn(req) or 401\nif !rbac.allows(user, req.verb, req.resource): 403\nobj = mutate(req.obj)            // defaults, injection\nerrs = validate(obj) + admit(obj) // 422 / 403\nif errs: return errs\nreturn store.write(obj)          // 201, or 409 if stale',
+    rule:'Nothing reaches the store without passing <b>every</b> stage, and the API server is the <b>only</b> component that talks to the store.'}},
+  {ask:'Two clients update the same Deployment at the same time. Whose change survives?',
+   why:'Controllers, kubectl and autoscalers all write the same objects concurrently, and 30 controllers polling every object every second would melt the store.',
+   v0:{name:'Read, modify, write back, and poll for changes',code:'obj = get(key); obj.replicas = 5; put(key, obj)\nwhile true: for o in list(all): react(o); sleep(1)',breaks:'Two writers read the same version; the second <code>put</code> silently erases the first (<b>lost update</b>). Polling costs <i>controllers &times; objects</i> reads per second and still reacts up to a second late.'},
+   design:'Version every write with one global <b>revision</b>: updates become compare-and-swap on <code>resourceVersion</code>, and readers <b>stream changes</b> from a revision instead of polling.',
+   predict:{q:'A and B both read the Deployment at resourceVersion 12. A writes first. Then B writes, still sending rv 12. Choose <i>update race (409)</i> and predict B\'s result.',opts:['409 Conflict: B must re-read (now rv 13) and retry','B\'s write wins and A\'s change is lost','The store merges both changes automatically'],ans:0,why:'B\'s write is conditional on rv 12, but the object is now at rv 13, so it is refused. B re-reads, re-applies its change on top of A\'s, and succeeds. No locks, and no lost updates.'},
+   build:{steps:['Keep one global counter <code>rev</code>; every write increments it and stamps the object with <code>resourceVersion = rev</code>.','<b>Conditional update:</b> accept a write only if its <code>resourceVersion</code> equals the stored one, otherwise answer 409.','Keep a history of changes. <b>Watch(fromRev)</b> streams every ADDED / MODIFIED / DELETED after <code>fromRev</code>.','<b>Compaction</b> drops old history; a watch from a compacted revision answers 410 Gone, and the client must LIST again.','Clients build an <b>informer</b>: LIST once, remember rev, WATCH from it, keep a local cache.'],
+    code:'write(obj, expectRv):\n  if store[obj.key].rv != expectRv: return 409\n  rev += 1; obj.rv = rev; store[obj.key] = obj\n  history.append({rev, type, obj}); notify watchers\nwatch(fromRev):\n  if fromRev < compactedRev: return 410\n  stream history after fromRev, then live events',
+    rule:'A write based on a stale version is <b>rejected, never merged silently</b>, and watchers see changes in revision order.'}},
+  {ask:'A pod is deleted, and the "pod deleted" event is lost. Is it ever replaced?',
+   why:'Events get lost: connections drop, controllers restart, nodes reboot. A system that only works when every single event arrives will drift away from what you asked for.',
+   v0:{name:'Edge-triggered handlers: react to each event',code:'onPodDeleted(pod):\n  createPod(pod.template)',breaks:'If the event is missed (watch hiccup, controller restart), the pod is <b>never</b> replaced. If an event is delivered twice, you get one pod too many. Tick <i>lose the watch event</i> below to see the difference.'},
+   design:'Make controllers <b>level-triggered</b>: whatever woke them up, they re-read the current state, compare it with the desired state, and take the smallest step to close the gap.',
+   predict:{q:'Select <i>delete a pod</i> and tick <i>lose the watch event</i>. What happens to the missing replica?',opts:['Nothing: the controller never heard about it','A human has to restart the controller manager','It is recreated on a later reconcile'],ans:2,why:'The ReplicaSet controller does not remember events, it counts pods. The next time it runs for that ReplicaSet (here a periodic resync; in a real cluster typically a re-list after the broken watch) it sees 2 &lt; 3 and creates one. Duplicated events are just as harmless.'},
+   build:{steps:['<b>Informer:</b> LIST + WATCH into a local cache (chapter 3).','On any event, push the <b>object key</b> (not the event) onto a de-duplicating <b>work queue</b>.','<b>Reconcile(key):</b> read desired from the cache, count the observed children, create or delete the difference.','Re-queue with back-off on errors; resync or re-list as a safety net.','Children carry an <code>ownerReference</code> so controllers can find them and garbage collection can delete them.'],
+    code:'on any event for obj: queue.add(ownerKey(obj))\nworker: key = queue.pop()\n  rs   = cache.get(key)\n  pods = cache.pods(ownedBy = key, notTerminating)\n  diff = rs.replicas - len(pods)\n  if diff > 0: create diff pods\n  if diff < 0: delete -diff pods (unready first)',
+    rule:'Reconcile from <b>current state, not from events</b>: running it twice, late or after a missed event gives the same result.'}},
+  {ask:'A new pod needs 200m CPU and an SSD. Which of 120 machines should run it?',
+   why:'Put it on a full node and it gets starved or killed. Ignore labels and taints and a database lands on a disk-less GPU box. Decide badly and some nodes sit idle while others overflow.',
+   v0:{name:'Round-robin over the nodes',code:'node = nodes[i++ % nodes.length]',breaks:'It ignores free capacity, <code>nodeSelector</code> and taints. Pods land on full nodes or on nodes that cannot run them, and you only find out when they fail.'},
+   design:'Separate <b>hard rules</b> from <b>preferences</b>: filter out every node that cannot run the pod, score the ones that can, then bind the pod by writing a single field.',
+   predict:{q:'Web sample, 3 nodes of 2000m CPU, pods request 200m but really use about 20m. Slide <i>Pods to schedule</i> to 36. How many get a node?',opts:['All 36: real usage is tiny','30: the scheduler adds up requests, so pod 31 stays Pending','10: one node at a time is filled first'],ans:1,why:'Filtering compares the sum of <b>requests</b> with the node capacity: 10 &times; 200m fills 2000m on each node. Pods 31 to 36 stay Pending with <i>Insufficient cpu</i>, even though the CPUs are mostly idle.'},
+   build:{steps:['Watch for pods with an empty <code>spec.nodeName</code>.','<b>Filter:</b> drop nodes that are not Ready, have a taint the pod does not tolerate, miss a <code>nodeSelector</code> label, or lack free requested CPU or memory.','<b>Score</b> the survivors: least-allocated (spread), most-allocated (bin-pack), minus a penalty for replicas of the same app.','<b>Bind:</b> write <code>spec.nodeName</code>. If nothing passes, record the reasons ("0/3 nodes available: ...") and retry later.'],
+    code:'feasible = [n for n in nodes if ready(n) and tolerates(pod, n)\n            and matches(pod.nodeSelector, n.labels)\n            and n.free.cpu >= pod.cpu and n.free.mem >= pod.mem]\nif !feasible: pod.status = Unschedulable(reasons); retry\nbest = max(feasible, key = score)\npatch(pod, nodeName = best)',
+    rule:'Never bind a pod to a node where the <b>sum of requests</b> would exceed capacity or a hard constraint fails.'}},
+  {ask:'A pod is bound to node-1. What turns that record into a running, healthy container?',
+   why:'Image pulls fail, apps take seconds to boot, containers crash. The control plane only sees what the node reports, so "started" and "ready to serve" must be reported separately.',
+   v0:{name:'Start the container once and mark it Running',code:'onPodBound(pod):\n  runtime.run(pod.image)\n  setStatus(pod, "Running")',breaks:'A failed pull is never retried, so the pod is silently stuck. And "Running" is reported while the app is still booting, so traffic arrives before it can answer.'},
+   design:'Put an <b>agent on every node</b> that reconciles its own pods: watch the pods bound to me, drive the container runtime toward their spec, and report observed status, including readiness, back to the API server.',
+   predict:{q:'Pick <i>bad image tag</i>. What happens to the pod?',opts:['It stays put and the kubelet keeps retrying the pull','The scheduler moves it to another node','The API server rejects the Deployment: no such image'],ans:0,why:'Neither the API server nor the scheduler looks at registries. The kubelet reports <code>ErrImagePull</code>, then <code>ImagePullBackOff</code>, and retries with an exponentially growing delay. The pod never becomes Ready, so it never receives traffic.'},
+   build:{steps:['Watch pods whose <code>spec.nodeName</code> is this node.','For each one, reconcile through the runtime interface (CRI): pull the image, create and start the container. On failure, retry with exponential back-off.','Report <code>phase</code> (Pending &rarr; Running) and a separate <code>ready</code> condition driven by the readiness probe.','On deletion: SIGTERM, wait the grace period, SIGKILL, then remove the pod object.','Renew the node heartbeat (a Lease) every few seconds (chapter 10).'],
+    code:'for pod in podsBoundTo(me):\n  c = runtime.get(pod)\n  if pod.deleting: stopGracefully(c); continue\n  if !c: try runtime.pull+start(pod) except: backoff(pod)\n  setStatus(pod, phase = c.state, ready = probe(c))',
+    rule:'A pod is reported <b>Ready only after its readiness probe passes</b>, and status always reflects what the node actually observed.'}},
+  {ask:'Pods come and go with new IPs every deploy. How do clients find a working one?',
+   why:'In a single rolling update every pod IP changes. Hard-coded IPs break on the next deploy, and traffic sent to a pod that is still booting or already gone fails.',
+   v0:{name:'Hard-code pod IPs in the client, or DNS round-robin',code:'upstreams = ["10.244.0.2", "10.244.1.2", "10.244.2.2"]',breaks:'The list is stale after every deploy, includes pods that are not ready yet, and DNS caches keep stale answers for minutes.'},
+   design:'Give the service one <b>stable virtual IP</b>, keep a live list of <b>ready</b> pod IPs (Endpoints), and let every node rewrite packets for that virtual IP to one of them.',
+   predict:{q:'During a rolling update, set <i>grace period</i> to <b>0 s</b> and watch the failed counter. Why do some requests fail?',opts:['Some nodes still route to an old pod for a moment after its container has already exited','The Service gets a new ClusterIP during the update','New pods get traffic before they are Ready'],ans:0,why:'Removing the pod from Endpoints and stopping its container happen in parallel, and each node\'s kube-proxy needs a moment to reprogram its rules. With grace 0 the container is gone before every node has caught up. With a 2 s grace period it keeps serving through that lag: 0 failures.'},
+   build:{steps:['A Service is <code>{selector, port, targetPort}</code> plus a stable ClusterIP allocated once.','<b>Endpoints controller:</b> list pods matching the selector that are Running, Ready and not terminating; write their IPs.','<b>kube-proxy</b> on every node watches Endpoints and programs kernel rules: packets to <code>ClusterIP:port</code> are DNAT-ed to a random endpoint.','Apps must drain on SIGTERM: keep serving during the grace period while the rules propagate.'],
+    code:'endpoints(svc) = sorted(p.ip for p in pods\n  if matches(svc.selector, p.labels) and p.ready and !p.deleting)\nkube-proxy, on endpoints change:\n  rules[svc.clusterIP] = endpoints   // DNAT, equal odds',
+    rule:'Only <b>Ready, non-terminating</b> pods are endpoints, and a pod keeps serving until every node has stopped routing to it.'}},
+  {ask:'Ship version 2 to all pods without ever dropping below full capacity. How?',
+   why:'50 deploys a day. Each one must keep serving, must stop by itself if v2 is broken, and must be undoable in seconds.',
+   v0:{name:'Delete all old pods, then create the new ones',code:'scale(oldVersion, 0)\nscale(newVersion, replicas)',breaks:'Downtime between the last old pod stopping and the first new pod becoming Ready. If v2 is broken, <b>everything</b> is down. (This is the <i>Recreate</i> strategy in the capstone.)'},
+   design:'A new pod template gets its <b>own ReplicaSet</b>. The Deployment controller shifts replicas from old to new in steps bounded by <code>maxSurge</code> and <code>maxUnavailable</code>, counting only Ready pods.',
+   predict:{q:'Set maxSurge <b>1</b>, maxUnavailable <b>0</b> and choose <i>broken tag</i>. What does the rollout do?',opts:['Replaces the old pods one by one and the service goes down','Rolls back to the old version automatically','Stalls with 1 unready new pod while all old pods keep serving'],ans:2,why:'With maxUnavailable 0, an old pod is only removed once a new one is Ready, and that never happens. maxSurge 1 caps the extra pods at one. Kubernetes does not roll back on its own: it reports the stall (progress deadline exceeded) and you run <code>rollout undo</code>, which you can tick below.'},
+   build:{steps:['Hash the pod template; the ReplicaSet named <code>deploy-&lt;hash&gt;</code> is the "new" one. Create it if it is missing.','<b>Scale up</b> the new ReplicaSet while the total stays at most <code>replicas + maxSurge</code>.','<b>Scale down</b> old ReplicaSets only while Ready pods stay at least <code>replicas - maxUnavailable</code>.','Run on every change (pod Ready, pod gone): the rollout is just this reconcile repeated.','Keep old ReplicaSets at 0 replicas: rollback means making an old template the new one again.'],
+    code:'new = rsFor(hash(template)) or create(0 replicas)\nup = min(R - new.replicas, R + maxSurge - total)\nscale(new, new.replicas + up)\nbudget = ready - (R - maxUnavailable)\nfor old in oldRS: take = min(old.replicas, budget)\n  scale(old, old.replicas - take); budget -= take',
+    rule:'During a rollout, <b>Ready &ge; replicas &minus; maxUnavailable</b> and <b>total &le; replicas + maxSurge</b> at every moment.'}},
+  {ask:'Traffic jumps 7x at 8 p.m. How many replicas do you need, and when do you scale back?',
+   why:'Too few pods and requests time out; too many and you pay for idle machines. Load moves faster than any human can edit YAML.',
+   v0:{name:'Add one pod above 80% CPU, remove one below 40%',code:'every 15s:\n  if cpu > 80%: replicas += 1\n  if cpu < 40%: replicas -= 1',breaks:'A 7x spike needs many steps of +1, so it stays overloaded for minutes. When load hovers near a threshold the count flaps up and down every period.'},
+   design:'Compute the needed replicas <b>proportionally</b> from utilisation versus a target, scale up quickly, and scale down only to the highest recommendation seen during a stabilisation window.',
+   predict:{q:'4 Ready pods average 90% CPU (of their request) and the target is 60%. What replica count does the HPA ask for?',opts:['5: add one pod per period','6','8: double the replicas under load'],ans:1,why:'desired = ceil(current &times; utilisation / target) = ceil(4 &times; 1.5) = 6. Read the same formula in the caption below as the load changes. Utilisation is measured against the pod <b>request</b>, which is why HPA needs requests set.'},
+   build:{steps:['Every period, read the average CPU of Ready pods and divide by the CPU <b>request</b> to get utilisation.','<code>raw = ceil(current &times; util / target)</code>; ignore changes within a ~10% tolerance.','Clamp to <code>[min, max]</code>; limit how much one step may scale up.','<b>Scale down</b> to the highest recommendation inside the stabilisation window, then write <code>spec.replicas</code>; the Deployment does the rest.'],
+    code:'util = avg(cpuUsage(readyPods)) / cpuRequest\nraw  = ceil(current * util / target)\nif abs(util / target - 1) <= 0.1: raw = current\nwindow.push(raw)\ndesired = raw > current ? raw : max(window)\nscale(deployment, clamp(desired, min, max))',
+    rule:'Scale on a <b>ratio to the target</b>, and never scale down faster than the stabilisation window allows.'}},
+  {ask:'A machine loses power at 3 a.m. How does the cluster notice and heal?',
+   why:'A dead node sends nothing. The control plane cannot tell <i>dead</i> from <i>slow network</i>, and reacting to every blip would reshuffle thousands of pods.',
+   v0:{name:'One missed heartbeat: delete its pods and move them',code:'if now - node.lastBeat > 2s:\n  for pod in podsOn(node): delete(pod)',breaks:'A 3-second network blip reshuffles every pod on the node. A partitioned node that is actually alive keeps running the old copies while new ones start elsewhere.'},
+   design:'Treat silence as <b>suspicion, not death</b>: after a grace period mark the node NotReady and taint it, evict its pods only after a toleration period, and let the normal ReplicaSet loop create replacements.',
+   predict:{q:'Press Play. When do replacements for the dead node\'s pods start?',opts:['As soon as the first heartbeat is missed','After a grace period plus an eviction toleration','Never: an operator has to delete them by hand'],ans:1,why:'Here the node is marked NotReady about 9 s after it dies (8 s grace, checked every second), and its pods are evicted after the toleration you set (6 s by default). With real defaults (tens of seconds of grace plus a 300 s toleration) that is about 5 minutes, which is why critical workloads lower <code>tolerationSeconds</code>.'},
+   build:{steps:['The kubelet renews a heartbeat (Lease) every few seconds.','<b>Node controller:</b> no heartbeat for <code>grace</code> &rarr; mark NotReady and add the <code>unreachable:NoExecute</code> taint.','<b>Taint eviction:</b> pods that do not tolerate the taint longer than <code>tolerationSeconds</code> are marked for deletion.','The ReplicaSet controller sees fewer live pods and creates replacements; the scheduler skips the NotReady node; Endpoints drop the lost pods.','When the node returns, remove the taint; its kubelet cleans up the old containers.'],
+    code:'every 1s, for node in nodes:\n  if now - lastBeat(node) > GRACE and node.ready:\n    node.ready = false; taint(node, unreachable:NoExecute)\n  for pod on NotReady node past tolerationSeconds:\n    markDeleted(pod)   // ReplicaSet loop replaces it\n  if beats again: node.ready = true; untaint(node)',
+    rule:'Only <b>prolonged</b> silence evicts pods, and replacement always goes through the same reconcile loops, never special failure code.'}}
+ ],
+ milestones:[
+  {t:'Versioned object store with watch',test:'Two concurrent updates from the same resourceVersion: exactly one gets 409. A watch from revision N replays every later change in order; from a compacted revision it gets 410.'},
+  {t:'API server in front of it',test:'A viewer creating a Deployment gets 403 and the store revision does not change; a selector that does not match the labels gets 422.'},
+  {t:'Informer, work queue, ReplicaSet controller',test:'Delete a pod: it is recreated. Drop the DELETED event: it is still recreated after the next resync. Kill and restart the controller: no duplicates.'},
+  {t:'Scheduler',test:'A pod never lands on a node failing its nodeSelector or taints; when requests do not fit, it stays Pending with a readable reason.'},
+  {t:'Kubelet with a fake runtime',test:'A pod goes Pending &rarr; Running &rarr; Ready; a bad image shows ErrImagePull then ImagePullBackOff with growing retry delays.'},
+  {t:'Endpoints and kube-proxy',test:'Scale down under constant traffic with a grace period longer than the rule-sync lag: zero failed requests.'},
+  {t:'Deployment controller (rolling update)',test:'Through a whole rollout, Ready never drops below replicas &minus; maxUnavailable and the total never exceeds replicas + maxSurge; a broken image stalls instead of spreading.'},
+  {t:'HPA and node lifecycle',test:'A 7x load step reaches ceil(R &times; util / target) replicas within a few periods; killing a node gets its pods replaced after grace + toleration.'}],
+ capstone:{title:'Put it together: a live cluster',lead:'Everything from the chapters, running at once. Play a scenario, scrub the timeline, tap any component or event to see why it happened, then switch the update strategy to <i>Recreate</i> or kill a worker node.'}
+};
+</script>
+<script>
+Lab.mount(STORY);
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const J=x=>{try{return JSON.stringify(x)}catch{return String(x)}};
+const C=o=>JSON.parse(JSON.stringify(o));
+const pc=i=>`var(--p${((i%8)+8)%8})`,tc=i=>`var(--t${((i%8)+8)%8})`;
+const cmp=(a,b)=>a<b?-1:a>b?1:0;
+const short=(s,n=40)=>{s=String(s);return s.length>n?s.slice(0,n-1)+'…':s};
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+function fnv(s){let h=2166136261;s=String(s);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0}return h>>>0}
+const b36=(n,l)=>n.toString(36).padStart(l,'0').slice(-l);
+const sec=t=>(t/1000).toFixed(1)+'s';
+
+/* =========================================================
+   MINI YAML (maps, lists, scalars, simple flow collections)
+   ========================================================= */
+function scalar(v){
+  v=v.trim();
+  if(v.startsWith('{')&&v.endsWith('}')){const o={};const body=v.slice(1,-1).trim();if(!body)return o;body.split(/,(?![^\[]*\])/).forEach(p=>{const i=p.indexOf(':');o[p.slice(0,i).trim()]=scalar(p.slice(i+1))});return o}
+  if(v.startsWith('[')&&v.endsWith(']')){const body=v.slice(1,-1).trim();return body?body.split(',').map(scalar):[]}
+  if((v.startsWith('"')&&v.endsWith('"'))||(v.startsWith("'")&&v.endsWith("'")))return v.slice(1,-1);
+  if(/^-?\d+$/.test(v))return parseInt(v,10);if(/^-?\d+\.\d+$/.test(v))return parseFloat(v);
+  if(v==='true')return true;if(v==='false')return false;if(v==='null'||v==='~')return null;return v;
+}
+function parseDoc(src){
+  const lines=src.split('\n').map(l=>l.replace(/\s+#.*$/,'').replace(/\s+$/,'')).filter(l=>l.trim()&&!l.trim().startsWith('#')).map(l=>({ind:l.match(/^ */)[0].length,t:l.trim()}));
+  let i=0;
+  const isItem=l=>l.t==='-'||l.t.startsWith('- ');
+  function block(){return isItem(lines[i])?list(lines[i].ind):map(lines[i].ind)}
+  function map(ind){const o={};
+    while(i<lines.length&&lines[i].ind===ind&&!isItem(lines[i])){
+      const m=/^([^:]+?):(?:\s+(.*))?$/.exec(lines[i].t);if(!m)throw new Error('cannot parse line: '+lines[i].t);
+      const k=m[1].trim(),v=m[2]===undefined?'':m[2];i++;
+      if(v===''){if(i<lines.length&&(lines[i].ind>ind||(lines[i].ind===ind&&isItem(lines[i]))))o[k]=block();else o[k]=null}else o[k]=scalar(v);
+    }return o}
+  function list(ind){const a=[];
+    while(i<lines.length&&lines[i].ind===ind&&isItem(lines[i])){
+      const rest=lines[i].t.replace(/^-\s*/,'');
+      if(rest===''){i++;a.push(block())}
+      else if(/^[^:"']+:(\s|$)/.test(rest)){lines[i]={ind:ind+2,t:rest};a.push(map(ind+2))}
+      else{a.push(scalar(rest));i++}
+    }return a}
+  if(!lines.length)return null;return block();
+}
+function parseYAML(text){return text.split(/^---\s*$/m).map(s=>s.trim()).filter(Boolean).map(parseDoc).filter(Boolean)}
+
+/* =========================================================
+   MANIFEST NORMALISATION
+   ========================================================= */
+const qty=(v,kind)=>{if(v==null)return 0;v=String(v);if(kind==='cpu')return v.endsWith('m')?parseInt(v):Math.round(parseFloat(v)*1000);const m=/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|M|G)?$/.exec(v);if(!m)return 0;const n=parseFloat(m[1]);return m[2]==='Gi'?n*1024:m[2]==='Ki'?n/1024:m[2]==='G'?n*953:n};
+const pct=(v,R,up)=>{if(typeof v==='string'&&v.endsWith('%')){const x=parseFloat(v)/100*R;return up?Math.ceil(x):Math.floor(x)}return parseInt(v)||0};
+function normalize(docs){
+  const dep=docs.find(d=>d.kind==='Deployment'),svc=docs.find(d=>d.kind==='Service');
+  if(!dep)throw new Error('The manifest needs a Deployment.');
+  const spec=dep.spec||{},tpl=spec.template||{},ps=tpl.spec||{},cs=(ps.containers||[]);
+  if(!cs.length)throw new Error('Deployment has no containers.');
+  const R=spec.replicas==null?1:spec.replicas,ru=(spec.strategy&&spec.strategy.rollingUpdate)||{};
+  const labels=(tpl.metadata&&tpl.metadata.labels)||{};
+  const d={kind:'Deployment',metadata:{name:dep.metadata.name,labels:dep.metadata.labels||{}},spec:{replicas:R,selector:{matchLabels:(spec.selector&&spec.selector.matchLabels)||labels},
+    strategy:{maxSurge:pct(ru.maxSurge==null?'25%':ru.maxSurge,R,true),maxUnavailable:pct(ru.maxUnavailable==null?'25%':ru.maxUnavailable,R,false)},
+    template:{metadata:{labels},spec:{containers:cs.map(c=>({name:c.name,image:c.image,cpu:qty(c.resources&&c.resources.requests&&c.resources.requests.cpu,'cpu'),mem:qty(c.resources&&c.resources.requests&&c.resources.requests.memory,'mem'),readyDelay:c.readinessProbe?(((c.readinessProbe.initialDelaySeconds)==null?2:c.readinessProbe.initialDelaySeconds)*1000):0})),
+      nodeSelector:ps.nodeSelector||{},tolerations:ps.tolerations||[],graceMs:(ps.terminationGracePeriodSeconds==null?2:Math.min(ps.terminationGracePeriodSeconds,5))*1000}}}};
+  let s=null;if(svc){const p=((svc.spec||{}).ports||[{port:80}])[0];s={kind:'Service',metadata:{name:svc.metadata.name},spec:{selector:(svc.spec||{}).selector||labels,port:p.port||80,targetPort:p.targetPort||p.port||80,clusterIP:'10.96.'+(fnv(svc.metadata.name)%200)+'.'+(fnv(svc.metadata.name+'x')%250)}}}
+  return{dep:d,svc:s,raw:dep};
+}
+const SAMPLES={
+web:`apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    app: web
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: nginx:1.25
+        resources:
+          requests:
+            cpu: 200m
+            memory: 128Mi
+        readinessProbe:
+          initialDelaySeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  selector:
+    app: web
+  ports:
+  - port: 80
+    targetPort: 8080
+`,
+api:`apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: api
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      nodeSelector:
+        disk: ssd
+      containers:
+      - name: api
+        image: myorg/api:2.4.1
+        resources:
+          requests:
+            cpu: 700m
+            memory: 1Gi
+        readinessProbe:
+          initialDelaySeconds: 4
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  selector:
+    app: api
+  ports:
+  - port: 443
+    targetPort: 8443
+`,
+bad:`apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: worker
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+      - name: worker
+        image: myorg/worker:bad-tag
+        resources:
+          requests:
+            cpu: 300m
+            memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+spec:
+  selector:
+    app: worker
+  ports:
+  - port: 9000
+`};
+
+/* =========================================================
+   SCHEDULER ALGORITHM (shared: pure + inside the simulator)
+   ========================================================= */
+function filterScore(nodes,bound,pod,policy){
+  return nodes.map(n=>{
+    const fails=[];
+    if(!n.ready)fails.push('node not ready');
+    (n.taints||[]).forEach(t=>{if(['NoSchedule','NoExecute'].includes(t.effect)&&!(pod.tolerations||[]).some(x=>x.key===t.key))fails.push(`taint ${t.key}:${t.effect}`)});
+    Object.entries(pod.nodeSelector||{}).forEach(([k,v])=>{if(n.labels[k]!==v)fails.push(`nodeSelector ${k}=${v}`)});
+    const mine=bound.filter(b=>b.node===n.name),used={cpu:mine.reduce((a,b)=>a+b.cpu,0),mem:mine.reduce((a,b)=>a+b.mem,0)};
+    if(used.cpu+pod.cpu>n.cpu)fails.push(`Insufficient cpu (${n.cpu-used.cpu}m free, needs ${pod.cpu}m)`);
+    if(used.mem+pod.mem>n.mem)fails.push(`Insufficient memory (${Math.round(n.mem-used.mem)}Mi free, needs ${pod.mem}Mi)`);
+    const free=((n.cpu-used.cpu-pod.cpu)/n.cpu+(n.mem-used.mem-pod.mem)/n.mem)/2*100;
+    const same=mine.filter(b=>b.owner===pod.owner).length;
+    const score=fails.length?null:(policy.pack?100-free:free)-(policy.spread?same*8:0);
+    return{name:n.name,fails,score,used,free,same};
+  });
+}
+function pickNode(rows){const ok=rows.filter(r=>!r.fails.length).sort((a,b)=>b.score-a.score||cmp(a.name,b.name));return ok.length?ok[0].name:null}
+
+/* =========================================================
+   CLUSTER SIMULATOR: etcd + API server + controllers + scheduler + kubelet + proxy
+   ========================================================= */
+const MATCH=(sel,lab)=>Object.entries(sel||{}).every(([k,v])=>lab&&lab[k]===v);
+class Sim{
+  constructor(o){
+    this.o=o;this.t=0;this.q=[];this.k=0;this.log=[];this.kv=new Map();this.rev=0;this.pend=new Set();this.uidn=1;this.cn=0;
+    this.hb={};this.alive={};this.imgs={};this.kl={};this.cont={};this.rules={};this.ruleLog=[];this.schedLog=[];this.wlog=[];this.snaps=[];this.ipn={};this.hpaLog=[];this.recon=[];this.drop=null;this.hpa=null;this.evictLog=[];
+    o.nodes.forEach((n,i)=>{this.alive[n.name]=true;this.hb[n.name]=0;this.imgs[n.name]=new Set();this.rules[n.name]=[];this.ipn[n.name]=2;
+      this.write({kind:'Node',metadata:{name:n.name,labels:{'kubernetes.io/hostname':n.name,...n.labels}},spec:{taints:C(n.taints||[]),cpu:n.cpu,mem:n.mem,idx:i},status:{ready:true}},'create','kubelet/'+n.name,null,true);
+      this.heartbeat(n.name)});
+    this.at(1000,()=>this.nodeCtl());this.at(250,()=>this.snap());this.at(o.resync||6000,()=>this.resync());
+  }
+  at(dt,fn){this.q.push({t:this.t+dt,k:this.k++,fn})}
+  run(until){while(this.q.length){let bi=0;for(let i=1;i<this.q.length;i++){const a=this.q[i],b=this.q[bi];if(a.t<b.t||(a.t===b.t&&a.k<b.k))bi=i}const e=this.q[bi];if(e.t>until)break;this.q.splice(bi,1);this.t=e.t;e.fn()}this.t=until}
+  emit(from,to,msg,kind='call'){this.log.push({t:this.t,from,to,msg,kind})}
+  key(kind,name){return`/registry/${kind.toLowerCase()}${kind.endsWith('s')?'':'s'}/${name}`}
+  get(kind,name){const e=this.kv.get(this.key(kind,name));return e?C(e.obj):null}
+  list(kind){const pre=`/registry/${kind.toLowerCase()}${kind.endsWith('s')?'':'s'}/`;return[...this.kv.entries()].filter(([k])=>k.startsWith(pre)).map(([k,e])=>C(e.obj))}
+  write(obj,verb,who,expectRv,quiet){
+    const k=this.key(obj.kind,obj.metadata.name),cur=this.kv.get(k);
+    if(verb==='create'&&cur)return{err:409};
+    if(expectRv!=null&&(!cur||cur.obj.metadata.rv!==expectRv))return{err:409};
+    this.rev++;obj.metadata.rv=this.rev;if(!obj.metadata.uid)obj.metadata.uid='uid-'+(this.uidn++);if(!obj.metadata.createdRv)obj.metadata.createdRv=this.rev;
+    this.kv.set(k,{obj:C(obj)});
+    if(!quiet){this.emit(who,'apiserver',`${verb==='create'?'POST':'PUT'} ${obj.kind}/${obj.metadata.name}`);this.emit('apiserver','etcd',`write ${k.replace('/registry/','')} → rev ${this.rev}`,'store')}
+    const ev={type:cur?'MODIFIED':'ADDED',obj:C(obj)};this.at(4,()=>this.dispatch(ev));return{ok:true,obj:C(obj)};
+  }
+  remove(kind,name,who){const k=this.key(kind,name),cur=this.kv.get(k);if(!cur)return;this.rev++;this.kv.delete(k);this.emit(who,'apiserver',`DELETE ${kind}/${name}`);this.emit('apiserver','etcd',`delete ${k.replace('/registry/','')} → rev ${this.rev}`,'store');const o=C(cur.obj);o.metadata.rv=this.rev;this.at(4,()=>this.dispatch({type:'DELETED',obj:o}))}
+  patch(kind,name,fn,who,quiet){const o=this.get(kind,name);if(!o)return null;fn(o);const r=this.write(o,'update',who,o.metadata.rv,quiet);return r.ok?r.obj:null}
+  enq(ctrl,key){const id=ctrl+'|'+key;if(this.pend.has(id))return;this.pend.add(id);const d=ctrl.startsWith('kube-proxy')?800:ctrl.startsWith('kubelet')?5:2;this.at(d,()=>{this.pend.delete(id);this.handle(ctrl,key)})}
+  dispatch(ev){
+    const o=ev.obj,k=o.kind,n=o.metadata.name;this.wlog.push({t:this.t,type:ev.type,kind:k,name:n,rv:o.metadata.rv});
+    const own=(o.metadata.ownerRefs||[])[0];
+    if(k==='Deployment')this.enq('deployment-controller',n);
+    if(k==='ReplicaSet'){this.enq('replicaset-controller',n);if(own)this.enq('deployment-controller',own.name)}
+    if(k==='Pod'){
+      const dropped=this.drop&&this.t>=this.drop.from&&this.t<this.drop.until&&ev.type==='DELETED';
+      if(own&&!dropped)this.enq('replicaset-controller',own.name);else if(own&&dropped)this.emit('informer','replicaset-controller','⚠ watch event DELETED Pod/'+n+' LOST (connection hiccup)','lost');
+      if(!o.spec.nodeName&&o.status.phase==='Pending'&&!o.metadata.deletionTs)this.enq('scheduler',n);
+      if(o.spec.nodeName)this.enq('kubelet:'+o.spec.nodeName,n);
+      this.list('Service').forEach(s=>{if(MATCH(s.spec.selector,o.metadata.labels))this.enq('endpoints-controller',s.metadata.name)});
+      if(own&&!dropped){const rs=this.get('ReplicaSet',own.name);if(rs&&rs.metadata.ownerRefs&&rs.metadata.ownerRefs[0])this.enq('deployment-controller',rs.metadata.ownerRefs[0].name)}
+    }
+    if(k==='Service')this.enq('endpoints-controller',n);
+    if(k==='Endpoints')this.o.nodes.forEach(nd=>this.enq('kube-proxy:'+nd.name,n));
+  }
+  resync(){this.list('ReplicaSet').forEach(r=>this.enq('replicaset-controller',r.metadata.name));this.list('Deployment').forEach(d=>this.enq('deployment-controller',d.metadata.name));this.list('Service').forEach(s=>this.enq('endpoints-controller',s.metadata.name));this.at(this.o.resync||6000,()=>this.resync())}
+  handle(ctrl,key){
+    if(ctrl==='deployment-controller')this.syncDeployment(key);
+    else if(ctrl==='replicaset-controller')this.syncRS(key);
+    else if(ctrl==='scheduler')this.schedule(key);
+    else if(ctrl.startsWith('kubelet:'))this.kubelet(ctrl.slice(8),key);
+    else if(ctrl==='endpoints-controller')this.syncEndpoints(key);
+    else if(ctrl.startsWith('kube-proxy:'))this.proxySync(ctrl.slice(11),key);
+  }
+  owned(o,kind,name){return(o.metadata.ownerRefs||[]).some(r=>r.kind===kind&&r.name===name)}
+  /* ---- Deployment controller (rolling update) ---- */
+  syncDeployment(name){
+    const d=this.get('Deployment',name);if(!d)return;
+    const tpl=d.spec.template,hash=b36(fnv(J(tpl)),8).slice(0,8),rsName=`${name}-${hash}`;
+    const all=this.list('ReplicaSet').filter(r=>this.owned(r,'Deployment',name)),nw=all.find(r=>r.metadata.name===rsName),old=all.filter(r=>r!==nw).sort((a,b)=>a.metadata.createdRv-b.metadata.createdRv);
+    const R=d.spec.replicas,surge=d.spec.strategy.maxSurge,unav=d.spec.strategy.maxUnavailable,sumOf=(xs,f)=>xs.reduce((a,x)=>a+f(x),0);
+    this.recon.push({t:this.t,ctrl:'deployment-controller',key:name,obs:`RS ${all.length} (new ${nw?nw.spec.replicas:'-'}, old ${sumOf(old,x=>x.spec.replicas)}) ready ${sumOf(all,x=>x.status.readyReplicas||0)}`,des:`${R} replicas, new template ${hash}`,act:''});
+    const rec=this.recon[this.recon.length-1];
+    if(!nw){const initial=Math.max(0,Math.min(R,R+surge-sumOf(old,x=>x.spec.replicas)));
+      const rs={kind:'ReplicaSet',metadata:{name:rsName,labels:{...tpl.metadata.labels,'pod-template-hash':hash},ownerRefs:[{kind:'Deployment',name}],revision:all.length+1},spec:{replicas:initial,selector:d.spec.selector,template:C(tpl)},status:{replicas:0,readyReplicas:0}};
+      this.write(rs,'create','deployment-controller');rec.act=`create ReplicaSet ${rsName} with ${initial} replica(s)`;return}
+    const total=sumOf(all,x=>x.spec.replicas),maxTotal=R+surge;let acts=[];
+    let up=Math.min(R-nw.spec.replicas,Math.max(0,maxTotal-total));if(up<0)up=Math.min(0,R-nw.spec.replicas);
+    if(up!==0){this.patch('ReplicaSet',nw.metadata.name,o=>o.spec.replicas=nw.spec.replicas+up,'deployment-controller');acts.push(`scale new RS ${nw.spec.replicas} → ${nw.spec.replicas+up} (surge limit ${maxTotal})`)}
+    const nwNow=Math.max(nw.spec.replicas+up,0),newUnavail=Math.max(0,nwNow-(nw.status.readyReplicas||0)),totalNow=total+up;let budget=Math.max(0,totalNow-(R-unav)-newUnavail);
+    for(const o of old){if(o.spec.replicas===0)continue;const unready=Math.max(0,o.spec.replicas-(o.status.readyReplicas||0));const dec=Math.min(o.spec.replicas,unready+budget);if(dec<=0)continue;budget-=Math.max(0,dec-unready);this.patch('ReplicaSet',o.metadata.name,x=>x.spec.replicas=o.spec.replicas-dec,'deployment-controller');acts.push(`scale old RS ${o.metadata.name.slice(-6)} ${o.spec.replicas} → ${o.spec.replicas-dec} (minAvailable ${R-unav})`)}
+    const ready=sumOf(all,x=>x.status.readyReplicas||0),st={replicas:sumOf(all,x=>x.status.replicas||0),updated:nw.status.replicas||0,ready,available:ready};
+    if(J(st)!==J(d.status||{})){this.patch('Deployment',name,o=>o.status=st,'deployment-controller',true)}
+    rec.act=acts.join('; ')||'no change';
+  }
+  /* ---- ReplicaSet controller ---- */
+  syncRS(name){
+    const rs=this.get('ReplicaSet',name);if(!rs)return;
+    const pods=this.list('Pod').filter(p=>this.owned(p,'ReplicaSet',name)&&!p.metadata.deletionTs),want=rs.spec.replicas,diff=want-pods.length;
+    const rec={t:this.t,ctrl:'replicaset-controller',key:name,obs:`${pods.length} active pod(s)`,des:`${want} replica(s)`,act:''};this.recon.push(rec);
+    if(diff>0){const names=[];for(let i=0;i<diff;i++){const pn=`${name}-${b36(fnv(name+':'+(++this.cn)),5)}`;names.push(pn);
+      const ps=C(rs.spec.template.spec),c=ps.containers[0];
+      this.write({kind:'Pod',metadata:{name:pn,labels:C(rs.spec.template.metadata.labels),ownerRefs:[{kind:'ReplicaSet',name}]},spec:{image:c.image,cpu:c.cpu,mem:c.mem,readyDelay:c.readyDelay,nodeSelector:ps.nodeSelector,tolerations:ps.tolerations,graceMs:ps.graceMs,nodeName:null},status:{phase:'Pending',ready:false,reason:'Pending'}},'create','replicaset-controller')}
+      rec.act=`create ${diff} pod(s): ${names.map(n=>n.slice(-5)).join(', ')}`}
+    else if(diff<0){const victims=pods.slice().sort((a,b)=>((a.spec.nodeName?1:0)-(b.spec.nodeName?1:0))||((a.status.ready?1:0)-(b.status.ready?1:0))||(b.metadata.createdRv-a.metadata.createdRv)).slice(0,-diff);victims.forEach(p=>this.markDelete(p.metadata.name,'replicaset-controller'));rec.act=`delete ${-diff} pod(s): ${victims.map(p=>p.metadata.name.slice(-5)).join(', ')}`}
+    else rec.act='no change';
+    const act=this.list('Pod').filter(p=>this.owned(p,'ReplicaSet',name)&&!p.metadata.deletionTs),st={replicas:act.length,readyReplicas:act.filter(p=>p.status.ready).length};
+    if(J(st)!==J(rs.status||{}))this.patch('ReplicaSet',name,o=>o.status=st,'replicaset-controller',true);
+  }
+  markDelete(name,who){const p=this.get('Pod',name);if(!p)return;if(!p.spec.nodeName||!this.alive[p.spec.nodeName]&&false){this.remove('Pod',name,who);return}this.patch('Pod',name,o=>o.metadata.deletionTs=this.t,who)}
+  /* ---- scheduler ---- */
+  nodeStates(){return this.list('Node').map(n=>({name:n.metadata.name,cpu:n.spec.cpu,mem:n.spec.mem,labels:n.metadata.labels,taints:n.spec.taints,ready:n.status.ready}))}
+  boundPods(){return this.list('Pod').filter(p=>p.spec.nodeName&&!p.metadata.deletionTs).map(p=>({node:p.spec.nodeName,cpu:p.spec.cpu,mem:p.spec.mem,owner:(p.metadata.ownerRefs||[{}])[0].name}))}
+  schedule(name){
+    const p=this.get('Pod',name);if(!p||p.spec.nodeName||p.metadata.deletionTs||p.status.phase!=='Pending')return;
+    const pod={cpu:p.spec.cpu,mem:p.spec.mem,nodeSelector:p.spec.nodeSelector,tolerations:p.spec.tolerations,owner:(p.metadata.ownerRefs||[{}])[0].name};
+    const rows=filterScore(this.nodeStates(),this.boundPods(),pod,this.o.policy||{spread:true}),pick=pickNode(rows);
+    this.schedLog.push({t:this.t,pod:name,rows,chosen:pick});
+    if(!pick){const msg=`0/${rows.length} nodes available: `+Object.entries(rows.flatMap(r=>r.fails.map(f=>f.replace(/ \(.*\)/,''))).reduce((a,f)=>(a[f]=(a[f]||0)+1,a),{})).map(([f,n])=>n+' '+f).join(', ');
+      if(p.status.reason!=='Unschedulable'||p.status.message!==msg){this.emit('scheduler','apiserver',`Pod ${name.slice(-5)} Unschedulable: ${msg}`,'status');this.patch('Pod',name,o=>{o.status.reason='Unschedulable';o.status.message=msg},'scheduler',true)}this.at(3000,()=>this.enq('scheduler',name));return}
+    this.emit('scheduler','scheduler',`filter+score ${rows.length} nodes → ${pick} (score ${rows.find(r=>r.name===pick).score.toFixed(0)})`,'self');
+    this.patch('Pod',name,o=>{o.spec.nodeName=pick;o.status.reason='Scheduled'},'scheduler');
+  }
+  /* ---- kubelet ---- */
+  kubelet(node,name){
+    if(!this.alive[node])return;const p=this.get('Pod',name),st=this.kl[name],who='kubelet/'+node;
+    if(!p)return;if(p.spec.nodeName!==node)return;
+    if(p.metadata.deletionTs){if(!st||!st.killing){this.kl[name]={...(st||{}),killing:true};this.emit(who,'runtime',`SIGTERM ${name.slice(-5)} (grace ${p.spec.graceMs} ms)`);
+      this.at(p.spec.graceMs,()=>{if(!this.alive[node])return;if(this.cont[name]&&this.cont[name].to==null)this.cont[name].to=this.t;this.emit(who,'runtime',`container ${name.slice(-5)} stopped`);this.remove('Pod',name,who)})}return}
+    if(st&&st.started)return;this.kl[name]={started:true};
+    const mk=(f,ms,fn)=>this.at(ms,()=>{if(!this.alive[node])return;const q=this.get('Pod',name);if(!q||q.metadata.deletionTs)return;fn(q)});
+    this.patch('Pod',name,o=>{o.status.reason='ContainerCreating'},who,true);
+    const bad=/bad/.test(p.spec.image);
+    if(bad){const attempt=(n)=>{this.emit(who,'runtime',`pull ${p.spec.image} → manifest unknown`,'status');this.patch('Pod',name,o=>{o.status.reason=n===0?'ErrImagePull':'ImagePullBackOff'},who);mk(null,Math.min(20000,3000*Math.pow(2,n)),()=>attempt(n+1))};mk(null,1200,()=>attempt(0));return}
+    const pull=this.imgs[node].has(p.spec.image)?100:1400+(fnv(p.spec.image)%600);
+    this.emit(who,'runtime',this.imgs[node].has(p.spec.image)?`image ${p.spec.image} already on node`:`pull image ${p.spec.image}`);
+    mk(null,pull,()=>{this.imgs[node].add(p.spec.image);this.emit(who,'runtime',`CRI create+start container for ${name.slice(-5)}`);
+      mk(null,300,()=>{const ip=`10.244.${this.get('Node',node).spec.idx}.${this.ipn[node]++}`;this.patch('Pod',name,o=>{o.status.phase='Running';o.status.podIP=ip;o.status.reason='Started';o.status.startedAt=this.t},who);this.cont[name]={from:this.t,to:null,node};
+        mk(null,p.spec.readyDelay,()=>{this.emit(who,'apiserver',`readiness probe passed → Pod ${name.slice(-5)} Ready`,'status');this.patch('Pod',name,o=>{o.status.ready=true;o.status.reason='Ready'},who)})})});
+  }
+  /* ---- endpoints controller + kube-proxy ---- */
+  syncEndpoints(name){
+    const s=this.get('Service',name);if(!s)return;
+    const addrs=this.list('Pod').filter(p=>MATCH(s.spec.selector,p.metadata.labels)&&p.status.phase==='Running'&&p.status.ready&&!p.metadata.deletionTs).map(p=>p.status.podIP).sort();
+    const cur=this.get('Endpoints',name);this.recon.push({t:this.t,ctrl:'endpoints-controller',key:name,obs:`${addrs.length} ready pod(s)`,des:'endpoints = ready pods',act:cur&&J(cur.spec.addrs)===J(addrs)?'no change':`update endpoints [${addrs.join(', ')}]`});
+    if(cur&&J(cur.spec.addrs)===J(addrs))return;
+    if(!cur)this.write({kind:'Endpoints',metadata:{name},spec:{addrs}},'create','endpoints-controller');else this.patch('Endpoints',name,o=>o.spec.addrs=addrs,'endpoints-controller');
+  }
+  proxySync(node,name){if(!this.alive[node])return;const e=this.get('Endpoints',name);if(!e)return;this.rules[node]=e.spec.addrs.slice();this.ruleLog.push({t:this.t,node,addrs:e.spec.addrs.slice()});this.emit('kube-proxy/'+node,'kube-proxy/'+node,`programmed iptables: ${e.spec.addrs.length} endpoint(s)`,'self')}
+  /* ---- node lifecycle ---- */
+  heartbeat(n){this.at(2000,()=>{if(this.alive[n]){this.hb[n]=this.t;this.heartbeat(n)}})}
+  nodeCtl(){
+    this.o.nodes.forEach(n=>{const nd=this.get('Node',n.name);if(!nd)return;const stale=this.t-this.hb[n.name]>this.o.nodeGrace;
+      if(stale&&nd.status.ready){this.patch('Node',n.name,o=>{o.status.ready=false;o.spec.taints.push({key:'node.kubernetes.io/unreachable',effect:'NoExecute'})},'node-controller');this.emit('node-controller','apiserver',`node ${n.name} NotReady (no heartbeat for ${sec(this.t-this.hb[n.name])}) + taint unreachable:NoExecute`,'status');
+        this.at(this.o.evictAfter,()=>{const n2=this.get('Node',n.name);if(n2&&!n2.status.ready){const ps=this.list('Pod').filter(p=>p.spec.nodeName===n.name&&!p.metadata.deletionTs);this.evictLog.push({t:this.t,node:n.name,pods:ps.length});this.emit('node-controller','apiserver',`evict ${ps.length} pod(s) from ${n.name} (toleration expired)`,'status');ps.forEach(p=>this.patch('Pod',p.metadata.name,o=>o.metadata.deletionTs=this.t,'node-controller'))}})}
+      if(!stale&&!nd.status.ready){this.patch('Node',n.name,o=>{o.status.ready=true;o.spec.taints=o.spec.taints.filter(t=>t.key!=='node.kubernetes.io/unreachable')},'node-controller');this.emit('node-controller','apiserver',`node ${n.name} Ready again`,'status')}});
+    this.at(1000,()=>this.nodeCtl());
+  }
+  killNode(n){this.alive[n]=false;this.emit('chaos',n,`node ${n} goes down (kubelet stops, containers die)`,'lost');Object.entries(this.cont).forEach(([p,c])=>{if(c.node===n&&c.to==null)c.to=this.t})}
+  reviveNode(n){this.alive[n]=true;this.hb[n]=this.t;this.emit('chaos',n,`node ${n} is back`,'self');this.heartbeat(n);this.list('Pod').filter(p=>p.spec.nodeName===n).forEach(p=>this.enq('kubelet:'+n,p.metadata.name))}
+  /* ---- HPA ---- */
+  startHPA(h){this.hpa=h;this.at(h.period,()=>this.hpaTick())}
+  hpaTick(){
+    const h=this.hpa,d=this.get('Deployment',h.dep);if(!d)return;
+    const pods=this.list('Pod').filter(p=>MATCH(d.spec.selector.matchLabels,p.metadata.labels)&&p.status.phase==='Running'&&p.status.ready&&!p.metadata.deletionTs),ready=pods.length,cur=d.spec.replicas;
+    const req=d.spec.template.spec.containers[0].cpu,load=h.load(this.t),use=ready?load/ready:0,util=ready?use/req*100:0;
+    let raw=ready?Math.ceil(cur*util/h.target):cur;if(Math.abs(util/h.target-1)<=0.1)raw=cur;
+    raw=clamp(raw,h.min,h.max);this.hpaWin=(this.hpaWin||[]);this.hpaWin.push({t:this.t,v:raw});this.hpaWin=this.hpaWin.filter(x=>x.t>=this.t-h.stab);
+    let des=raw;if(raw<cur)des=Math.max(...this.hpaWin.map(x=>x.v),raw);if(raw>cur)des=Math.min(raw,Math.max(cur*2,cur+4));
+    des=clamp(des,h.min,h.max);
+    this.hpaLog.push({t:this.t,load,ready,cur,util,raw,des});
+    if(des!==cur){this.emit('hpa','apiserver',`scale Deployment ${cur} → ${des} (cpu ${util.toFixed(0)}% vs target ${h.target}%)`,'status');this.patch('Deployment',h.dep,o=>o.spec.replicas=des,'hpa')}
+    this.at(h.period,()=>this.hpaTick());
+  }
+  /* ---- snapshots ---- */
+  snap(){
+    const pods=this.list('Pod').map(p=>({name:p.metadata.name,node:p.spec.nodeName,rs:(p.metadata.ownerRefs||[{}])[0].name,phase:p.status.phase,ready:!!p.status.ready,reason:p.status.reason,term:!!p.metadata.deletionTs,ip:p.status.podIP}));
+    const rs=this.list('ReplicaSet').map(r=>({name:r.metadata.name,desired:r.spec.replicas,ready:r.status.readyReplicas||0,have:r.status.replicas||0,rev:r.metadata.revision}));
+    const ep=(this.get('Endpoints',this.o.svcName)||{spec:{addrs:[]}}).spec.addrs.length;
+    this.snaps.push({t:this.t,pods,rs,ep,nodes:this.list('Node').map(n=>({name:n.metadata.name,ready:n.status.ready,alive:this.alive[n.metadata.name]})),dep:(this.get('Deployment',this.o.depName)||{spec:{replicas:0}}).spec.replicas});
+    this.at(250,()=>this.snap());
+  }
+}
+/* ================= scenarios (cached) ================= */
+const OPT={ctrlAct:'delete',dropWatch:false,ssel:'fill',srep:8,spolicy:'spread',ssel2:'',lcase:'normal',rcase:'good',rsurge:-1,runav:-1,rback:false,
+  tgrace:2,hload:'spike',htarget:60,hmin:2,hmax:12,hstab:20,nfail:0,nevict:6,nrecover:false,preq:'valid',econf:'conflict',ecompact:6,hT:0.5};
+let S=null;const _sc=new Map();
+function nodeList(){
+  const n=+$('#nn').value,labels=i=>({zone:['a','b','c','a','b'][i],...(i===0?{disk:'ssd'}:{}),...(i===1?{disk:'ssd'}:{})});
+  return Array.from({length:n},(_,i)=>({name:'node-'+i,cpu:2000,mem:4096,labels:labels(i),taints:($('#taint').checked&&i===n-1)?[{key:'dedicated',value:'gpu',effect:'NoSchedule'}]:[]}));
+}
+function newSim(extra={}){
+  const nodes=nodeList(),sim=new Sim({nodes,svcName:S.svc?S.svc.metadata.name:'',depName:S.dep.metadata.name,nodeGrace:8000,evictAfter:OPT.nevict*1000,resync:6000,policy:{spread:true},...extra});
+  const dep=C(S.dep);dep.spec.template.spec.graceMs=OPT.tgrace*1000;
+  sim.write(dep,'create','kubectl');if(S.svc)sim.write(C(S.svc),'create','kubectl');return sim;
+}
+function cached(key,fn){const k=key+'|'+S.key;if(_sc.has(k))return _sc.get(k);const v=fn();_sc.set(k,v);if(_sc.size>14)_sc.delete(_sc.keys().next().value);return v}
+const simApply=()=>cached('apply',()=>{const s=newSim();s.run(16000);return s});
+function simRollout(){return cached('rollout'+OPT.rcase+OPT.rsurge+OPT.runav+OPT.rback+OPT.tgrace,()=>{
+  const s=newSim();s.run(14000);const d=s.get('Deployment',S.dep.metadata.name);
+  if(OPT.rsurge>=0||OPT.runav>=0)s.patch('Deployment',d.metadata.name,o=>{if(OPT.rsurge>=0)o.spec.strategy.maxSurge=OPT.rsurge;if(OPT.runav>=0)o.spec.strategy.maxUnavailable=OPT.runav},'kubectl');
+  const img=OPT.rcase==='bad'?d.spec.template.spec.containers[0].image.split(':')[0]+':bad-v3':d.spec.template.spec.containers[0].image.split(':')[0]+':v2';
+  s.at(100,()=>{s.emit('kubectl','apiserver',`kubectl set image → ${img}`);s.patch('Deployment',d.metadata.name,o=>o.spec.template.spec.containers[0].image=img,'kubectl')});
+  if(OPT.rback)s.at(18000,()=>{s.emit('kubectl','apiserver','kubectl rollout undo');s.patch('Deployment',d.metadata.name,o=>o.spec.template.spec.containers[0].image=d.spec.template.spec.containers[0].image,'kubectl')});
+  s.run(14000+55000);s.rolloutStart=14000;return s})}
+function simNodeFail(){return cached('nf'+OPT.nfail+OPT.nevict+OPT.nrecover+OPT.tgrace,()=>{
+  const s=newSim();s.run(14000);const names=nodeList().map(n=>n.name);const pods=s.list('Pod');const cnt={};pods.forEach(p=>cnt[p.spec.nodeName]=(cnt[p.spec.nodeName]||0)+1);
+  const victim=names[Math.min(OPT.nfail,names.length-1)]||Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
+  s.victim=victim;s.at(100,()=>s.killNode(victim));if(OPT.nrecover)s.at(100+30000,()=>s.reviveNode(victim));s.run(14000+55000);s.failAt=14100;return s})}
+function simHPA(){return cached('hpa'+OPT.hload+OPT.htarget+OPT.hmin+OPT.hmax+OPT.hstab+S.dep.spec.template.spec.containers[0].cpu,()=>{
+  const req=S.dep.spec.template.spec.containers[0].cpu,base=req*1.2,prof={spike:t=>t<20000?base:t<60000?base*7:base,ramp:t=>base*(1+Math.min(6,Math.max(0,(t-15000)/12000))),steady:t=>base*2};
+  const s=newSim();s.write({kind:'HPA',metadata:{name:'hpa'},spec:{}},'create','kubectl',null,true);s.run(8000);
+  s.startHPA({dep:S.dep.metadata.name,period:3000,min:OPT.hmin,max:OPT.hmax,target:OPT.htarget,stab:OPT.hstab*1000,load:t=>prof[OPT.hload](t)});s.run(110000);return s})}
+function simCtrl(){return cached('ctrl'+OPT.ctrlAct+OPT.dropWatch,()=>{
+  const s=newSim();s.run(14000);s.mark=s.t;const d=S.dep.metadata.name,pods=s.list('Pod').filter(p=>p.spec.nodeName);const rsn=s.list('ReplicaSet')[0].metadata.name;
+  if(OPT.dropWatch)s.drop={from:14000,until:14400};
+  if(OPT.ctrlAct==='delete'){const v=pods[0].metadata.name;s.at(100,()=>{s.emit('chaos','apiserver',`kubectl delete pod ${v.slice(-5)} --force`);s.remove('Pod',v,'kubectl')})}
+  else if(OPT.ctrlAct==='scale'){s.at(100,()=>{s.emit('kubectl','apiserver',`kubectl scale --replicas=${S.dep.spec.replicas+2}`);s.patch('Deployment',d,o=>o.spec.replicas=S.dep.spec.replicas+2,'kubectl')})}
+  else{s.at(100,()=>{s.emit('kubectl','apiserver','kubectl edit: set replicas back to '+Math.max(1,S.dep.spec.replicas-1));s.patch('Deployment',d,o=>o.spec.replicas=Math.max(1,S.dep.spec.replicas-1),'kubectl')})}
+  s.run(14000+14000);return s})}
+function simLife(){return cached('life'+OPT.lcase,()=>{
+  const nodes=nodeList(),dep=C(S.dep);dep.spec.replicas=1;dep.spec.strategy={maxSurge:1,maxUnavailable:0};
+  const c=dep.spec.template.spec.containers[0];if(OPT.lcase==='bad')c.image=c.image.split(':')[0]+':bad-tag';if(OPT.lcase==='slow')c.readyDelay=9000;if(OPT.lcase==='normal'&&!c.readyDelay)c.readyDelay=3000;
+  const s=new Sim({nodes,svcName:S.svc?S.svc.metadata.name:'',depName:dep.metadata.name,nodeGrace:8000,evictAfter:6000,resync:6000,policy:{spread:true}});s.write(dep,'create','kubectl');if(S.svc)s.write(C(S.svc),'create','kubectl');s.run(30000);return s})}
+
+/* ================= build ================= */
+function build(){
+  const o={};
+  const text=$('#src').value;
+  try{const docs=parseYAML(text);const n=normalize(docs);o.dep=n.dep;o.svc=n.svc;o.docs=docs}catch(e){o.error='Manifest error: '+e.message;return o}
+  o.key=text+'|'+$('#nn').value+'|'+$('#taint').checked;return o;
+}
+
+/* ================= player ================= */
+const podCls=p=>p.term?'term':/Err|BackOff/.test(p.reason||'')?'err':p.ready?'ready':p.phase==='Running'?'run':'pend';
+const podChip=p=>`<span class="pod ${podCls(p)}" title="${esc(p.name)} · ${esc(p.reason||p.phase)}${p.ip?' · '+p.ip:''}">${esc(p.name.slice(-5))}${p.term?' ✕':!p.ready&&p.phase==='Running'?' …':''}</span>`;
+function snapAt(sim,t){let b=sim.snaps[0];for(const s of sim.snaps){if(s.t<=t)b=s;else break}return b}
+
+/* =========================================================
+   PHASE 1: kubectl apply end-to-end
+   ========================================================= */
+const LANES=['kubectl','apiserver','etcd','deployment-controller','replicaset-controller','scheduler','kubelet','endpoints-controller','kube-proxy'];
+const laneOf=n=>n.startsWith('kubelet')||n==='runtime'||n.startsWith('node-')&&false?'kubelet':n.startsWith('kube-proxy')?'kube-proxy':LANES.includes(n)?n:null;
+function draw1(p){
+  const sim=simApply(),ready=sim.snaps.find(s=>s.pods.length&&s.pods.filter(x=>x.ready).length>=S.dep.spec.replicas);
+  const tEnd=ready?ready.t+300:12000;
+  const rows=[];sim.log.filter(l=>l.t<=tEnd).forEach(l=>{const a=laneOf(l.from),b=laneOf(l.to);if(!a||!b||l.kind==='self'&&false)return;const k=a+'>'+b+'>'+l.msg.replace(/[a-z0-9]{5,8}\b/g,'*').replace(/\d+(\.\d+)?/g,'#');const last=rows[rows.length-1];
+    if(last&&last.k===k){last.n++}else rows.push({t:l.t,a,b,msg:l.msg,k,n:1,kind:l.kind})});
+  const show=rows.slice(0,48),k=p>=1?show.length:Math.ceil(p*show.length),RH=19,W=900,lx=i=>60+i*((W-100)/(LANES.length-1));
+  let sv=`<svg viewBox="0 0 ${W+60} ${30+show.length*RH+10}" style="max-height:${30+show.length*RH+20}px">`;
+  LANES.forEach((l,i)=>{sv+=`<text x="${lx(i)}" y="12" text-anchor="middle" style="font-size:9.5px;font-weight:700">${esc(l.replace('-controller','-ctrl'))}</text><line x1="${lx(i)}" x2="${lx(i)}" y1="18" y2="${30+show.length*RH}" stroke="var(--line)" stroke-dasharray="3 3"/>`});
+  show.slice(0,k).forEach((r,i)=>{const y=34+i*RH,ai=LANES.indexOf(r.a),bi=LANES.indexOf(r.b),x1=lx(ai),x2=lx(bi);
+    if(ai===bi)sv+=`<circle cx="${x1}" cy="${y}" r="4" fill="${tc(ai)}"/><text x="${x1+8}" y="${y+4}" style="font-size:9.5px">${esc(short(r.msg,60))}${r.n>1?' ×'+r.n:''}</text>`;
+    else{const col=r.kind==='store'?'var(--t7)':r.kind==='status'?'var(--bad)':tc(ai);sv+=`<line x1="${x1}" x2="${x2}" y1="${y}" y2="${y}" stroke="${col}" stroke-width="1.8"/><path d="M${x2},${y} l${x2>x1?-7:7},-4 l0,8z" fill="${col}"/><text x="${(x1+x2)/2}" y="${y-3}" text-anchor="middle" style="font-size:9.5px;paint-order:stroke;stroke:var(--card);stroke-width:3px">${esc(short(r.msg,56))}${r.n>1?' ×'+r.n:''}</text>`}
+    sv+=`<text x="0" y="${y+4}" style="font-size:9px;fill:var(--mut)">${sec(r.t)}</text>`});
+  sv+='</svg>';
+  const fin=snapAt(sim,tEnd),dep=sim.get('Deployment',S.dep.metadata.name),ep=S.svc?sim.get('Endpoints',S.svc.metadata.name):null;
+  return`<div class="caption">${esc(S.dep.metadata.name)}: <span class="mono">kubectl apply</span> → ${show[Math.max(0,k-1)]?esc(show[Math.max(0,k-1)].msg):''} <b>(${show[Math.max(0,k-1)]?sec(show[Math.max(0,k-1)].t):''})</b>. ${p>=1?`All ${S.dep.spec.replicas} pod(s) ready after <b>${sec(tEnd)}</b>.`:''}</div>
+  <div class="svgscroll seq">${sv}</div>
+  <h3>Resulting state (t=${sec(tEnd)})</h3><div class="g2"><div>${(fin.nodes).map(n=>`<div class="node ${n.alive?'':'dead'}" style="margin-bottom:6px"><b>${n.name}</b> <span class="tag ${n.ready?'g':'r'}">${n.ready?'Ready':'NotReady'}</span><div>${fin.pods.filter(x=>x.node===n.name).map(podChip).join('')||'<span class="note">no pods</span>'}</div></div>`).join('')}${fin.pods.some(x=>!x.node)?`<div class="node"><b>Pending (unscheduled)</b><div>${fin.pods.filter(x=>!x.node).map(podChip).join('')}</div></div>`:''}</div>
+  <div><table class="kv"><tr><td>Deployment</td><td class="mono">${dep&&dep.status?esc(J(dep.status)):'-'}</td></tr><tr><td>Endpoints</td><td class="mono">${ep?esc(ep.spec.addrs.join(', ')||'(none ready)'):'-'}</td></tr><tr><td>etcd revision</td><td class="mono">${sim.rev}</td></tr></table></div></div>
+  <div class="note">Nothing here is imperative: <b>kubectl only writes desired state</b>. Each component watches the API server for objects it cares about and writes the next piece of state, so the whole rollout emerges from independent reconcile loops.</div>`;
+}
+
+/* =========================================================
+   PHASE 2: API SERVER PIPELINE
+   ========================================================= */
+const USERS={'tok-alice':{name:'alice',groups:['system:masters'],role:'cluster-admin'},'tok-bob':{name:'bob',groups:['dev'],role:'developer'},'tok-carol':{name:'carol',groups:['viewers'],role:'viewer'}};
+const RBAC={'cluster-admin':[['*','*']],developer:[['create','deployments'],['get','deployments'],['update','deployments'],['list','pods']],viewer:[['get','deployments'],['list','pods'],['list','deployments']]};
+function pipeline(req,etcdRv){
+  const st=[];const dep=C(req.obj);let obj=dep;
+  const user=USERS[req.token];
+  if(!user){st.push({n:'Authentication',ok:false,msg:'401 Unauthorized: invalid or missing bearer token'});return{st,code:401}}
+  st.push({n:'Authentication',ok:true,msg:`token → user "${user.name}" (groups: ${user.groups.join(', ')})`});
+  const allowed=(RBAC[user.role]||[]).some(([v,r])=>(v==='*'||v===req.verb)&&(r==='*'||r===req.res));
+  if(!allowed){st.push({n:'Authorization (RBAC)',ok:false,msg:`403 Forbidden: ${user.name} (role ${user.role}) cannot ${req.verb} ${req.res}`});return{st,code:403}}
+  st.push({n:'Authorization (RBAC)',ok:true,msg:`role ${user.role} allows ${req.verb} ${req.res}`});
+  // mutating admission
+  const before=C(obj),added=[];
+  const sp=obj.spec;if(sp.replicas==null){sp.replicas=1;added.push('spec.replicas=1')}
+  if(!obj.metadata.namespace){obj.metadata.namespace='default';added.push('metadata.namespace=default')}
+  sp.template.spec.containers.forEach(c=>{if(!c.pullPolicy){c.pullPolicy=/:latest$/.test(c.image)?'Always':'IfNotPresent';added.push(`${c.name}.imagePullPolicy=${c.pullPolicy}`)}if(!c.limitsCpu){c.limitsCpu=Math.max(c.cpu*2,100)+'m';added.push(`${c.name}.limits.cpu=${c.limitsCpu} (LimitRange)`)}});
+  if(sp.template.spec.termination==null){sp.template.spec.termination=30;added.push('terminationGracePeriodSeconds=30')}
+  st.push({n:'Mutating admission',ok:true,msg:added.length?`injected defaults: ${added.join(', ')}`:'nothing to inject'});
+  // validation
+  const errs=[];if(sp.replicas<0)errs.push('spec.replicas: must be >= 0');
+  if(!MATCH(sp.selector.matchLabels,sp.template.metadata.labels)||!Object.keys(sp.selector.matchLabels||{}).length)errs.push('spec.selector: does not match template.metadata.labels');
+  if(!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(obj.metadata.name))errs.push('metadata.name: must be a DNS-1123 label');
+  if(errs.length){st.push({n:'Schema validation',ok:false,msg:'422 Unprocessable: '+errs.join('; ')});return{st,code:422}}
+  st.push({n:'Schema validation',ok:true,msg:'object is well-formed'});
+  // validating admission: ResourceQuota
+  const needCpu=sp.replicas*sp.template.spec.containers.reduce((a,c)=>a+c.cpu,0),quota=4000;
+  if(needCpu>quota){st.push({n:'Validating admission (ResourceQuota)',ok:false,msg:`403 exceeded quota: requests.cpu ${needCpu}m > ${quota}m for namespace default`});return{st,code:403}}
+  st.push({n:'Validating admission (ResourceQuota)',ok:true,msg:`requests.cpu ${needCpu}m ≤ quota ${quota}m`});
+  // persist
+  if(req.stale){st.push({n:'Persist to etcd',ok:false,msg:`409 Conflict: object has been modified (you sent resourceVersion ${etcdRv-3}, current is ${etcdRv}); re-read and retry`});return{st,code:409}}
+  st.push({n:'Persist to etcd',ok:true,msg:`write /registry/deployments/default/${obj.metadata.name} → resourceVersion ${etcdRv+1}`});
+  st.push({n:'Response + watch fan-out',ok:true,msg:`201 Created; watchers (deployment-controller) receive ADDED @rev ${etcdRv+1}`});
+  return{st,code:201,obj,before,added};
+}
+function draw2(p){
+  const k={valid:{token:'tok-alice',verb:'create',res:'deployments'},notoken:{token:'tok-none',verb:'create',res:'deployments'},viewer:{token:'tok-carol',verb:'create',res:'deployments'},quota:{token:'tok-bob',verb:'create',res:'deployments',mut:o=>o.spec.replicas=400},selector:{token:'tok-bob',verb:'create',res:'deployments',mut:o=>o.spec.template.metadata.labels={app:'other'}},stale:{token:'tok-bob',verb:'update',res:'deployments',stale:true}}[OPT.preq];
+  const obj=C(S.dep);if(k.mut)k.mut(obj);obj.spec.template.spec.termination=null;
+  const R=pipeline({...k,obj},40),show=Math.max(1,Math.ceil(p*R.st.length)),last=R.st[Math.min(show,R.st.length)-1];
+  const stages=['Authentication','Authorization (RBAC)','Mutating admission','Schema validation','Validating admission (ResourceQuota)','Persist to etcd','Response + watch fan-out'];
+  const boxes=stages.map((s,i)=>{const r=R.st.find(x=>x.n===s),idx=R.st.indexOf(r),vis=r&&idx<show,col=!r?'var(--line)':!vis?'var(--line)':r.ok?'var(--ok)':'var(--bad)';return`<div class="row" style="border-color:${col};${r&&vis?'':'opacity:.4'}"><b>${i+1}. ${esc(s)}</b>${vis?` · <span class="${r.ok?'ok':'bad'}">${r.ok?'✔':'✘'}</span> ${esc(r.msg)}`:''}</div>`}).join('');
+  return`<div class="caption ${R.code>=400?'bad':'good'}">${esc(k.verb.toUpperCase())} ${k.res} as <b>${esc((USERS[k.token]||{name:'(anonymous)'}).name)}</b> → <b>HTTP ${R.code}</b>${R.code>=400?' — the request stops at the first failing stage and nothing is written to etcd':''}${OPT.preq==='quota'?'<div class="note" style="margin-top:4px"><b>Simplified:</b> a real <span class="mono">requests.cpu</span> ResourceQuota is checked when <i>Pods</i> are created, so the Deployment itself would be accepted and the ReplicaSet\'s pod creations would be refused (visible as events on the ReplicaSet).</div>':''}</div>
+  <div class="g2"><div><h3 style="margin-top:0">Request pipeline</h3>${boxes}</div>
+  <div><h3 style="margin-top:0">Mutating admission: defaults injected into your Deployment</h3>${R.added&&R.added.length?`<pre>${esc(R.added.join('\n'))}</pre>`:'<div class="note">(request rejected before mutation, or nothing to add)</div>'}<h3>What gets stored</h3><pre>${esc(J({kind:'Deployment',metadata:{name:S.dep.metadata.name,namespace:'default',resourceVersion:R.code===201?'41':'-'},spec:{replicas:obj.spec.replicas,strategy:S.dep.spec.strategy,selector:obj.spec.selector,containers:obj.spec.template.spec.containers.map(c=>({name:c.name,image:c.image,requests:{cpu:c.cpu+'m',memory:c.mem+'Mi'}}))}}))}</pre></div></div>
+  <div class="note">Every request goes through the same chain: <b>authenticate</b> who you are, <b>authorize</b> (RBAC) what you may do, <b>mutating admission</b> fills defaults, the object is <b>validated</b>, <b>validating admission</b> (quotas, policies) can still reject it, and only then is it persisted to etcd and fanned out to watchers. The API server is the only component that talks to etcd.</div>`;
+}
+
+/* =========================================================
+   PHASE 3: ETCD + WATCH
+   ========================================================= */
+function draw3(p){
+  const sim=simApply();
+  if(OPT.econf==='conflict'){
+    const steps=[['A','GET Deployment/'+S.dep.metadata.name,'rv 12'],['B','GET Deployment/'+S.dep.metadata.name,'rv 12'],['A','PUT replicas=5, resourceVersion 12','OK → rv 13'],['B','PUT image=v2, resourceVersion 12','409 Conflict (object is at rv 13)'],['B','GET Deployment/'+S.dep.metadata.name,'rv 13 (replicas=5)'],['B','PUT replicas=5,image=v2, resourceVersion 13','OK → rv 14']];
+    const k=Math.max(1,Math.ceil(p*steps.length));
+    return`<div class="caption">Two clients update the same object. etcd/API server use <b>optimistic concurrency</b>: a write carries the resourceVersion it was based on; if the object changed since, it is rejected (409) instead of silently overwriting.</div><table class="wrap"><tr><th>#</th><th>client</th><th>request</th><th>result</th></tr>${steps.slice(0,k).map((s,i)=>`<tr style="${s[2].startsWith('409')?'background:color-mix(in srgb,var(--bad) 14%,var(--card))':''}"><td>${i+1}</td><td><b>${s[0]}</b></td><td class="mono">${esc(s[1])}</td><td class="mono ${s[2].startsWith('409')?'bad':''}">${esc(s[2])}</td></tr>`).join('')}</table>
+    <div class="note">This is why controllers re-read and retry: no locks, no lost updates. Compare-and-swap on resourceVersion is the only concurrency primitive the whole control plane relies on.</div>`;
+  }
+  if(OPT.econf==='watch'){
+    const ev=sim.wlog.filter(e=>e.kind==='Pod'||e.kind==='ReplicaSet'||e.kind==='Deployment').slice(0,22),n=ev.length;
+    const cut=Math.floor(n*0.45),resumeRv=ev[cut]?ev[cut].rv:0,comp=OPT.ecompact*Math.floor(n/10)+ev[0].rv,gone=resumeRv<comp;
+    const k=Math.ceil(p*n);
+    return`<div class="caption">A client watches Pods from the start. Its connection drops after event ${cut+1} (resourceVersion ${resumeRv}); it reconnects asking for events <b>after ${resumeRv}</b>. etcd compacted history up to revision <b>${comp}</b> → ${gone?'<b class="bad">410 Gone: history is gone, the client must re-LIST and start a new watch</b>':'<b class="ok">the server can replay the missed events</b>'}.</div>
+    <div class="g2"><div><table><tr><th>#</th><th>rev</th><th>event</th><th>object</th></tr>${ev.slice(0,k).map((e,i)=>`<tr style="${i===cut?'background:var(--p4)':''}${i>cut&&gone?';opacity:.5':''}"><td>${i+1}</td><td class="n">${e.rv}</td><td>${e.type}</td><td class="mono">${e.kind}/${esc(e.name.slice(-12))}</td></tr>`).join('')}</table></div>
+    <div><div class="box"><b>Informer algorithm</b><ol style="margin:6px 0 0 18px;padding:0"><li>LIST all objects → remember resourceVersion</li><li>WATCH from that resourceVersion; apply ADDED/MODIFIED/DELETED to a local cache</li><li>On disconnect: re-WATCH from the last seen rv</li><li>On 410 Gone: LIST again (full resync) and continue</li></ol></div><div class="note">Controllers never poll etcd; they react to this event stream, backed by a periodic resync as a safety net (phase 4).</div></div></div>`;
+  }
+  const keys=[...sim.kv.keys()].sort(),show=Math.max(1,Math.ceil(p*keys.length));
+  return`<div class="caption">etcd is a versioned key-value store: every write bumps one global <b>revision</b>, and each object remembers the revision of its last change (its <b>resourceVersion</b>). After this rollout etcd is at revision <b>${sim.rev}</b> and holds ${keys.length} keys.</div>
+  <div class="g2"><div><table><tr><th>key</th><th class="n">resourceVersion</th></tr>${keys.slice(0,show).map(k=>`<tr><td class="mono">${esc(k)}</td><td class="n">${sim.kv.get(k).obj.metadata.rv}</td></tr>`).join('')}</table></div>
+  <div><h3 style="margin-top:0">Watch events emitted so far (${sim.wlog.length})</h3>${sim.wlog.slice(0,12).map(e=>`<span class="row">rev ${e.rv} · ${e.type} · ${e.kind}/${esc(e.name.slice(-14))}</span>`).join('')}</div></div>
+  <div class="note">Because all state lives in etcd and only the API server writes to it, restarting any controller loses nothing: it re-lists and rebuilds its cache. Pick “update race” or “watch resume” above.</div>`;
+}
+
+/* =========================================================
+   PHASE 4: CONTROLLERS / RECONCILE
+   ========================================================= */
+function draw4(p){
+  const sim=simCtrl(),t0=14000,tEnd=28000,T=t0+p*(tEnd-t0);
+  const rec=sim.recon.filter(r=>r.t>=t0&&r.t<=T),state=snapAt(sim,T),before=snapAt(sim,t0-100);
+  const kinds={delete:'a pod is deleted by hand',scale:'replicas is raised by 2',edit:'replicas is lowered by 1'};
+  const lost=sim.log.filter(l=>l.kind==='lost'&&l.t<=T);
+  return`<div class="caption">Event: <b>${kinds[OPT.ctrlAct]}</b>${OPT.dropWatch?' <span class="bad">and the watch event is LOST</span>':''}. Controllers do not execute commands; each loop compares <b>observed</b> state with <b>desired</b> state and takes the smallest step to close the gap (level-triggered, so it is safe to run twice).</div>
+  <div class="g2"><div><h3 style="margin-top:0">Reconcile log</h3><table class="wrap"><tr><th>t</th><th>controller</th><th>observed → desired</th><th>action</th></tr>${rec.slice(-12).map(r=>`<tr><td>${sec(r.t-t0)}</td><td>${esc(r.ctrl.replace('-controller',''))}</td><td class="mono">${esc(r.obs)} → ${esc(r.des)}</td><td class="mono">${esc(r.act||'…')}</td></tr>`).join('')||'<tr><td colspan="4">…</td></tr>'}</table>
+    ${lost.map(l=>`<div class="note bad">${sec(l.t-t0)} ${esc(l.msg)}</div>`).join('')}${OPT.dropWatch&&T>t0+6000?'<div class="note ok">A periodic resync (every 6 s in this model) re-enqueued the ReplicaSet; the controller counted the pods again and recreated the missing one. In a real cluster the usual safety net is the informer re-listing after a broken watch; either way the level-triggered loop heals.</div>':''}</div>
+  <div><h3 style="margin-top:0">Cluster state at +${((T-t0)/1000).toFixed(1)}s</h3>${state.nodes.map(n=>`<div class="node" style="margin-bottom:6px"><b>${n.name}</b><div>${state.pods.filter(x=>x.node===n.name).map(podChip).join('')||'<span class="note">no pods</span>'}</div></div>`).join('')}<div class="note">desired replicas: <b>${state.dep}</b> · ReplicaSets: ${state.rs.map(r=>r.name.slice(-5)+' '+r.ready+'/'+r.desired).join(', ')}</div></div></div>
+  <div class="note">Ownership chain: Deployment → ReplicaSet → Pods (ownerReferences). Deleting a Pod is simply a change that makes observed ≠ desired, so the ReplicaSet controller recreates it. Edge-triggered systems break when an event is missed; level-triggered controllers heal on the next pass or resync.</div>`;
+}
+
+/* =========================================================
+   PHASE 5: SCHEDULER
+   ========================================================= */
+function schedFill(){
+  const nodes=nodeList().map(n=>({...n,ready:true})),tpl=S.dep.spec.template.spec,c=tpl.containers[0],bound=[],steps=[];
+  const pol={spread:OPT.spolicy==='spread',pack:OPT.spolicy==='pack'};
+  for(let i=0;i<OPT.srep;i++){const pod={cpu:c.cpu,mem:c.mem,nodeSelector:tpl.nodeSelector,tolerations:tpl.tolerations,owner:'app'},rows=filterScore(nodes,bound,pod,pol),pick=pickNode(rows);steps.push({i,rows,pick});if(pick)bound.push({node:pick,cpu:pod.cpu,mem:pod.mem,owner:'app'})}
+  return{nodes,steps,bound,c};
+}
+function draw5(p){
+  if(!S.dep)return'';
+  const F=schedFill(),k=p>=1?F.steps.length:Math.max(1,Math.ceil(p*F.steps.length)),st=F.steps[k-1],used=n=>{const m=F.steps.slice(0,k).filter(s=>s.pick===n.name);return{cpu:m.length*F.c.cpu,mem:m.length*F.c.mem,n:m.length}};
+  const pending=F.steps.slice(0,k).filter(s=>!s.pick).length;
+  return`<div class="caption">Pod ${k}/${F.steps.length} (requests ${F.c.cpu}m cpu, ${F.c.mem}Mi): the scheduler <b>filters</b> nodes that cannot run it, <b>scores</b> the rest, and <b>binds</b> the pod to the best one. ${st.pick?`→ <b>${st.pick}</b>`:'<b class="bad">→ no feasible node: the pod stays Pending</b>'}</div>
+  <div class="g2"><div><table><tr><th>node</th><th>filter result</th><th class="n">score</th></tr>${st.rows.map(r=>`<tr style="${r.name===st.pick?'background:var(--p2)':''}"><td><b>${r.name}</b></td><td>${r.fails.length?'<span class="bad">✘ '+esc(r.fails.join('; '))+'</span>':'<span class="ok">✔ feasible</span>'}</td><td class="n">${r.score==null?'-':r.score.toFixed(0)}</td></tr>`).join('')}</table>
+  <div class="note">Policy: ${OPT.spolicy==='spread'?'LeastAllocated + spread replicas of the same app':OPT.spolicy==='pack'?'MostAllocated (bin-packing)':'LeastAllocated'}. Filters: node Ready, taints/tolerations, nodeSelector, free cpu/memory against <i>requests</i>.</div></div>
+  <div>${F.nodes.map(n=>{const u=used(n);return`<div class="node" style="margin-bottom:6px"><b>${n.name}</b> <span class="note">${esc(Object.entries(n.labels).map(([a,b])=>a+'='+b).join(' '))}${n.taints.length?' · taint '+n.taints[0].key:''}</span><div class="lrow"><b style="min-width:34px">cpu</b><span class="bar2" style="width:${u.cpu/n.cpu*60}%;background:var(--t0)"></span><span class="mono">${u.cpu}/${n.cpu}m</span></div><div class="lrow"><b style="min-width:34px">mem</b><span class="bar2" style="width:${u.mem/n.mem*60}%;background:var(--t2)"></span><span class="mono">${Math.round(u.mem)}/${n.mem}Mi</span></div><div>${Array.from({length:u.n},(_,i)=>`<span class="pod ready">pod</span>`).join('')}</div></div>`}).join('')}${pending?`<div class="node"><b>Pending</b> ${Array.from({length:pending},()=>'<span class="pod pend">pod</span>').join('')}</div>`:''}</div></div>
+  <div class="note">Scheduling decisions use the <b>requests</b> declared in the manifest, not actual usage. Edit requests, add a nodeSelector, or taint the last node (job panel) to see Pending pods and "0/N nodes available" reasons.</div>`;
+}
+
+/* =========================================================
+   PHASE 6: KUBELET + POD LIFECYCLE
+   ========================================================= */
+function draw6(p){
+  const sim=simLife(),pod=sim.snaps.length?sim.list('Pod')[0]:null,tl=[],find=(f)=>{for(const s of sim.snaps){const x=s.pods[0];if(x&&f(x))return s.t}return null};
+  const tPend=find(x=>true),tSched=find(x=>x.node),tCreating=find(x=>x.reason==='ContainerCreating'||/Err|BackOff/.test(x.reason||'')),tRun=find(x=>x.phase==='Running'),tReady=find(x=>x.ready);
+  const T=p*Math.min(30000,Math.max(12000,(tReady||14000)+2500)),W=620,xs=t=>10+t/Math.min(30000,Math.max(12000,(tReady||14000)+2500))*W;
+  const seg=(a,b,col,l)=>a==null?'':`<rect x="${xs(a)}" y="30" width="${Math.max(2,xs(Math.min(b==null?T:b,T))-xs(a))}" height="26" fill="${col}" opacity="${a<=T?1:0}"><title>${l}</title></rect><text x="${xs(a)+3}" y="47" style="font-size:9.5px;fill:#fff;opacity:${a<=T?1:0}">${l}</text>`;
+  const sv=`<div class="wide"><svg viewBox="0 0 650 90" style="max-height:100px">${seg(tPend,tSched,'var(--t7)','Pending')}${seg(tSched,tCreating||tRun,'var(--t4)','Scheduled')}${seg(tCreating,tRun||(OPT.lcase==='bad'?30000:null),OPT.lcase==='bad'?'var(--bad)':'var(--t3)',OPT.lcase==='bad'?'ErrImagePull → BackOff':'pull image + create')}${seg(tRun,tReady,'var(--t1)','Running (not ready)')}${seg(tReady,null,'var(--ok)','Ready · gets traffic')}<line x1="${xs(T)}" x2="${xs(T)}" y1="10" y2="70" stroke="var(--ink)" opacity=".5"/><text x="10" y="82" style="fill:var(--mut);font-size:10px">time since apply (s)</text></svg></div>`;
+  const log=sim.log.filter(l=>l.t<=T&&(l.from.startsWith('kubelet')||l.to==='runtime'||l.from==='scheduler')).slice(-9);
+  const now=snapAt(sim,T).pods[0];
+  return`<div class="caption">One pod, from <span class="mono">Pending</span> to <span class="mono">Ready</span>. State now: <b>${esc(now?(now.ready?'Running · Ready':now.reason||now.phase):'-')}</b>. ${OPT.lcase==='bad'?'<b class="bad">The image tag does not exist: the kubelet keeps retrying with exponential back-off and the pod never becomes Ready.</b>':OPT.lcase==='slow'?'The readiness probe has a long initialDelay, so the pod runs but receives no traffic for a while.':'The kubelet pulls the image, asks the container runtime (CRI) to start it, then readiness probing decides when it can serve.'}</div>${sv}
+  <div class="g2"><div><h3 style="margin-top:0">Kubelet / runtime activity</h3>${log.map(l=>`<span class="row">${sec(l.t)} · ${esc(l.from)} → ${esc(l.to)}: ${esc(l.msg)}</span>`).join('')||'<span class="note">…</span>'}</div>
+  <div><h3 style="margin-top:0">What the kubelet does</h3><ol style="margin:0 0 0 18px;padding:0;font-size:13px"><li>Watches Pods bound to its node (<span class="mono">spec.nodeName</span>)</li><li>Pulls images and starts containers through the CRI</li><li>Runs liveness/readiness probes and reports <span class="mono">status</span> back to the API server</li><li>Renews the node heartbeat (Lease) every few seconds</li><li>On deletion: SIGTERM, grace period, then SIGKILL, then removes the Pod object</li></ol></div></div>`;
+}
+
+/* =========================================================
+   PHASE 7: SERVICES, ENDPOINTS, KUBE-PROXY
+   ========================================================= */
+function trafficRun(sim,t0,t1,every){
+  const out=[],rnd=(()=>{let s=7;return()=>{s=(Math.imul(s,1103515245)+12345)&0x7fffffff;return s/0x7fffffff}})(),ipToPod=new Map();
+  sim.snaps.forEach(s=>s.pods.forEach(p=>{if(p.ip)ipToPod.set(p.ip,p.name)}));
+  for(let t=t0;t<=t1;t+=every){
+    const node=sim.o.nodes[Math.floor(rnd()*sim.o.nodes.length)].name;let rules=[];for(const r of sim.ruleLog){if(r.node===node&&r.t<=t)rules=r.addrs;else if(r.t>t)break}
+    if(!rules.length){out.push({t,ok:false,why:'no endpoints'});continue}
+    const ip=rules[Math.floor(rnd()*rules.length)],pn=ipToPod.get(ip),c=sim.cont[pn];const up=c&&c.from<=t&&(c.to==null||t<c.to);
+    out.push({t,ok:!!up,ip,pod:pn,why:up?'':'connection reset (container already gone)'});
+  }
+  return out;
+}
+function draw7(p){
+  if(!S.svc)return'<div class="box">Add a Service to the manifest to see Endpoints and kube-proxy.</div>';
+  const sim=simRollout(),T0=sim.rolloutStart,tEnd=T0+30000,T=T0+p*30000,tr=trafficRun(sim,T0-2000,tEnd,150);
+  const stable=snapAt(sim,T0-200),ep=stable.pods.filter(x=>x.ready&&!x.term);
+  const per={};tr.filter(r=>r.ok).forEach(r=>per[r.pod]=(per[r.pod]||0)+1);const done=tr.filter(r=>r.t<=T),errs=done.filter(r=>!r.ok).length;
+  const sv=(()=>{const W=640,bw=W/tr.length*1;let s=`<svg viewBox="0 0 680 60" style="max-height:70px">`;tr.forEach((r,i)=>{if(r.t>T)return;s+=`<rect x="${10+i*bw}" y="${r.ok?10:30}" width="${Math.max(1.5,bw-0.5)}" height="${r.ok?16:20}" fill="${r.ok?'var(--ok)':'var(--bad)'}"/>`});return s+'</svg>'})();
+  const rulesTxt=ep.map((e,i)=>`-A KUBE-SVC-${S.svc.metadata.name.toUpperCase()} -m statistic --mode random --probability ${(1/(ep.length-i)).toFixed(5)} -j KUBE-SEP-${e.name.slice(-5).toUpperCase()}`).join('\n');
+  const now=snapAt(sim,T);
+  return`<div class="caption">Service <b>${esc(S.svc.metadata.name)}</b> (ClusterIP ${S.svc.spec.clusterIP}:${S.svc.spec.port} → targetPort ${S.svc.spec.targetPort}) is just a stable virtual IP. The Endpoints controller lists <b>ready</b> pods; every node's kube-proxy turns that list into packet-rewrite rules. Traffic below keeps flowing during a rolling update (t = +${((T-T0)/1000).toFixed(1)}s).</div>
+  <div class="g2"><div><h3 style="margin-top:0">kube-proxy rules before the update</h3><pre>${esc(`-A KUBE-SERVICES -d ${S.svc.spec.clusterIP}/32 -p tcp --dport ${S.svc.spec.port} -j KUBE-SVC-${S.svc.metadata.name.toUpperCase()}\n${rulesTxt}\n(-j DNAT --to-destination <podIP>:${S.svc.spec.targetPort})`)}</pre><div class="note">Random statistic rules give each endpoint an equal share; there is no proxy process in the data path, only kernel NAT (iptables/IPVS).</div></div>
+  <div><h3 style="margin-top:0">Endpoints now (${now.ep})</h3><div>${now.pods.filter(x=>x.ready&&!x.term).map(podChip).join('')||'<span class="note">none</span>'}</div><h3>Client requests (green = served, red = failed)</h3>${sv}<div class="chips"><span class="chip">requests ${done.length}</span><span class="chip ${errs?'bad':'ok'}">failed ${errs}</span><span class="chip">programming lag ≈ 0.8 s</span></div></div></div>
+  <div class="note">New pods get traffic only when <b>Ready</b>; old pods leave the endpoint list when they start terminating. Because endpoint and rule updates take a moment to propagate, a pod must keep serving during its termination grace period (now ${OPT.tgrace}s). Set it to 0 in the controls to see connection resets during a rollout.</div>`;
+}
+
+/* =========================================================
+   PHASE 8: ROLLING UPDATE
+   ========================================================= */
+function draw8(p){
+  const sim=simRollout(),T0=sim.rolloutStart,span=55000,T=T0+p*span,now=snapAt(sim,T);
+  const names=[...new Set(sim.snaps.flatMap(s=>s.rs.map(r=>r.name)))],W=640,H=110,xs=t=>10+(t-T0)/span*W;
+  const maxPods=Math.max(1,...sim.snaps.map(s=>s.pods.filter(x=>!x.term||true).length));
+  let sv=`<div class="wide"><svg viewBox="0 0 680 ${H+20}" style="max-height:${H+30}px">`;
+  names.forEach((nm,ri)=>{let pts='';sim.snaps.filter(s=>s.t>=T0-500&&s.t<=T).forEach(s=>{const r=s.rs.find(x=>x.name===nm),v=r?s.pods.filter(x=>x.rs===nm&&x.ready&&!x.term).length:0;pts+=`${xs(s.t)},${H-v/maxPods*(H-10)} `});sv+=`<polyline fill="none" stroke="${tc(ri)}" stroke-width="2.5" points="${pts}"/><text x="${12}" y="${14+ri*12}" style="fill:${tc(ri)};font-size:10px">${esc(nm.slice(-8))} ready pods</text>`});
+  sv+=`<line x1="${xs(T)}" x2="${xs(T)}" y1="4" y2="${H}" stroke="var(--ink)" opacity=".4"/></svg></div>`;
+  const R=S.dep.spec.replicas,ds=sim.get('Deployment',S.dep.metadata.name),ready=now.pods.filter(x=>x.ready&&!x.term).length,min=R-ds.spec.strategy.maxUnavailable;
+  const stuck=OPT.rcase==='bad';
+  return`<div class="caption">Update to a ${stuck?'<b class="bad">bad</b> ':''}new image · maxSurge <b>${ds.spec.strategy.maxSurge}</b>, maxUnavailable <b>${ds.spec.strategy.maxUnavailable}</b> → ready pods never drop below <b>${min}</b> and the total never exceeds <b>${R+ds.spec.strategy.maxSurge}</b>. At +${((T-T0)/1000).toFixed(1)}s: <b>${ready}/${R}</b> ready${stuck&&!OPT.rback?' · <span class="bad">rollout stuck waiting for new pods to become Ready; old pods keep serving</span>':''}${OPT.rback&&T>T0+18000?' · <b class="ok">rolled back</b>':''}</div>${sv}
+  <h3>ReplicaSets and pods (t=+${((T-T0)/1000).toFixed(1)}s)</h3>${now.rs.sort((a,b)=>a.rev-b.rev).map((r,i)=>`<div class="node" style="margin-bottom:6px;border-color:${tc(i)}"><b>${esc(r.name.slice(-14))}</b> <span class="tag m">rev ${r.rev}</span> <span class="note">desired ${r.desired} · ready ${now.pods.filter(x=>x.rs===r.name&&x.ready&&!x.term).length}</span><div>${now.pods.filter(x=>x.rs===r.name).map(podChip).join('')||'<span class="note">no pods</span>'}</div></div>`).join('')}
+  <div class="note">A Deployment is a controller of ReplicaSets: a new pod template creates a new ReplicaSet and the two are scaled in steps limited by maxSurge/maxUnavailable. The old ReplicaSet is kept (at 0 replicas) so <span class="mono">kubectl rollout undo</span> is just scaling it back up. ${stuck?'With a broken image, availability is protected: only up to maxSurge new pods are created and none of the old ones are removed.':''}</div>`;
+}
+
+/* =========================================================
+   PHASE 9: HPA
+   ========================================================= */
+function draw9(p){
+  const sim=simHPA(),log=sim.hpaLog,T=p*110000,W=640,xs=t=>10+t/110000*W,mx=Math.max(1,...log.map(l=>l.cur),...log.map(l=>l.ready),OPT.hmax),maxLoad=Math.max(1,...log.map(l=>l.load));
+  let a='',b='',c='';log.filter(l=>l.t<=T).forEach(l=>{a+=`${xs(l.t)},${100-l.load/maxLoad*90} `;b+=`${xs(l.t)},${100-l.cur/mx*90} `;c+=`${xs(l.t)},${100-l.ready/mx*90} `});
+  const cur=log.filter(l=>l.t<=T).slice(-1)[0]||log[0];
+  const sv=`<div class="wide"><svg viewBox="0 0 680 115" style="max-height:125px"><polyline fill="none" stroke="var(--t7)" stroke-width="2" stroke-dasharray="4 3" points="${a}"/><polyline fill="none" stroke="var(--t0)" stroke-width="2.5" points="${b}"/><polyline fill="none" stroke="var(--ok)" stroke-width="2.5" points="${c}"/><line x1="${xs(T)}" x2="${xs(T)}" y1="4" y2="105" stroke="var(--ink)" opacity=".4"/><text x="10" y="112" style="fill:var(--mut);font-size:10px">load (dashed) · desired replicas (blue) · ready replicas (green)</text></svg></div>`;
+  const req=S.dep.spec.template.spec.containers[0].cpu;
+  return`<div class="caption">Every 3 s the HPA reads average CPU utilisation (usage ÷ <i>request</i> = ${req}m) and computes <b>desired = ceil(current × utilisation ÷ target)</b>. At +${(cur.t/1000).toFixed(0)}s: ${cur.ready} ready pod(s), utilisation <b>${cur.util.toFixed(0)}%</b> vs target ${OPT.htarget}% → ceil(${cur.cur} × ${cur.util.toFixed(0)} ÷ ${OPT.htarget}) = <b>${Math.ceil(cur.cur*cur.util/OPT.htarget)}</b> → clamped to [${OPT.hmin}, ${OPT.hmax}] → <b>${cur.des}</b>.</div>${sv}
+  <div class="g2"><div><table><tr><th>t</th><th class="n">load m</th><th class="n">ready</th><th class="n">util %</th><th class="n">replicas</th></tr>${log.filter(l=>l.t<=T).slice(-8).map(l=>`<tr><td>${(l.t/1000).toFixed(0)}s</td><td class="n">${Math.round(l.load)}</td><td class="n">${l.ready}</td><td class="n">${l.util.toFixed(0)}</td><td class="n">${l.cur}${l.des!==l.cur?' → <b>'+l.des+'</b>':''}</td></tr>`).join('')}</table></div>
+  <div><div class="note" style="margin:0">Scaling up is fast (at most double + 4 per step), but new pods still need to be scheduled, pull images and pass readiness (green lags blue). Scaling down waits for a <b>stabilisation window</b> (${OPT.hstab}s): the highest recommendation in the window wins, which prevents flapping when load briefly dips. <i>Simplified:</i> during scale-up a real HPA counts pods that are not Ready yet as 0% busy, which damps the overshoot this model can show mid-spike.</div></div></div>`;
+}
+
+/* =========================================================
+   PHASE 10: NODE FAILURE
+   ========================================================= */
+function draw10(p){
+  const sim=simNodeFail(),T0=sim.failAt,span=55000,T=T0+p*span,now=snapAt(sim,T),before=snapAt(sim,T0-300);
+  const ev=sim.log.filter(l=>l.t>=T0-200&&l.t<=T&&(l.from==='node-controller'&&!/^PUT /.test(l.msg)||l.from==='chaos'||l.from==='scheduler'&&/→/.test(l.msg)||l.from==='replicaset-controller'&&/^POST/.test(l.msg)||l.to==='kubelet/'+sim.victim&&false)).slice(0,14);
+  const R=S.dep.spec.replicas,ready=now.pods.filter(x=>x.ready&&!x.term).length;
+  return`<div class="caption"><b>${sim.victim}</b> loses power at +0s. Heartbeats stop → after the grace period the node controller marks it <b>NotReady</b>, taints it, and after the toleration period <b>evicts</b> its pods; the ReplicaSet creates replacements and the scheduler places them on healthy nodes. At +${((T-T0)/1000).toFixed(1)}s: <b>${ready}/${R}</b> pods Ready.</div>
+  <div class="g2"><div><h3 style="margin-top:0">Timeline</h3>${ev.map(l=>`<span class="row ${l.kind==='lost'?'bad':''}">+${((l.t-T0)/1000).toFixed(1)}s · ${esc(l.msg)}</span>`).join('')||'<span class="note">…</span>'}<div class="note">Heartbeat grace 8 s, eviction after ${OPT.nevict} s (real clusters: tens of seconds of grace, then a default 300 s toleration).</div></div>
+  <div>${now.nodes.map(n=>`<div class="node ${n.alive?'':'dead'}" style="margin-bottom:6px"><b>${n.name}</b> <span class="tag ${n.ready?'g':'r'}">${n.ready?'Ready':'NotReady'}</span>${n.alive?'':' <span class="tag r">down</span>'}<div>${now.pods.filter(x=>x.node===n.name).map(podChip).join('')||'<span class="note">no pods</span>'}</div></div>`).join('')}${now.pods.some(x=>!x.node)?`<div class="node"><b>Pending</b><div>${now.pods.filter(x=>!x.node).map(podChip).join('')}</div></div>`:''}</div></div>
+  <div class="chips"><span class="chip">endpoints ${now.ep}</span><span class="chip">service stays up while ≥1 pod is Ready</span></div>
+  <div class="note">Kubernetes cannot know a silent node is dead, only that it stopped reporting. Evicted pods stay "Terminating" on the dead node (their kubelet cannot confirm) but no longer count, so capacity is restored elsewhere. If the node returns (control above), its kubelet cleans the old containers up.</div>`;
+}
+
+/* ================= phases table + controls ================= */
+const PHASES=[
+ {t:'kubectl apply',s:'end-to-end sequence',f:'overview',dur:9000,draw:draw1,b:'One manifest sets off a chain of independent reactions. This sequence is generated by a real simulation: every arrow is a request, watch event or status update between components.'},
+ {t:'API server',s:'authn · RBAC · admission',f:'kube-apiserver',dur:6000,draw:draw2,b:'Every request passes the same pipeline: authentication, authorization (RBAC), mutating admission, validation, validating admission (quotas), and finally persistence. Rejections happen before anything is stored.'},
+ {t:'etcd & watch',s:'revisions · conflicts',f:'etcd',dur:6000,draw:draw3,b:'All cluster state lives in etcd as versioned key-value pairs. resourceVersion enables optimistic concurrency and the watch stream that drives every controller.'},
+ {t:'Controllers',s:'reconcile loops',f:'controller-manager',dur:8000,draw:draw4,b:'Controllers are level-triggered loops: compare observed state with desired state and take the smallest step to close the gap. Deployment → ReplicaSet → Pods.'},
+ {t:'Scheduler',s:'filter · score · bind',f:'kube-scheduler',dur:7000,draw:draw5,b:'For each unscheduled pod the scheduler filters infeasible nodes (resources, taints, selectors), scores the rest and binds the pod to the winner by writing spec.nodeName.'},
+ {t:'Kubelet',s:'pod lifecycle · CRI',f:'kubelet',dur:7000,draw:draw6,b:'The kubelet on each node watches pods bound to it, starts containers through the container runtime, runs probes, reports status and heartbeats.'},
+ {t:'Services & kube-proxy',s:'endpoints · NAT rules',f:'kube-proxy',dur:7000,draw:draw7,b:'A Service is a stable virtual IP. The Endpoints controller tracks ready pods and kube-proxy programs node-level rules that spread connections across them.'},
+ {t:'Rolling update',s:'surge · unavailable',f:'deployment',dur:8000,draw:draw8,b:'A new pod template creates a new ReplicaSet; the Deployment controller shifts replicas between the old and new ones within maxSurge/maxUnavailable limits and keeps the old one for rollback.'},
+ {t:'Autoscaling',s:'HPA',f:'HPA',dur:8000,draw:draw9,b:'The Horizontal Pod Autoscaler periodically computes desired replicas from CPU utilisation versus a target, with fast scale-up and stabilised scale-down.'},
+ {t:'Node failure',s:'heartbeat · taint · evict',f:'node lifecycle',dur:9000,draw:draw10,b:'When a node stops heartbeating it is marked NotReady and tainted; after a toleration period its pods are evicted and recreated elsewhere, keeping the Service available.'},
+];
+function ctlHTML(k){
+  if(!S||S.error)return'';
+  const sel=(key,opts,val)=>`<select data-opt="${key}">${opts.map(([v,l])=>`<option value="${v}" ${String(v)===String(val)?'selected':''}>${esc(l)}</option>`).join('')}</select>`;
+  const rng=(key,min,max,step,val,suf='')=>`<input type="range" data-opt="${key}" min="${min}" max="${max}" step="${step}" value="${val}" style="width:120px"> ${val}${suf}`;
+  if(k===0)return`<span class="note">Pick another sample or edit the manifest at the top of the page (replicas, requests, readiness delay, nodeSelector) and watch the sequence change.</span>`;
+  if(k===1)return`<label>Request ${sel('preq',[['valid','valid create (alice)'],['notoken','no token'],['viewer','viewer tries to create'],['quota','over ResourceQuota'],['selector','selector ≠ labels'],['stale','stale update (409)']],OPT.preq)}</label>`;
+  if(k===2)return`<label>Scenario ${sel('econf',[['keys','keys & revisions'],['conflict','update race (409)'],['watch','watch resume / 410 Gone']],OPT.econf)}</label>${OPT.econf==='watch'?`<label>history kept after <code>etcdctl compact</code> ${rng('ecompact',0,10,1,OPT.ecompact)}</label>`:''}`;
+  if(k===3)return`<label>Event ${sel('ctrlAct',[['delete','delete a pod'],['scale','scale up by 2'],['edit','scale down by 1']],OPT.ctrlAct)}</label><label><input type="checkbox" data-opt="dropWatch" ${OPT.dropWatch?'checked':''}> lose the watch event</label>`;
+  if(k===4)return`<label>Pods to schedule ${rng('srep',1,36,1,OPT.srep)}</label><label>scoring (<code>NodeResourcesFit</code> strategy) ${sel('spolicy',[['spread','spread replicas'],['least','least allocated'],['pack','bin-packing']],OPT.spolicy)}</label><span class="note">Node count and the taint are set at the top of the page.</span>`;
+  if(k===5)return`<label>Case ${sel('lcase',[['normal','normal'],['bad','bad image tag'],['slow','slow readiness (9 s)']],OPT.lcase)}</label>`;
+  if(k===6)return`<label><code>terminationGracePeriodSeconds</code> ${sel('tgrace',[0,2,5].map(x=>[x,x+' s']),OPT.tgrace)}</label><label>New image ${sel('rcase',[['good','valid new tag'],['bad','broken tag']],OPT.rcase)}</label><label><input type="checkbox" data-opt="rback" ${OPT.rback?'checked':''}> <code>kubectl rollout undo</code> at +18 s</label><label><code>maxSurge</code> ${sel('rsurge',[[-1,'manifest'],0,1,2,3].map(x=>Array.isArray(x)?x:[x,x]),OPT.rsurge)}</label><label><code>maxUnavailable</code> ${sel('runav',[[-1,'manifest'],0,1,2,3].map(x=>Array.isArray(x)?x:[x,x]),OPT.runav)}</label>`;
+  if(k===7)return`<label>New image ${sel('rcase',[['good','valid new tag'],['bad','broken tag']],OPT.rcase)}</label><label><code>maxSurge</code> ${sel('rsurge',[[-1,'manifest'],0,1,2,3].map(x=>Array.isArray(x)?x:[x,x]),OPT.rsurge)}</label><label><code>maxUnavailable</code> ${sel('runav',[[-1,'manifest'],0,1,2,3].map(x=>Array.isArray(x)?x:[x,x]),OPT.runav)}</label><label><code>terminationGracePeriodSeconds</code> ${sel('tgrace',[0,2,5].map(x=>[x,x+' s']),OPT.tgrace)}</label><label><input type="checkbox" data-opt="rback" ${OPT.rback?'checked':''}> <code>kubectl rollout undo</code> at +18 s</label>`;
+  if(k===8)return`<label>Load ${sel('hload',[['spike','spike'],['ramp','ramp'],['steady','steady']],OPT.hload)}</label><label><code>averageUtilization</code> ${rng('htarget',30,90,5,OPT.htarget,'%')}</label><label><code>minReplicas</code> ${rng('hmin',1,6,1,OPT.hmin)}</label><label><code>maxReplicas</code> ${rng('hmax',3,20,1,OPT.hmax)}</label><label><code>stabilizationWindowSeconds</code> (down) ${rng('hstab',3,40,1,OPT.hstab,' s')}</label>`;
+  if(k===9)return`<label>Failing node ${sel('nfail',nodeList().map((n,i)=>[i,n.name]),OPT.nfail)}</label><label><code>tolerationSeconds</code> ${rng('nevict',2,12,1,OPT.nevict,' s')}</label><label><input type="checkbox" data-opt="nrecover" ${OPT.nrecover?'checked':''}> node recovers at +30 s</label>`;
+  return'';
+}
+const STROPT=['preq','econf','ctrlAct','spolicy','lcase','rcase','hload'],BOOLOPT=['dropWatch','rback','nrecover'];
+$('#phCtl').addEventListener('change',e=>{
+  const t=e.target.closest('[data-opt]');if(!t)return;const key=t.dataset.opt;
+  OPT[key]=BOOLOPT.includes(key)?t.checked:STROPT.includes(key)?t.value:+t.value;stopAll();rebuild(false);
+});
+
+/* ================= render / wiring ================= */
+function rebuild(reparse){
+  S=build();
+  if(S&&!S.error){const sv=S.svc;$('#srcInfo').innerHTML=`Parsed ${S.docs.length} document(s): Deployment <b>${esc(S.dep.metadata.name)}</b> (${S.dep.spec.replicas} replicas, requests ${S.dep.spec.template.spec.containers[0].cpu}m cpu / ${S.dep.spec.template.spec.containers[0].mem}Mi, maxSurge ${S.dep.spec.strategy.maxSurge}, maxUnavailable ${S.dep.spec.strategy.maxUnavailable})${sv?` and Service <b>${esc(sv.metadata.name)}</b>`:''}.`;
+    $('#statLine').textContent=`${nodeList().length} worker nodes · 2000m cpu / 4096Mi each`}
+  else{$('#srcInfo').innerHTML=`<span class="bad">${esc(S.error)}</span>`;$('#statLine').textContent=''}
+  showPhase(cur);
+}
+$('#src').addEventListener('input',()=>{stopAll();rebuild(true)});
+$('#nn').addEventListener('change',()=>{stopAll();rebuild(false)});
+$('#taint').addEventListener('change',()=>{stopAll();rebuild(false)});
+$$('[data-sample]').forEach(b=>b.onclick=()=>{$('#src').value=SAMPLES[b.dataset.sample];stopAll();rebuild(true)});
+
+/* =========================================================
+   ARCHITECTURE OVERVIEW (components + relationships)
+   ========================================================= */
+const OVS={"w": 1000, "h": 420, "groups": [{"x": 170, "y": 40, "w": 790, "h": 225, "label": "Control plane"}, {"x": 170, "y": 290, "w": 580, "h": 110, "label": "Worker node (\u00d7N)"}], "nodes": [{"id": "kubectl", "x": 10, "y": 80, "w": 110, "h": 56, "label": "kubectl", "sub": "declares state", "desc": "Sends the desired state (a manifest) to the API server; it does not tell anything to run.", "phase": 0}, {"id": "etcd", "x": 10, "y": 190, "w": 110, "h": 56, "label": "etcd", "sub": "versioned KV", "desc": "The only store of cluster state: every object has a resourceVersion and clients can watch changes.", "phase": 2}, {"id": "apiserver", "x": 190, "y": 80, "w": 150, "h": 64, "label": "API server", "sub": "authn \u00b7 RBAC \u00b7 admission", "desc": "The front door and the only component that reads or writes etcd. Authenticates, authorizes, admits, validates, persists and fans out watch events.", "phase": 1}, {"id": "cm", "x": 400, "y": 80, "w": 170, "h": 64, "label": "Controller manager", "sub": "reconcile loops", "desc": "Runs Deployment, ReplicaSet, Endpoints and other controllers that move observed state toward desired state.", "phase": 3}, {"id": "rollout", "x": 610, "y": 80, "w": 150, "h": 64, "label": "Deployment rollout", "sub": "ReplicaSets \u00b7 surge", "desc": "Shifts replicas between old and new ReplicaSets within maxSurge/maxUnavailable limits and keeps history for rollback.", "phase": 7}, {"id": "hpa", "x": 790, "y": 80, "w": 150, "h": 64, "label": "Autoscaler", "sub": "HPA", "desc": "Computes desired replicas from CPU utilisation versus a target and edits the Deployment.", "phase": 8}, {"id": "sched", "x": 400, "y": 190, "w": 170, "h": 60, "label": "Scheduler", "sub": "filter \u00b7 score \u00b7 bind", "desc": "Picks a node for every unscheduled pod by filtering infeasible nodes and scoring the rest, then writes spec.nodeName.", "phase": 4}, {"id": "nodelife", "x": 610, "y": 190, "w": 170, "h": 60, "label": "Node lifecycle", "sub": "heartbeat \u00b7 taint \u00b7 evict", "desc": "Detects silent nodes, marks them NotReady, taints them and evicts their pods after a toleration period.", "phase": 9}, {"id": "kubelet", "x": 190, "y": 320, "w": 150, "h": 60, "label": "Kubelet", "sub": "pod lifecycle \u00b7 probes", "desc": "Runs on each node: starts the pods bound to it through the runtime, runs probes, reports status and heartbeats.", "phase": 5}, {"id": "runtime", "x": 380, "y": 320, "w": 150, "h": 60, "label": "Container runtime", "sub": "CRI", "desc": "Pulls images and runs containers on behalf of the kubelet via the Container Runtime Interface.", "phase": 5}, {"id": "proxy", "x": 570, "y": 320, "w": 160, "h": 60, "label": "kube-proxy", "sub": "Service NAT rules", "desc": "Programs node-level rules so a Service virtual IP is spread across the ready pod endpoints.", "phase": 6}], "edges": [{"from": "kubectl", "to": "apiserver", "label": "REST", "kind": "data"}, {"from": "apiserver", "to": "etcd", "label": "persist", "kind": "data"}, {"from": "apiserver", "to": "cm", "label": "watch", "kind": "ctl"}, {"from": "apiserver", "to": "sched", "label": "unbound", "kind": "ctl"}, {"from": "apiserver", "to": "kubelet", "label": "my pods", "kind": "ctl"}, {"from": "kubelet", "to": "runtime", "label": "CRI", "kind": "data"}, {"from": "kubelet", "to": "nodelife", "label": "heartbeat", "kind": "async"}, {"from": "apiserver", "to": "proxy", "label": "endpoints", "kind": "ctl"}, {"from": "cm", "to": "rollout", "label": "RS", "kind": "data"}, {"from": "hpa", "to": "rollout", "label": "scale", "kind": "ctl"}, {"from": "nodelife", "to": "cm", "label": "evict", "kind": "ctl"}], "flow": [{"n": "kubectl", "t": "kubectl apply sends the desired state."}, {"n": "apiserver", "t": "The API server authenticates, authorizes, admits and validates it."}, {"n": "etcd", "t": "It is persisted in etcd with a new resourceVersion."}, {"n": "cm", "t": "Controllers watching the API server create a ReplicaSet and Pods."}, {"n": "sched", "t": "The scheduler binds each Pod to a node."}, {"n": "kubelet", "t": "That node's kubelet sees its Pod and starts it."}, {"n": "runtime", "t": "The container runtime pulls the image and runs the container."}, {"n": "proxy", "t": "Once Ready, kube-proxy routes Service traffic to it."}]};
+OVS.groupLabelBottom=true;
+
+
+/* ================= init ================= */
+$('#src').value=SAMPLES.web;
+rebuild(true);
+
+/* ================= v2: live simulation, accordion, packets ================= */
+const DETAIL=[
+{how:"kubectl apply reads your YAML, does a client/server-side apply (it stores the last-applied state in the kubectl.kubernetes.io/last-applied-configuration annotation or in managedFields) and sends it to kube-apiserver over HTTPS. Nothing is told to 'run'. The API server stores a Deployment in etcd, and independent controllers, the scheduler and kubelets each react to watch events and move the cluster toward that desired state.",
+ pros:["Declarative: you state the end result and the system retries until it is reached","Loose coupling: components only talk to the API server, so each can crash and restart alone","Every step is an object or event you can inspect with kubectl get/describe","Re-applying the same manifest is idempotent, which makes GitOps workable"],
+ cons:["Eventual consistency: apply returns long before pods are actually running","Many hops make 'why is nothing happening' hard to localize without events and logs","A bad manifest is accepted if it passes validation, then fails later at runtime","Apply conflicts appear when several tools or people own the same fields"],
+ fails:[{m:"Manifest rejected",s:"error: ... is invalid, or unknown field / strict decoding error from kubectl apply",x:"Run kubectl apply --dry-run=server and kubectl diff; fix apiVersion, schema and selector/labels mismatch"},
+ {m:"Apply succeeds but nothing runs",s:"Deployment exists, READY 0/3, no pods or pods Pending",x:"kubectl describe deploy/rs, then check controller-manager and scheduler health and Events"},
+ {m:"Field ownership conflict",s:"Server-side apply error: Apply failed with 1 conflict ... conflict with another manager",x:"Decide the owner of the field; use --force-conflicts only deliberately or remove the other writer (HPA vs replicas)"},
+ {m:"Stale kubeconfig or auth failure",s:"Unauthorized / Forbidden or connection refused / timeout to the API server",x:"Check kubectl config current-context, token/cert expiry, VPN, and API server endpoint health"}],
+ watch:["kubectl get events --sort-by=.lastTimestamp: bad = Warning events right after apply","kubectl rollout status deploy/NAME: bad = hangs or progress deadline exceeded","kubectl get deploy,rs,pods -o wide: bad = READY below desired for a long time"]},
+
+{how:"Each request goes through the kube-apiserver handler chain: authentication (x509, bearer/OIDC/ServiceAccount token), authorization (RBAC checks Role/ClusterRole bindings for verb, resource, namespace), mutating admission (defaulting, sidecar injection via webhooks), schema validation, validating admission (ResourceQuota, LimitRange, Pod Security, validating webhooks), then the write to etcd. Rejection at any stage returns 401, 403, 422 or 409 and stores nothing.",
+ pros:["One enforcement point for security and policy, regardless of which client is calling","Admission lets platform teams inject defaults and block unsafe objects without changing apps","Fail early: bad requests never reach etcd or controllers","RBAC is additive and auditable through audit logs"],
+ cons:["The API server is a shared bottleneck: slow admission or webhooks slow every write","Webhooks add network hops and a new failure domain on the critical path","RBAC grows complex and over-broad ClusterRoles are common","Mutating webhooks can change objects in surprising ways (order matters)"],
+ fails:[{m:"Admission webhook outage",s:"Creates/updates fail with: failed calling webhook ... context deadline exceeded or connection refused",x:"Set failurePolicy and timeoutSeconds deliberately, exclude kube-system and the webhook's own namespace, run webhook HA with PDB"},
+ {m:"RBAC denied",s:"Error from server (Forbidden): user cannot create resource in namespace",x:"kubectl auth can-i --as=USER; add a minimal Role/RoleBinding instead of cluster-admin"},
+ {m:"ResourceQuota exceeded",s:"forbidden: exceeded quota, requested vs used vs limited; pods missing from ReplicaSet",x:"Raise the quota or lower requests; also make sure pods set requests/limits when a quota requires them"},
+ {m:"API server overload",s:"429 Too Many Requests, high request latency, slow kubectl",x:"Tune API Priority and Fairness, fix noisy clients/controllers, scale apiserver replicas, watch etcd latency"}],
+ watch:["apiserver_request_duration_seconds and apiserver_request_total by code: bad = rising 5xx/429 or p99 over 1s","apiserver_admission_webhook_rejection_count / admission_webhook latency: bad = timeouts","kubectl auth can-i --list --as=USER; check audit logs for Forbidden","kubectl describe quota -n NS: bad = used equals hard"]},
+
+{how:"etcd is a Raft-replicated key-value store, normally 3 or 5 members. Every object lives under /registry/... and each write bumps a global revision, exposed as resourceVersion. Updates are optimistic: the API server rejects a write whose resourceVersion is stale with 409 Conflict. Clients use list+watch from a resourceVersion; if it was compacted away, they get 410 Gone and must re-list.",
+ pros:["Strong consistency via Raft means a single agreed view of cluster state","resourceVersion gives lock-free optimistic concurrency between controllers","Watch streams push changes, so controllers do not poll","Revisions allow resuming a watch exactly where it left off"],
+ cons:["Writes need a quorum and a disk fsync, so slow disks hurt the entire cluster","Practical limits: a 2 GB default space quota (about 8 GB recommended maximum) and a 1.5 MB request size cap","Compaction and defrag must be managed, and 410 Gone forces expensive re-lists","Large clusters with many watchers or big objects (Secrets, CRDs, Events) strain it"],
+ fails:[{m:"Quorum loss",s:"API server returns timeouts or 'etcdserver: no leader'; cluster is read-only or unavailable; running pods continue",x:"Restore majority of members or recover from snapshot; keep odd member count across failure zones; practice restores"},
+ {m:"Slow disk / high latency",s:"'etcdserver: request timed out', slow kubectl, leader elections flapping",x:"Use dedicated SSD/NVMe; watch fsync and backend commit durations; keep etcd off noisy neighbors"},
+ {m:"Database space exceeded",s:"etcdserver: mvcc: database space exceeded; writes refused (NOSPACE alarm)",x:"Compact, defrag, disarm the alarm; find the object hoarding space (events, huge CRs); raise quota-backend-bytes carefully"},
+ {m:"409 Conflict / 410 Gone",s:"Operation cannot be fulfilled ... object has been modified; or 'too old resource version' in controller logs",x:"Retry with a fresh GET (client-go RetryOnConflict); informers re-list automatically; avoid long-lived stale watches"}],
+ watch:["etcd_disk_wal_fsync_duration_seconds and backend_commit_duration: bad = p99 above ~10 ms / 25 ms","etcd_server_has_leader and leader_changes_seen_total: bad = 0 leader or frequent changes","etcd_mvcc_db_total_size_in_bytes vs quota: bad = above ~80 percent","etcdctl endpoint status -w table and endpoint health"]},
+
+{how:"kube-controller-manager runs many controllers (Deployment, ReplicaSet, Endpoints, Node, Job and others). Each uses informers with a local cache fed by watch, puts keys on a work queue, and in a reconcile function compares desired spec with observed status, then creates, patches or deletes objects. They are level-triggered: if an event is missed, the next resync or re-list still finds the gap. Deployment owns ReplicaSets, which own Pods through ownerReferences.",
+ pros:["Level-triggered loops self-heal: a lost event or a crashed controller is corrected on the next sync","Small single-purpose controllers compose into complex behavior","Same pattern works for your own CRDs and operators","Garbage collection via ownerReferences cleans children automatically"],
+ cons:["Reconciliation is asynchronous, so there is always a delay between change and effect","Two controllers editing the same field can fight each other forever","Controller-manager is leader-elected, so only one active instance does work","Errors are retried with backoff, which can hide a persistent problem in logs"],
+ fails:[{m:"Controller-manager down or leaderless",s:"Scaling or deleting pods has no effect; ReplicaSet does not replace deleted pods",x:"Check the kube-controller-manager pod and logs, lease in kube-system, and API connectivity; keep 3 control-plane nodes"},
+ {m:"Reconcile fight",s:"Replicas keep flipping, objects constantly modified, high API write rate",x:"Single owner per field (HPA owns replicas, remove replicas from GitOps manifest); inspect managedFields"},
+ {m:"Missed watch event",s:"Temporary drift until the next resync, such as a deleted pod not replaced immediately",x:"Expected to heal via resync/re-list; check informer lag and API server health if it persists"},
+ {m:"Stuck finalizers / orphan objects",s:"Object stays Terminating, namespace never deletes",x:"Find the finalizer and its controller; fix or remove the controller; patch the finalizer only as a last resort"}],
+ watch:["workqueue_depth and workqueue_work_duration_seconds per controller: bad = growing depth or long processing","kubectl get rs,deploy: bad = DESIRED differs from CURRENT for long","kubectl get lease -n kube-system: bad = stale renewTime for the controller-manager","kubectl describe deploy: look at Conditions (Progressing, Available) and Events"]},
+
+{how:"kube-scheduler watches pods with an empty spec.nodeName. For each one it runs Filter plugins (NodeResourcesFit using requests, taints and tolerations, nodeSelector/affinity, topology spread, PVC zone) to drop infeasible nodes, then Score plugins to rank the rest, and finally Binds by creating a Binding that sets spec.nodeName. Scheduling uses requests, not actual usage. If no node fits, the pod stays Pending with a FailedScheduling event.",
+ pros:["Pluggable framework: filters and scores can be tuned or extended with profiles","Resource requests give predictable placement and bin-packing control","Affinity, taints and topology spread express placement rules declaratively","Decoupled from kubelet: scheduling decision is just one field written to the API"],
+ cons:["Decisions rely on requests, which are often wrong, so nodes can be overcommitted or wasteful","Scheduling is a point-in-time choice; nothing rebalances later without the descheduler","Strict constraints (anti-affinity, zone volumes) can make pods unschedulable","One scheduler loop is a throughput limit on very large bursts"],
+ fails:[{m:"FailedScheduling: insufficient cpu/memory",s:"Pods Pending; event: 0/N nodes are available: N Insufficient cpu",x:"Lower requests if oversized, add nodes or enable Cluster Autoscaler, check kubectl describe node Allocated resources"},
+ {m:"Taint / selector mismatch",s:"Event: node(s) had untolerated taint or didn't match Pod's node affinity/selector",x:"Add tolerations or fix labels; check kubectl describe node for Taints"},
+ {m:"Volume node affinity conflict",s:"Pod Pending: node(s) had volume node affinity conflict; PVC bound in another zone",x:"Use WaitForFirstConsumer StorageClass; ensure capacity in the volume's zone"},
+ {m:"Scheduler not running",s:"New pods Pending with no events at all",x:"Check kube-scheduler pod and leader lease; restore control-plane node"}],
+ watch:["kubectl get pods --field-selector=status.phase=Pending and kubectl describe pod (FailedScheduling event)","scheduler_pending_pods and scheduler_pod_scheduling_duration_seconds: bad = rising queue or high latency","kubectl describe node: compare Allocated requests vs Allocatable","kubectl top nodes to compare real usage with requested"]},
+
+{how:"The kubelet on each node watches pods whose spec.nodeName is its node. It pulls images and creates the sandbox and containers through the CRI (containerd or CRI-O), mounts volumes, runs startup, liveness and readiness probes, and writes pod status back to the API. It also renews its Lease every ~10 s and posts node status. Failed containers are restarted per restartPolicy with exponential backoff up to 5 minutes.",
+ pros:["Node-local agent keeps working from its cache even if the control plane is briefly unreachable","CRI abstraction lets you swap container runtimes","Probes give the platform application-level health signals","Status reporting makes pod state visible and drives traffic via readiness"],
+ cons:["Image pulls, slow registries and big images delay startup","Bad probe settings cause needless restarts or premature traffic","Resource limits cause OOMKills and CPU throttling that look like app bugs","Kubelet trouble hides pods on that node from the control plane's view"],
+ fails:[{m:"ImagePullBackOff / ErrImagePull",s:"Pod stuck, event: Failed to pull image / manifest unknown / unauthorized",x:"Fix tag or registry, add imagePullSecrets, check registry reachability and rate limits"},
+ {m:"CrashLoopBackOff",s:"Restarts climb, back-off delay grows to 5 minutes, Last State terminated with exit code",x:"kubectl logs --previous; check config, dependencies, exit code, OOMKilled; add startupProbe for slow apps"},
+ {m:"Readiness never passes",s:"Pod Running but READY 0/1; removed from Service endpoints",x:"kubectl describe pod for probe failures; fix probe path/port/initialDelay; do not point readiness at external dependencies"},
+ {m:"OOMKilled / eviction",s:"Last State: OOMKilled, exit 137; or Evicted due to node pressure",x:"Raise memory limit or fix leak; set requests close to real use; watch node DiskPressure/MemoryPressure"}],
+ watch:["kubectl get pods -w and kubectl describe pod: bad = Waiting reasons, rising RESTARTS","kubectl logs POD --previous for crashed containers","kubelet_pod_start_duration_seconds and container_oom_events_total","kubectl get node: bad = NotReady, plus conditions like MemoryPressure"]},
+
+{how:"A Service gets a stable ClusterIP and a label selector. The EndpointSlice controller keeps EndpointSlices listing only pod IPs that are Ready. kube-proxy on every node watches Services and EndpointSlices and programs iptables (default, random probability rules) or IPVS rules so traffic to the ClusterIP is DNAT-ed to one ready pod. CoreDNS gives the Service a DNS name.",
+ pros:["Stable virtual IP and DNS name while pods come and go","Readiness gating means only healthy pods receive traffic","Rules are programmed on every node, so there is no central proxy to saturate","Simple model that works for any TCP/UDP workload"],
+ cons:["Connection-level balancing only, so long-lived HTTP/2 or gRPC connections can stay unbalanced","iptables mode scales linearly with Service count; rule sync gets slow in huge clusters","Rule updates are eventually consistent, so brief traffic to a gone pod is possible","Poor visibility: no per-request metrics or retries without a mesh"],
+ fails:[{m:"Empty endpoints",s:"Connection refused / timeout via the Service; kubectl get endpoints shows <none>",x:"Selector must match pod labels; pods must be Ready; check targetPort matches the containerPort"},
+ {m:"Traffic to terminating pod",s:"Errors or resets during deploys or scale-down",x:"preStop sleep, terminationGracePeriodSeconds, handle SIGTERM and drain connections; use readiness to fail fast"},
+ {m:"Stale kube-proxy rules",s:"Some nodes cannot reach a Service or hit dead pod IPs",x:"Check kube-proxy pod logs and sync duration; restart it; verify the CNI and conntrack"},
+ {m:"Unbalanced long-lived connections",s:"One pod gets most load while others idle",x:"Client-side balancing, connection max age, or a service mesh / L7 ingress"}],
+ watch:["kubectl get endpointslices -l kubernetes.io/service-name=NAME: bad = no ready addresses","kubectl describe svc NAME: check selector, ports, Endpoints","kubeproxy_sync_proxy_rules_duration_seconds: bad = seconds-long syncs","kubectl run curl test from inside the cluster and check CoreDNS logs"]},
+
+{how:"Changing the pod template changes its hash, so the Deployment controller creates a new ReplicaSet and scales it up while scaling the old one down. Pace is bounded by maxSurge (extra pods above desired) and maxUnavailable (pods allowed below desired), defaults 25 percent each. A new pod only counts as available after readiness (and minReadySeconds). Old ReplicaSets are kept (revisionHistoryLimit, default 10), enabling kubectl rollout undo.",
+ pros:["Zero-downtime updates when readiness probes and surge settings are right","Easy rollback to a previous ReplicaSet","Bad new version stalls the rollout and leaves old pods serving","Tunable speed vs capacity trade-off"],
+ cons:["Surge needs spare cluster capacity or the new pods stay Pending","No automatic rollback: a stuck rollout just reports ProgressDeadlineExceeded","Both versions run together, so schemas and APIs must be backward compatible","Not canary or traffic-weighted; that needs Argo Rollouts or a mesh"],
+ fails:[{m:"Broken new image",s:"New pods ImagePullBackOff or CrashLoopBackOff; rollout stalls; old pods keep serving",x:"kubectl rollout undo; fix the image; progressDeadlineSeconds surfaces the failure to CI"},
+ {m:"Readiness gap / dropped requests",s:"5xx or connection resets during deploy",x:"Accurate readiness probe, preStop delay, sufficient grace period, maxUnavailable 0 for strict availability"},
+ {m:"Surge pods Pending",s:"Rollout stuck at partial progress; FailedScheduling for new pods",x:"Free capacity, lower maxSurge, or let Cluster Autoscaler add nodes"},
+ {m:"Bad rollback target",s:"Undo goes to a ReplicaSet with the same bad config or trimmed history",x:"Keep revisionHistoryLimit adequate and annotate change causes; deploy via Git so state is reproducible"}],
+ watch:["kubectl rollout status deploy/NAME and kubectl rollout history: bad = ProgressDeadlineExceeded","kubectl get rs: bad = new RS stuck below desired, old RS not draining","kube_deployment_status_replicas_unavailable: bad = above 0 for long","kubectl describe deploy: Conditions and ReplicaSet events"]},
+
+{how:"The HPA controller syncs every 15 s by default. It reads metrics from metrics-server (CPU/memory) or custom/external metrics APIs and computes desired = ceil(current replicas * current metric / target). CPU utilization is relative to pod requests. It applies tolerance (about 10 percent), min/maxReplicas, the behavior policies and a scale-down stabilization window (default 300 s), and then patches the scale subresource of the Deployment.",
+ pros:["Capacity follows load automatically, cutting cost and manual toil","Scale-up is quick while scale-down is damped to avoid thrashing","Works with custom metrics such as queue length or RPS","Min/max bounds protect against runaway scaling"],
+ cons:["Needs CPU requests set, and utilization is measured against them","Reactive: new pods take time to schedule, pull images and become Ready","Metrics lag (scrape interval) delays decisions","Scaling replicas does not help if nodes are full or the bottleneck is a database"],
+ fails:[{m:"Metrics unavailable",s:"HPA shows <unknown>/70%; event FailedGetResourceMetric",x:"Install or fix metrics-server; ensure containers define resource requests; check the APIService v1beta1.metrics.k8s.io"},
+ {m:"HPA flapping",s:"Replica count oscillates up and down",x:"Increase scale-down stabilizationWindowSeconds, use behavior policies, widen target gap, smooth the metric"},
+ {m:"Scaled out but pods Pending",s:"Desired replicas high but available replicas stay low",x:"Enable Cluster Autoscaler or Karpenter; check quotas and FailedScheduling events"},
+ {m:"Fighting with replicas in Git",s:"GitOps resets replicas to a fixed number",x:"Remove spec.replicas from the manifest or ignore the field in the sync tool"}],
+ watch:["kubectl get hpa -w and kubectl describe hpa: bad = <unknown> targets, AbleToScale or ScalingActive false","kube_horizontalpodautoscaler_status_desired_replicas vs current: bad = long gap","kubectl top pods: compare real CPU with requests and target","Pending pods after scale-up: kubectl get pods --field-selector=status.phase=Pending"]},
+
+{how:"Each kubelet renews a Lease in kube-node-lease every ~10 s. If the node-lifecycle controller sees no update for node-monitor-grace-period (default 40 s; 50 s in recent releases), it sets Ready to Unknown, and adds the node.kubernetes.io/unreachable taint with NoSchedule and NoExecute. Pods get a default toleration of 300 s (tolerationSeconds), after which they are evicted; their ReplicaSet creates replacements elsewhere and the Endpoints controller removes the not-Ready pods from Services.",
+ pros:["Automatic recovery: lost capacity is recreated on healthy nodes","Taints and tolerations make eviction timing configurable per pod","Services stop sending traffic once pods are not Ready","Tolerating short blips avoids needless churn from brief network issues"],
+ cons:["Default ~5 minutes of delay before pods are evicted (40-50 s detection plus 300 s toleration)","Cannot tell a dead node from a partitioned one, so a pod may still run on the isolated node","Stateful pods with RWO volumes can wait on volume detach or need fencing","Mass failure (zone outage) causes a thundering herd of rescheduling, and eviction rate is limited"],
+ fails:[{m:"Slow eviction",s:"Pods stay Running/Unknown on a NotReady node for ~5 minutes; capacity short",x:"Lower tolerationSeconds for unreachable/not-ready taints on critical workloads; run enough replicas across nodes and zones"},
+ {m:"All replicas on one node",s:"Service outage when that node dies",x:"topologySpreadConstraints or pod anti-affinity; PodDisruptionBudget; multiple zones"},
+ {m:"StatefulSet / volume stuck",s:"Replacement pod Pending or ContainerCreating: Multi-Attach error",x:"Wait for detach, or force delete the pod only after confirming the node is really down; use node shutdown handling"},
+ {m:"Zone outage eviction throttling",s:"Many nodes NotReady, controller slows evictions (cluster unhealthy mode)",x:"Expected safety behavior; restore the zone, ensure spare capacity so rescheduled pods can fit"}],
+ watch:["kubectl get nodes: bad = NotReady; kubectl describe node for Conditions and taints","kube_node_status_condition{condition=Ready,status=true}==0 alert","kubectl get events: reasons NodeNotReady, TaintManagerEviction, Killing","kubectl get lease -n kube-node-lease: bad = stale renewTime"]}
+];
+
+(function(){
+const SIMM={
+ id:'k8s',nodeLabel:'worker nodes',nodeRange:[2,4,3],
+ settings:[{id:'strat',label:'update strategy',opts:['RollingUpdate','Recreate'],def:'RollingUpdate'},{id:'grace',label:'node-monitor grace',opts:['short (2.5s)','long (5s)'],def:'short (2.5s)'}],
+ menu:[{op:'C',label:'CREATE Deployment',args:[{n:'name',d:'web',w:50},{n:'replicas',d:'3',w:40},{n:'image',d:'v1',w:44}]},{op:'S',label:'SCALE (update replicas)',args:[{n:'name',d:'web',w:50},{n:'replicas',d:'5',w:40}]},{op:'U',label:'UPDATE image (rollout)',args:[{n:'name',d:'web',w:50},{n:'image',d:'v2',w:44}]},{op:'D',label:'DELETE Deployment',args:[{n:'name',d:'web',w:50}]},{op:'K',label:'kill worker node',args:[{n:'#',d:'1',w:40}]},{op:'H',label:'restart worker node',args:[{n:'#',d:'1',w:40}]}],
+ scenarios:[
+  {name:'create → update → delete',desc:'kubectl only writes desired state. Controllers, the scheduler and kubelets each watch the API server and react: Deployment → ReplicaSet → Pods → node binding → containers → Service endpoints. A rolling update replaces pods one at a time so the Service keeps ready endpoints; Recreate kills all first.',acts:['0 C web 3 v1','8500 U web v2','25000 D web']},
+  {name:'worker node fails (self-healing)',desc:'The node stops sending heartbeats, but the control plane still lists its pods as Running until the grace period expires. Then the node controller evicts them, the ReplicaSet creates replacements and the scheduler places them on healthy nodes. Try the longer grace period.',acts:['0 C web 4 v1','8000 K 1','21000 H 1','23000 S web 6']},
+ ],
+ topo(n){
+  const nodes=[{id:'cli',x:14,y:190,w:90,h:70,label:'kubectl'},{id:'api',x:170,y:170,w:140,h:110,label:'API server',badge:'auth→admit→persist'},{id:'etcd',x:170,y:14,w:140,h:100,label:'etcd',badge:'desired state'},{id:'ctl',x:370,y:14,w:150,h:100,label:'Controllers',badge:'reconcile loops'},{id:'sch',x:370,y:340,w:150,h:90,label:'Scheduler',badge:'filter + score'},{id:'svc',x:370,y:178,w:150,h:96,label:'Service',badge:'kube-proxy endpoints'}];
+  const bh=Math.min(120,Math.floor(430/n)-8),y0=(450-n*(bh+8))/2;
+  for(let i=0;i<n;i++)nodes.push({id:'w'+i,x:620,y:y0+i*(bh+8),w:260,h:bh,label:'worker '+i,badge:'kubelet'});
+  const edges=[['cli','api'],['api','etcd'],['api','ctl'],['api','sch'],['api','svc']];for(let i=0;i<n;i++)edges.push(['api','w'+i]);
+  return{nodes,edges,w:900,h:450,zones:[{x:156,y:2,w:380,h:124,label:'control plane'}]};
+ },
+ init(n){const st={status:{cli:'up',api:'up',etcd:'up',ctl:'up',sch:'up',svc:'up'},dep:{},pods:[],rv:0,bound:0,n};for(let i=0;i<n;i++)st.status['w'+i]='up';return st},
+ apply(st,f){st.rv++;switch(f.op){
+   case'dep':st.dep[f.name]={replicas:f.replicas,image:f.image};break;
+   case'depdel':delete st.dep[f.name];break;
+   case'pod+':st.pods.push({name:f.name,dep:f.dep,img:f.img,node:null,phase:'Pending'});break;
+   case'bind':{const p=st.pods.find(x=>x.name===f.name);if(p){p.node=f.node;st.bound++}break}
+   case'phase':{const p=st.pods.find(x=>x.name===f.name);if(p)p.phase=f.phase;break}
+   case'pod-':st.pods=st.pods.filter(x=>x.name!==f.name);break;
+   case'down':st.status[f.node]='down';break;
+   case'up':st.status[f.node]='up';break}},
+ fxText(f){return{dep:`etcd: Deployment ${f.name} replicas=${f.replicas} image=${f.image}`,depdel:`etcd: Deployment ${f.name} deleted`,'pod+':`etcd: Pod ${f.name} created (Pending)`,bind:`Pod ${f.name} bound to ${f.node}`,phase:`Pod ${f.name} → ${f.phase}`,'pod-':`Pod ${f.name} removed`,down:`${f.node} stops heartbeating`,up:`${f.node} Ready`}[f.op]||f.op},
+ run(acts,n,set){
+  const W=SIMM.init(n),ev=[],pend=[],ap=f=>SIMM.apply(W,f),grace=set.grace&&set.grace.startsWith('long')?5000:2500,recreate=set.strat==='Recreate';
+  const push=e=>{ev.push(e);if(e.fx.length)pend.push({at:e.t+e.d,e});return e};
+  const flush=t=>{pend.sort((x,y)=>x.at-y.at);while(pend.length&&pend[0].at<=t){pend.shift().e.fx.forEach(ap)}};
+  let seq=0;
+  const load=i=>W.pods.filter(p=>p.node==='w'+i).length+pend.filter(x=>x.e.fx.some(f=>f.op==='bind'&&f.node==='w'+i)).length;
+  const upNodes=()=>[...Array(n).keys()].filter(i=>W.status['w'+i]==='up');
+  // create one pod; returns time it becomes Ready
+  function podFlow(t,dep,img,why){
+   const name=`${dep}-${++seq}`;
+   push(E(t,300,'ctl','api',`create Pod ${name} (${img})`,'ctrl',[],why||'The ReplicaSet controller sees fewer pods than replicas and creates a Pod object.'));
+   push(E(t+300,300,'api','etcd',`persist Pod ${name} (Pending)`,'write',[{op:'pod+',name,dep,img}],'The pod exists only as a record in etcd. Nothing is running yet and no node is chosen.'));
+   push(E(t+600,350,'api','sch',`watch: unscheduled Pod ${name}`,'watch',[],'The scheduler watches for pods with no node.'));
+   flush(t+950);const ups=upNodes();
+   if(!ups.length){push(E(t+950,0,'sch','sch',`Pod ${name}: no node available (Pending)`,'fail',[],'FailedScheduling: every node is down or unfit. The pod stays Pending until a node returns.'));return null}
+   ups.sort((a,b)=>load(a)-load(b));const w=ups[0];
+   push(E(t+950,400,'sch','sch',`filter + score → worker ${w}`,'info',[],'Filter drops unfit nodes (resources, taints). Score ranks the rest; here the least-loaded wins.'));
+   push(E(t+1350,350,'sch','api',`bind ${name} → worker ${w}`,'write',[{op:'bind',name,node:'w'+w}],'The scheduler only writes a binding (spec.nodeName). It does not start anything.'));
+   push(E(t+1700,350,'api','w'+w,`watch: Pod ${name} assigned`,'watch',[],'The kubelet on that node watches for pods bound to it.'));
+   push(E(t+2050,900,'w'+w,'w'+w,`pull ${img}, start container`,'info',[{op:'phase',name,phase:'Running'}],'The kubelet asks the container runtime to pull the image and start the container, then runs probes.'));
+   push(E(t+2950,300,'w'+w,'api',`status: ${name} Ready`,'ack',[],'The kubelet reports Ready through the API server.'));
+   push(E(t+3250,300,'api','svc',`endpoint +${name}`,'watch',[],'The endpoints controller adds the pod IP; kube-proxy then starts routing traffic to it.'));
+   return{name,at:t+3550,node:w};
+  }
+  function killPod(t,name,why){const p=W.pods.find(x=>x.name===name),node=p&&p.node;
+   push(E(t,300,'api','svc',`endpoint −${name}`,'watch',[],'The pod is removed from Service endpoints first so no new traffic reaches it.'));
+   if(node)push(E(t+300,300,'api',node,`delete ${name}`,'watch',[{op:'phase',name,phase:'Terminating'}],why||'The kubelet receives SIGTERM, gives the app time to drain, then removes the container.'));
+   push(E(t+600,500,node||'api','api',`${name} gone`,'ack',[{op:'pod-',name}],'The pod object is removed after the container has stopped.'));return t+1100}
+  const live=dep=>W.pods.filter(p=>p.dep===dep&&p.phase!=='Terminating');
+  for(const a of acts){const t=a.t;flush(t);const name=a.args[0]||'web';
+   if(a.op==='C'){const r=Math.max(1,+a.args[1]||3),img=a.args[2]||'v1';
+    if(W.dep[name]){push(E(t,500,'cli','api',`create ${name}`,'write',[],'kubectl sends the manifest.'));push(E(t+500,300,'api','cli','AlreadyExists','fail',[],'Names are unique per namespace; use apply/update instead.'));continue}
+    push(E(t,450,'cli','api',`POST Deployment ${name} (replicas=${r}, ${img})`,'write',[],'kubectl submits desired state: "I want '+r+' pods".'));
+    push(E(t+450,400,'api','api','authenticate → authorize → admit → validate','info',[],'The API server pipeline: who are you, may you do this, mutating/validating admission, schema validation.'));
+    push(E(t+850,300,'api','etcd',`persist Deployment ${name}`,'write',[{op:'dep',name,replicas:r,image:img}],'Desired state is saved in etcd. This is the only durable record; everything else can be rebuilt from it.'));
+    push(E(t+1150,350,'api','ctl',`watch: Deployment ${name} added`,'watch',[],'Controllers hold watches on the API server, so they are told immediately instead of polling.'));
+    push(E(t+1500,300,'ctl','ctl',`Deployment → ReplicaSet (${r} pods)`,'ctrl',[],'The Deployment controller creates a ReplicaSet; the ReplicaSet controller then creates the Pods.'));
+    for(let i=0;i<r;i++)podFlow(t+1800+i*120,name,img);flush(t+1800)}
+   if(a.op==='S'){const r=Math.max(0,+a.args[1]||1);if(!W.dep[name])continue;const cur=live(name).length;
+    push(E(t,450,'cli','api',`scale ${name} → ${r}`,'write',[],'Scaling only changes spec.replicas.'));
+    push(E(t+450,300,'api','etcd',`persist replicas=${r}`,'write',[{op:'dep',name,replicas:r,image:W.dep[name].image}],'One field changes in etcd.'));
+    push(E(t+750,350,'api','ctl',`watch: ${name} changed`,'watch',[],'The ReplicaSet controller compares observed (${cur}) with desired (${r}) and closes the gap.'));
+    if(r>cur)for(let i=0;i<r-cur;i++)podFlow(t+1100+i*120,name,W.dep[name].image,`Desired ${r}, observed ${cur+i}: create another pod.`);
+    else live(name).slice(r-cur).forEach((p,i)=>killPod(t+1100+i*150,p.name))}
+   if(a.op==='U'){const img=a.args[1]||'v2';const d=W.dep[name];if(!d)continue;
+    push(E(t,450,'cli','api',`set image ${name} → ${img}`,'write',[],'A new pod template (image) is submitted.'));
+    push(E(t+450,300,'api','etcd',`persist ${name} image=${img}`,'write',[{op:'dep',name,replicas:d.replicas,image:img}],'Changing the pod template creates a NEW ReplicaSet; the old one is scaled down.'));
+    push(E(t+750,350,'api','ctl',`watch: ${name} changed`,'watch',[],'The Deployment controller starts a rollout.'));
+    const olds=live(name).filter(p=>p.img!==img);let c=t+1100;
+    if(recreate){push(E(c,300,'ctl','ctl','Recreate: stop ALL old pods first','ctrl',[],'Recreate has no overlap: simple, but the app is down between the last old pod stopping and the first new pod becoming Ready.'));let e0=c+300;olds.forEach((p,i)=>{e0=Math.max(e0,killPod(c+300+i*100,p.name))});
+     push(E(e0,0,'svc','svc','0 ready endpoints: traffic FAILS (downtime)','fail',[],'Every old pod is gone and the new ones are not Ready yet.'));for(let i=0;i<olds.length;i++)podFlow(e0+200+i*120,name,img,'Recreate: start the new version.');}
+    else{push(E(c,300,'ctl','ctl','RollingUpdate: surge 1, unavailable 0','ctrl',[],'Start one new pod, wait until Ready, only then stop one old pod. Capacity never drops below the desired count.'));
+     for(const o of olds){const f=podFlow(c+300,name,img,'Rollout step: surge one new pod.');if(!f)break;c=killPod(f.at,o.name,'Only after the new pod is Ready does the old one get terminated.')}}
+    flush(t+1100)}
+   if(a.op==='D'){const d=W.dep[name];if(!d)continue;
+    push(E(t,450,'cli','api',`DELETE Deployment ${name}`,'write',[],'kubectl asks to delete.'));
+    push(E(t+450,300,'api','etcd',`remove ${name}`,'write',[{op:'depdel',name}],'The Deployment is removed from etcd. Dependents carry an ownerReference, so garbage collection removes them.'));
+    push(E(t+750,350,'api','ctl',`GC: delete ReplicaSet and Pods`,'watch',[],'The garbage collector deletes everything owned by the Deployment.'));
+    live(name).forEach((p,i)=>killPod(t+1100+i*150,p.name));flush(t+1100)}
+   if(a.op==='K'){const i=+a.args[0]||0;if(i>=n||W.status['w'+i]!=='up')continue;const nd='w'+i;
+    for(let q=pend.length-1;q>=0;q--){const e=pend[q].e;if((e.from===nd||e.to===nd)&&pend[q].at>t){e.fx=e.fx.filter(f=>f.op==='bind'||f.op==='pod+');e.kind='fail';e.msg+=' ✕ node died';pend.splice(q,1)}}
+    push(E(t,0,nd,nd,`worker ${i} CRASHES (heartbeats stop)`,'fail',[{op:'down',node:nd}],'Power loss or network partition. The control plane does not know yet: its pods still look Running.'));flush(t);
+    const lost=W.pods.filter(p=>p.node===nd||(p.node===null&&false));
+    push(E(t+grace-400,400,'ctl','api','node-monitor: no heartbeat → NotReady','ctrl',[],`After the grace period (${grace/1000}s) the node controller marks the node NotReady and taints it. A longer grace period avoids false alarms but lengthens the outage.`));
+    const et=t+grace;
+    lost.forEach(p=>{push(E(et,350,'api','svc',`endpoint −${p.name} (node lost)`,'watch',[],'Pods on the dead node are removed from Service endpoints.'));push(E(et+350,300,'api','etcd',`evict ${p.name}`,'write',[{op:'pod-',name:p.name}],'The pod record is deleted; the dead kubelet cannot confirm it, so the control plane forgets it.'))});
+    flush(et+700);
+    const deps={};lost.forEach(p=>{deps[p.dep]=(deps[p.dep]||0)+1});
+    const rem=Object.keys(W.dep).reduce((c,k)=>c+live(k).length,0);
+    if(lost.length&&rem===0)push(E(t,0,'svc','svc','no ready endpoints left: traffic FAILS','fail',[],'All pods were on the failed node: this is why you spread replicas across nodes (topology spread / anti-affinity).'));
+    Object.entries(deps).forEach(([d,k])=>{if(!W.dep[d])return;const need=W.dep[d].replicas-live(d).length;for(let j=0;j<Math.max(0,need);j++)podFlow(et+800+j*120,d,W.dep[d].image,'Observed < desired after eviction: the ReplicaSet creates a replacement. Same loop, no special failure code.')});
+    flush(et+800)}
+   if(a.op==='H'){const i=+a.args[0]||0;if(i>=n)continue;push(E(t,500,'w'+i,'api',`worker ${i} registers, Ready`,'ack',[{op:'up',node:'w'+i}],'The kubelet comes back with no pods. Existing pods are not moved back; the scheduler simply uses it for new ones.'));flush(t+500)}
+  }
+  return{events:ev};
+ },
+ lines(id,st){
+  if(id==='cli')return[];
+  if(id==='etcd')return[`revision ${st.rv}`,...Object.entries(st.dep).map(([k,v])=>`deploy/${k} ×${v.replicas} ${v.image}`),`pods ${st.pods.length}`];
+  if(id==='api')return[`writes ${st.rv}`];
+  if(id==='ctl')return Object.entries(st.dep).map(([k,v])=>{const r=st.pods.filter(p=>p.dep===k&&p.phase==='Running').length;return`${k}: ${r}/${v.replicas} ready`});
+  if(id==='sch')return[`bound ${st.bound}`,`pending ${st.pods.filter(p=>!p.node).length}`];
+  if(id==='svc'){const r=st.pods.filter(p=>p.phase==='Running');return[`${r.length} endpoint(s)`,...r.slice(0,5).map(p=>p.name+' '+p.img)]}
+  return st.pods.filter(p=>p.node===id).slice(0,8).map(p=>`${p.name} ${p.img} ${p.phase==='Running'?'●':p.phase}`)},
+ detail(id,st){return SIMM.lines(id,st)}
+};
+
+Lab.sim(SIMM);})();
+
+Lab.start({phases:PHASES,detail:DETAIL,ovs:OVS,ctl:ctlHTML,state:()=>S});
+</script>
+</body>
+</html>
