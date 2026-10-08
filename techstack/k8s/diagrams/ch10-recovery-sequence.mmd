@@ -1,0 +1,16 @@
+%%{init: {'sequence': {'actorMargin': 24, 'width': 90, 'height': 36, 'actorFontSize': 13, 'messageFontSize': 13, 'noteFontSize': 12, 'messageMargin': 22, 'noteMargin': 5, 'boxMargin': 5, 'diagramMarginX': 8, 'mirrorActors': false, 'wrap': false}}}%%
+sequenceDiagram
+    participant CP as Control plane
+    participant C as Controllers
+    participant OP as Operator
+    participant N as node-9
+    Note over CP: node-7 goes silent
+    CP->>CP: Unknown + taint
+    Note over CP,C: Toleration expires (300s)
+    CP->>C: Request deletion
+    C->>N: Create web-new
+    Note over C: db-1 identity held
+    OP->>OP: Verify node-7 off
+    OP->>CP: out-of-service taint
+    CP->>CP: Clear old pod / detach
+    C->>N: Recreate db-1

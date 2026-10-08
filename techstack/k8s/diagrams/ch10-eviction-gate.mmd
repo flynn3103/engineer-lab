@@ -1,0 +1,8 @@
+flowchart TB
+  D[Eviction request] --> B{Budget permits?}
+  B -->|No| R[429: retry later]
+  R -.-> D
+  B -->|Yes| E[Accept eviction]
+  E --> C[Consume disruption allowance]
+  C --> P[Replacement becomes healthy]
+  P -. Next request .-> D

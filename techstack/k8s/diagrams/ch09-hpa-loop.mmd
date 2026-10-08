@@ -1,0 +1,11 @@
+flowchart TB
+  subgraph S[Measure]
+    direction LR
+    U[CPU usage] --> M[Utilisation]
+    R[CPU request] --> M
+  end
+  M --> C[Calculate replica recommendation]
+  C --> B[Stabilization, bounds, rate policies]
+  B --> D[Set desired replicas]
+  D --> P[Start pods and wait for Ready]
+  P -. New metrics .-> U

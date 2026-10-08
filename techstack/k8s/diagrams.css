@@ -2,7 +2,10 @@
    Mermaid viewBox. Never enlarge above native size; fit smaller screens. */
 .prose figure.mm{padding:14px}
 .prose figure.mm img{
-  width:min(100%,var(--diagram-width,620px));
+  width:auto;
+  max-width:min(100%,var(--diagram-width,620px));
+  max-height:480px;
+  object-fit:contain;
   max-width:100%;
   height:auto;
   margin:0 auto;
@@ -27,3 +30,54 @@
 .prose figure.flow path{stroke:var(--mut);stroke-width:1.6;fill:none}
 .prose figure.flow .ah{fill:var(--mut);stroke:none}
 .prose figure.flow figcaption{font:12.5px var(--mono);color:var(--mut);margin-top:10px;text-align:center}
+
+/* Bespoke HPA instruments and failure/eviction scenes. All colours use theme tokens. */
+.scene .hpa-grid,.scene .nf-grid{stroke:var(--line);stroke-width:1;fill:none}
+.scene .hpa-window{fill:color-mix(in srgb,var(--ok) 15%,transparent);stroke:var(--ok);stroke-dasharray:3 3}
+.scene .hpa-raw,.scene .hpa-short,.scene .hpa-long{fill:none;stroke-width:2.5;stroke-linejoin:round}
+.scene .hpa-raw{stroke:var(--acc)}
+.scene .hpa-short{stroke:var(--warn);stroke-dasharray:5 3}
+.scene .hpa-long{stroke:var(--ok)}
+.scene .hpa-sample{fill:var(--card);stroke:var(--acc);stroke-width:2;transition:opacity .3s,fill .3s}
+.scene .hpa-sample.peak{fill:var(--ok);stroke:var(--ok)}
+.scene .hpa-selected{fill:none;stroke:var(--acc2);stroke-width:2}
+.scene .hpa-cursor{stroke:var(--acc2);stroke-dasharray:3 4;stroke-width:1.5}
+.scene .hpa-pod{fill:var(--soft);stroke:var(--line);transition:fill .4s,opacity .4s}
+.scene .hpa-pod.short.active{fill:var(--warn)}
+.scene .hpa-pod.long.active{fill:var(--ok)}
+.scene .hpa-dial{fill:none;stroke:var(--line);stroke-width:11;stroke-linecap:round}
+.scene .hpa-target{stroke:var(--ok);stroke-width:4}
+.scene .hpa-needle{stroke:var(--acc2);stroke-width:3;stroke-linecap:round}
+.scene .hpa-hub{fill:var(--acc2);stroke:var(--card);stroke-width:2}
+.scene .hpa-fraction{stroke:var(--ink);stroke-width:1.8}
+.scene .hpa-replica{transition:opacity .4s}
+.scene .hpa-replica circle{fill:var(--soft);stroke:var(--line);stroke-width:1.4;transition:fill .4s}
+.scene .hpa-replica.ready circle{fill:color-mix(in srgb,var(--ok) 38%,var(--card));stroke:var(--ok)}
+.scene .hpa-replica.pending circle{fill:color-mix(in srgb,var(--warn) 25%,var(--card));stroke:var(--warn);stroke-dasharray:3 2}
+.scene .nf-chassis{fill:var(--card);stroke:var(--ink);stroke-width:1.5;transition:stroke .4s,fill .4s}
+.scene .nf-rack.dead .nf-chassis{stroke:var(--bad);fill:color-mix(in srgb,var(--bad) 5%,var(--card))}
+.scene .nf-led{fill:var(--ok);transition:fill .4s}
+.scene .nf-rack.dead .nf-led{fill:var(--bad)}
+.scene .nf-pulse{fill:none;stroke:var(--ok);stroke-width:2;transition:opacity .4s}
+.scene .nf-silent{stroke:var(--bad);stroke-width:2}
+.scene .nf-heart{fill:var(--ok);transition:fill .4s}
+.scene .nf-heart.silent{fill:var(--bad)}
+.scene .nf-detection{fill:var(--warn)}
+.scene .nf-wait{fill:var(--acc)}
+.scene .nf-track{fill:none;stroke:var(--line);stroke-width:1}
+.scene .nf-reserved,.scene .nf-slot{fill:var(--soft);stroke:var(--line);stroke-dasharray:4 3;stroke-width:1.3}
+.scene .nf-barrier{stroke:var(--line);stroke-width:2;stroke-dasharray:3 4}
+.scene .nf-lock rect{fill:color-mix(in srgb,var(--warn) 32%,var(--card));stroke:var(--warn);stroke-width:2}
+.scene .nf-lock.open rect{fill:color-mix(in srgb,var(--ok) 32%,var(--card));stroke:var(--ok)}
+.scene .nf-shackle{fill:none;stroke:var(--warn);stroke-width:3;transition:transform .5s,stroke .4s}
+.scene .nf-lock.open .nf-shackle{stroke:var(--ok)}
+.scene .nf-volume{transition:transform .7s cubic-bezier(.3,.7,.2,1)}
+.scene .nf-disk{fill:color-mix(in srgb,var(--acc) 18%,var(--card));stroke:var(--acc);stroke-width:1.5}
+.scene .nf-conveyor{fill:none;stroke:var(--mut);stroke-width:2;stroke-dasharray:5 3}
+.scene .nf-gate rect,.scene .nf-gate circle{fill:var(--card);stroke:var(--ink);stroke-width:2}
+.scene .nf-gate-arm{stroke:var(--warn);stroke-width:7;stroke-linecap:round}
+@media(prefers-reduced-motion:reduce){
+  .scene .hpa-sample,.scene .hpa-pod,.scene .hpa-replica,.scene .hpa-replica circle,
+  .scene .nf-chassis,.scene .nf-led,.scene .nf-pulse,.scene .nf-heart,
+  .scene .nf-shackle,.scene .nf-volume{transition:none}
+}

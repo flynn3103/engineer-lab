@@ -1,0 +1,12 @@
+stateDiagram-v2
+  state "New web pod" as StatelessReplacement
+  state "Identity held" as IdentityHeld
+  state "New db-1" as StatefulReplacement
+  [*] --> Ready
+  Ready --> Unknown: Lease stale past grace interval
+  Unknown --> Waiting: Unreachable NoExecute taint
+  Waiting --> Ready: Heartbeat returns before expiry
+  Waiting --> Deleting: Toleration expires
+  Deleting --> StatelessReplacement: ReplicaSet restores count
+  Deleting --> IdentityHeld: StatefulSet old object remains
+  IdentityHeld --> StatefulReplacement: Verified shutdown and old object cleared
