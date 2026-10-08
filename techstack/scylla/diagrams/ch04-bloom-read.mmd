@@ -1,0 +1,10 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Next["Next SSTable"] --> Filter{"Bloom filter says absent?"}
+  Filter -->|Yes| Skip["Skip file"]
+  Skip --> Next
+  Filter -->|No: maybe| Key{"Key in file?"}
+  Key -->|No| Miss["Open cost, no match"]
+  Miss --> Next
+  Key -->|Yes| Merge["Merge cells by timestamp"]
+  Merge --> Next

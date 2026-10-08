@@ -4,3 +4,5 @@ node_modules/
 cv/*.aux
 cv/*.log
 cv/*.out
+tools/
+output/

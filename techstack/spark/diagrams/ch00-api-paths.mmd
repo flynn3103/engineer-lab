@@ -1,0 +1,10 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b"},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26}}}%%
+flowchart TD
+  Records["Distributed records"] --> RDD["RDD: objects + application functions"]
+  Records --> DF["DataFrame: schema + column expressions"]
+  Records --> DS["Dataset T: typed JVM objects + encoders"]
+  RDD --> Lineage["RDD lineage / iterators"]
+  DF --> SQL["Spark SQL logical / physical plans"]
+  DS --> SQL
+  Lineage --> Tasks["Action executes partition tasks"]
+  SQL --> Tasks

@@ -1,0 +1,16 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+stateDiagram-v2
+  direction TB
+  state "Planned" as Planned
+  state "Streaming" as Streaming
+  state "Caught up" as Ready
+  state "Reads new, writes both" as ReadsNew
+  state "Reads and writes new" as UseNew
+  state "Old replica retired" as Retired
+  [*] --> Planned: balancer selects move
+  Planned --> Streaming: dual writes, reads old
+  Streaming --> Ready: copy done, writes applied
+  Ready --> ReadsNew: switch read set
+  ReadsNew --> UseNew: use_new transition
+  UseNew --> Retired: cleanup leaving replica
+  Retired --> [*]

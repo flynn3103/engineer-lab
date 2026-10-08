@@ -1,0 +1,18 @@
+sequenceDiagram
+    autonumber
+    participant CO as Coordinator
+    participant R as Replica
+    participant CL as Commit log (disk)
+    participant M as Memtable
+    CO->>R: Mutation
+    alt Periodic sync
+      R->>CL: Append mutation
+      R-->>CO: ACK before disk sync
+      Note over CL: Sync every commitlog_sync_period_in_ms
+    else Batch sync
+      R->>CL: Append mutation
+      Note over R,CL: Wait up to the batch window
+      R->>CL: Sync to disk
+      R-->>CO: ACK after sync
+    end
+    R->>M: Apply mutation

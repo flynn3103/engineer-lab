@@ -4,46 +4,39 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tech Stack · Linh Trần Nhật</title>
-<meta name="description" content="Deep-dive research on the internals of Spark, ScyllaDB, Redis, Kafka, PostgreSQL, Kubernetes and the operating system: interactive tours, design docs and production runbooks, all searchable.">
+<meta name="description" content="Deep-dive research on the internals of Spark, ScyllaDB, Redis, Kafka, PostgreSQL, Kubernetes, concurrency, distributed systems and databases: lessons you can trace step by step, all searchable.">
 <link rel="stylesheet" href="assets/lab.css">
 <link rel="stylesheet" href="assets/site.css">
-<style>
-.sys{--c:var(--acc);display:flex;flex-direction:column;gap:10px;background:var(--card);border:1px solid var(--line);border-top:5px solid var(--c);border-radius:16px;padding:18px;text-decoration:none;color:inherit;box-shadow:var(--shadow);transition:transform .15s,box-shadow .15s}
-.sys:hover{transform:translateY(-3px);box-shadow:0 10px 28px #0002}
-.sys h2{font-size:21px;display:flex;align-items:center;gap:10px;margin:0}
-.sys h2 i{width:12px;height:12px;border-radius:50%;background:var(--c);display:inline-block}
-.sys .tag2{color:var(--mut);font-size:13px;margin:-6px 0 0}
-.sys .prob{font-size:16px;font-weight:600;line-height:1.4;margin:0;color:var(--ink)}
-.sys .prob::before{content:"The problem";display:block;font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut);font-weight:700;margin-bottom:2px}
-.sys p{margin:0;font-size:14.5px;color:var(--mut)}
-.sys .meta{margin-top:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.sys .go{margin-left:auto;background:var(--c);color:#fff;border-radius:10px;padding:8px 14px;font-weight:600;font-size:14px}
-.more{display:flex;gap:8px;flex-wrap:wrap}
-.more a{font-size:13px;text-decoration:none;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:5px 11px;background:var(--bg)}
-.more a:hover{border-color:var(--c)}
-@media(prefers-color-scheme:dark){.sys .go{color:#0e121a}}
-</style>
+<link rel="stylesheet" href="assets/curriculum.css">
 </head>
 <body>
 <div id="site-nav"></div>
-<div class="wrap">
-  <header class="page-hero">
-    <div class="kick">Tech Stack</div>
-    <h1>How real systems work, <span style="color:var(--acc)">down to the internals</span></h1>
-    <p class="lead">Research notes on the infrastructure I work with. Each system gets an interactive tour: a production problem, the naive fix that breaks, the real design, and how to operate it. Search every chapter.</p>
-    <div class="searchbar" role="search">
+<div class="cur-wrap">
+  <header class="cur-hero">
+    <div class="kick">CURRICULUM</div>
+    <h1>Tech Stack</h1>
+    <p class="lead">How real systems work, down to the internals. Each lesson shows one production problem, the mechanism behind it, and an animation you can step through.</p>
+    <div class="cur-search" role="search">
       <span id="ico"></span>
-      <input id="q" type="text" inputmode="search" autocomplete="off" spellcheck="false" placeholder="Search: compaction, ISR, MVCC, shuffle, rebalance…" aria-label="Search the tech stack">
+      <input id="q" type="text" inputmode="search" autocomplete="off" spellcheck="false" placeholder="Search: compaction, ISR, MVCC, join, NULL…" aria-label="Search the tech stack">
       <kbd>/</kbd>
     </div>
-    <div class="filters" id="fSys" aria-label="Filter by system"></div>
+    <div class="cur-status" id="status" aria-live="polite"></div>
   </header>
 
   <main>
-    <div class="status" id="status" aria-live="polite"></div>
-    <ul class="results" id="results" hidden></ul>
+    <ul class="cur-result" id="results" hidden></ul>
     <div id="catalog">
-      <div class="grid wide" id="systems"></div>
+      <section class="cur-sec" id="internals">
+        <h2>System internals <a class="anchor" href="#internals" aria-label="Link to System internals">⌁</a></h2>
+        <p class="sub">Each system is a problem-based course: a production problem, the mechanism behind it, and the failure modes to diagnose.</p>
+        <div class="cgrid" id="g-internals"></div>
+      </section>
+      <section class="cur-sec" id="courses">
+        <h2>Courses <a class="anchor" href="#courses" aria-label="Link to Courses">⌁</a></h2>
+        <p class="sub">Longer courses, one chapter at a time, each chapter problem-based and step-by-step.</p>
+        <div class="cgrid" id="g-courses"></div>
+      </section>
     </div>
   </main>
 </div>
@@ -52,45 +45,42 @@
 <script src="data/systems.js"></script>
 <script src="data/tech-index.js"></script>
 <script src="assets/site.js"></script>
+<script src="assets/thumbs.js"></script>
 <script>
 (function(){
   const {esc,hi,search,bindSearch,norm}=Site, SYS=SITE_SYSTEMS, IDX=SITE_TECH_INDEX, byId=Object.fromEntries(SYS.map(s=>[s.id,s]));
-  document.getElementById('ico').innerHTML=Site.ICON;
-  const q=document.getElementById('q'), res=document.getElementById('results'), cat=document.getElementById('catalog'), st=document.getElementById('status');
-  const types=[...new Set(IDX.map(e=>e.type))];
-  const state={sys:new Set(),type:new Set()};
-  const params=new URL(location.href).searchParams;
-  (params.get('system')||'').split(',').filter(x=>byId[x]).forEach(x=>state.sys.add(x));
-  (params.get('type')||'').split(',').filter(x=>types.includes(x)).forEach(x=>state.type.add(x));
+  const $=id=>document.getElementById(id), q=$('q'), res=$('results'), cat=$('catalog'), st=$('status');
+  $('ico').innerHTML=Site.ICON;
 
-  document.getElementById('systems').innerHTML=SYS.map(s=>`
-    <div class="sys" style="--c:${s.color}">
-      <a href="${s.url}" style="text-decoration:none;color:inherit;display:contents">
-        <h2><i></i>${esc(s.name)}</h2><p class="tag2">${esc(s.kind)}</p>
-        <p class="prob">${esc(s.problem)}</p><p>${esc(s.topics)}</p>
-      </a>
-            <div class="meta"><span class="chip">${s.chapters} chapters</span><a class="go" href="${s.url}" style="text-decoration:none">Start the tour →</a></div>
-    </div>`).join('');
-
-  function chips(el,list,set,label){
-    el.innerHTML=list.map(([k,t])=>`<button type="button" aria-pressed="${set.has(k)}" data-k="${esc(k)}">${esc(t)}</button>`).join('');
-    el.onclick=e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k;set.has(k)?set.delete(k):set.add(k);b.setAttribute('aria-pressed',set.has(k));sync();render()};
-  }
-  chips(document.getElementById('fSys'),SYS.map(s=>[s.id,s.name]),state.sys);
-  function sync(){const u=new URL(location.href);['system','type'].forEach((k,i)=>{const s=[state.sys,state.type][i];s.size?u.searchParams.set(k,[...s].join(',')):u.searchParams.delete(k)});history.replaceState(null,'',u)}
+  /* Every system opens its problem-based course. Old per-chapter links are rewritten to the course page. */
+  const ART={'database-systems':'database'};
+  const toCourse=u=>String(u).replace(/^techstack\/([^/]+)\/01-[^#]*/,'techstack/$1/course.html');
+  const cards={};
+  SYS.forEach((s,i)=>{
+    cards[s.id]=[{url:`techstack/${s.id}/course.html`,thumb:ART[s.id]||s.id,title:s.name,
+      desc:s.topics,chips:[s.kind.replace(/^Course: /,''),s.chapters+' chapters']}];
+  });
+  const cardHTML=(c,i)=>`<a class="ccard" href="${esc(c.url)}" style="--p:var(--p${i%8})">
+      <div class="art">${window.Thumbs.svg(c.thumb)}</div>
+      <div class="body"><h3>${esc(c.title)}</h3><p>${esc(c.desc)}</p>
+      <div class="chips">${c.chips.map(t=>`<span>${esc(t)}</span>`).join('')}</div></div></a>`;
+  const GROUPS={'g-internals':SYS.filter(s=>!/^Course:/.test(s.kind)).map(s=>s.id),'g-courses':SYS.filter(s=>/^Course:/.test(s.kind)).map(s=>s.id)};
+  Object.entries(GROUPS).forEach(([gid,ids])=>{
+    $(gid).innerHTML=ids.flatMap(id=>cards[id]).map((c,i)=>cardHTML(c,i)).join('');
+  });
 
   function render(){
-    const text=q.value.trim(), active=text||state.sys.size||state.type.size;
-    cat.hidden=!!active; res.hidden=!active;
-    if(!active){st.textContent=`${IDX.length} tours and chapters indexed across ${SYS.length} systems. Type to search, or press / anywhere.`;return}
-    let pool=IDX.filter(e=>(!state.sys.size||state.sys.has(e.system))&&(!state.type.size||state.type.has(e.type)));
-    let hits=search(pool,text,[['title',6],['tags',4],['system',3],['type',2],['summary',2],['body',1]]);
-    if(!text) hits=hits.sort((a,b)=>a.item.id-b.item.id);
+    const text=q.value.trim(), active=!!text;
+    cat.hidden=active; res.hidden=!active;
+    if(!active){st.textContent=`${LESSONS.length} lesson · ${SYS.length} systems · ${IDX.length} tour pages and chapters indexed. Type to search, or press /.`;return}
+    const pool=IDX.map(e=>({...e,url:toCourse(e.url)}));
+    const hits=search(pool,text,[['title',6],['tags',4],['system',3],['type',2],['summary',2],['body',1]]);
     st.textContent=hits.length?`${hits.length} result${hits.length>1?'s':''}`:'';
     const toks=norm(text).split(/\s+/).filter(Boolean);
     res.innerHTML=hits.length?hits.slice(0,80).map(({item:e})=>{const s=byId[e.system]||{};
-      return `<li class="res"><a href="${esc(e.url)}" style="--c:${s.color||'var(--acc)'}"><span class="t">${hi(e.title,toks)}</span>${e.summary?`<p class="s">${hi(e.summary.length>170?e.summary.slice(0,170)+'…':e.summary,toks)}</p>`:''}<span class="m"><span class="chip">${esc(s.name||e.system)}</span><span class="chip">${esc(e.type)}</span></span></a></li>`}).join('')+(hits.length>80?`<li class="status">Showing the top 80. Refine the query to narrow down.</li>`:'')
-      :`<li class="empty"><b>Nothing matches “${esc(text)}”</b>Try a broader word (e.g. “compaction”), or clear the filters.</li>`;
+      const url=e.url;
+      return `<li><a href="${esc(url)}" style="--c:${s.color||'var(--acc)'}"><span class="t">${hi(e.title,toks)}</span>${e.summary?`<p class="s">${hi(e.summary.length>170?e.summary.slice(0,170)+'…':e.summary,toks)}</p>`:''}<span class="m">${esc(s.name||e.system)} · ${esc(e.type)}</span></a></li>`}).join('')
+      :`<li class="empty" style="padding:22px;text-align:center;color:var(--mut)"><b style="color:var(--ink)">Nothing matches “${esc(text)}”</b>Try a broader word, such as “join” or “compaction”.</li>`;
   }
   bindSearch(q,render); render();
 })();

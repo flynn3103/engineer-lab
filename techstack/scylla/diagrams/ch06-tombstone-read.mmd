@@ -1,0 +1,9 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Next["Next cell in clustering order"] --> Deleted{"Tombstone or shadowed?"}
+  Deleted -->|Yes| Skip["Count and skip"]
+  Skip --> Next
+  Deleted -->|No| Return["Return live row"]
+  Return --> Limit{"LIMIT reached?"}
+  Limit -->|No| Next
+  Limit -->|Yes| Stop["Stop"]

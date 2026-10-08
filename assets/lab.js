@@ -125,7 +125,7 @@ L.mount = function (story) {
   app.innerHTML = `
   <div class="topbar"><div class="wrap">
     <a class="home" href="../../tech.html">← Tech Stack</a><b>${esc(story.system || document.title)}</b>
-    <nav aria-label="Page sections"><a href="#problem">Problem</a><a href="#overview">Map</a><a href="#chapters">Chapters</a><a href="#build">Build it</a><a href="#capstone">End-to-end</a></nav>
+    <nav aria-label="Page sections"><a href="#problem">Problem</a><a href="#overview">Map</a><a href="#chapters">Chapters</a></nav>
   </div></div>
   <div class="wrap">
     <header class="hero" id="problem">
@@ -137,9 +137,6 @@ L.mount = function (story) {
         <div class="card"><h4>What your design must guarantee</h4><ul class="musts">${musts}</ul>
           <div class="callout ask" style="margin-top:14px"><b class="t">Your quest</b>${P.quest || 'Rebuild it piece by piece. Each chapter starts from a problem, shows the naive fix breaking, then the real design.'}</div></div>
       </div>
-      <div class="sec-h" style="margin-top:26px"><h2 style="font-size:20px">The journey, one problem at a time</h2></div>
-      <ol class="journey" id="journey"></ol>
-      <div id="dataHost"></div>
     </header>
 
     <section class="sec" id="overview">
@@ -181,37 +178,10 @@ L.mount = function (story) {
       </article>
     </section>
 
-    <section class="sec" id="build">
-      <div class="sec-h"><div class="kick">If you build it</div><h2>${(story.milestonesTitle) || 'A build order that always has something testable'}</h2>
-        <p>${(story.milestonesLead) || 'Implement in this order. Each milestone ends with a test you can run before moving on.'}</p></div>
-      <ol class="miles" id="miles"></ol>
-    </section>
-
-    <section class="sec sim" id="capstone">
-      <div class="sec-h"><div class="kick">End-to-end</div><h2>${(story.capstone && story.capstone.title) || 'Run it end to end, at scale'}</h2>
-        <p>${(story.capstone && story.capstone.lead) || 'Everything from the chapters, running at once on a production-sized workload. Pick an incident, change the cluster size and the real parameters, and watch the result change. Tap any node or event to see why it happened.'}</p></div>
-      <div class="card">
-        <div class="ctl"><label>Scenario <select id="simScn"></select></label><label><span id="simNL">nodes</span> <select id="simN"></select></label><span id="simSet" class="ctl" style="margin:0"></span></div>
-        <p class="scn" id="simDesc"></p>
-        <div class="gauges" id="simGauge" aria-label="Live metrics"></div>
-        <div class="player"><button class="primary" id="simPlay">▶ Play</button><button id="simStep">Step ›</button><button id="simReset" aria-label="Back to start">⏮</button><label>Speed <select id="simSpeed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label></div>
-        <div class="simbox"><svg id="simSvg" role="img" aria-label="Cluster simulation"></svg></div>
-        <div class="timeline" style="margin-top:6px"><input type="range" id="simT" min="0" max="1000" value="0" step="10" aria-label="Timeline"><span class="mono" id="simTv"></span></div>
-        <div id="simRes"></div>
-        <div id="simInsp" class="box simnow"></div>
-        <div class="simgrid"><div><h4 style="font-size:13px;margin:0 0 6px">Event log <span class="note" style="font-weight:400">tap an event to see why</span></h4><div id="simLog" class="simlog"></div></div>
-          <div><details class="adv"><summary>Edit the script &amp; add your own actions</summary>
-            <p class="note">One action per line: time in ms, operation, arguments.</p><textarea id="simAct" rows="7" spellcheck="false"></textarea>
-            <div class="bar"><select id="simOp"></select><span id="simArgs" class="bar" style="margin:0"></span><button id="simAdd">＋ add</button></div></details></div></div>
-      </div>
-    </section>
-
     <div id="deepStore" hidden>${ex}</div>
     <footer class="foot">Part of <b>engineer-lab</b>. Everything runs in your browser; your data never leaves this page. These are learning models: simplified on purpose.</footer>
   </div>`;
   document.body.prepend(app);
-  const slot = $('#dataSlot'), host = $('#dataHost');
-  if (slot && host) { while (slot.firstChild) host.append(slot.firstChild); slot.remove(); }
 };
 
 
@@ -617,10 +587,6 @@ L.start = function (c) {
   L.cfg = c;
   const S = L.story || {};
   const sc = S.chapters || [];
-  $('#journey').innerHTML = c.phases.map((p, i) => `<li><a href="#chapter" data-ph="${i}" style="--pc:${pc(i)}"><span class="n">${i + 1}</span><span><b>${(sc[i] && sc[i].ask) || esc(p.t)}</b><small>${esc(p.t)}${p.s ? ' · ' + esc(p.s) : ''}</small></span></a></li>`).join('');
-  $('#miles').innerHTML = (S.milestones || []).map(m => `<li><div><b>${m.t}</b><span>${m.test || ''}</span></div></li>`).join('');
-  if (!(S.milestones || []).length) $('#build').hidden = true;
-  $('#journey').addEventListener('click', e => { const a = e.target.closest('[data-ph]'); if (a) { e.preventDefault(); jumpPhase(+a.dataset.ph); } });
   $('#chTabs').addEventListener('click', e => { const b = e.target.closest('[data-ph]'); if (b) jumpPhase(+b.dataset.ph, false); });
   $('#prev').onclick = () => jumpPhase(Math.max(0, st.cur - 1));
   $('#nextB').onclick = () => jumpPhase(Math.min(c.phases.length - 1, st.cur + 1));
@@ -652,8 +618,6 @@ L.start = function (c) {
   ovInit(); L.opsInit();
   showPhase(st.cur);
   { const m = /^#ch(\d+)$/.exec(location.hash); if (m && +m[1] < c.phases.length) jumpPhase(+m[1]); }   // deep link from site search: tour.html#ch3
-  if (SIMM) simInit();
-  const cap = $('#capstone'); if (!SIMM && cap) cap.hidden = true;
   document.querySelectorAll('.topbar nav a[href^="#"]').forEach(a => { const t = document.getElementById(a.getAttribute('href').slice(1)); if (t && t.hidden) a.style.display = 'none'; });   // no link to a section that is not shown
 };
 })();

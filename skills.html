@@ -7,26 +7,42 @@
 <meta name="description" content="Searchable library of skills for working with coding agents, synced live from a GitHub repo.">
 <link rel="stylesheet" href="assets/lab.css">
 <link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="assets/curriculum.css">
+<style>
+.skill-card .art{aspect-ratio:auto;height:118px}
+.skill-card .install{display:flex;flex-direction:column;gap:6px;align-items:stretch;margin-top:6px}
+.skill-card .install button{align-self:flex-start}
+.skill-card .install code{flex:1;min-width:0;overflow:auto;white-space:nowrap;padding:7px 9px;border-radius:8px;border:1px solid var(--ink);font-size:12px}
+.skill-card .install button{min-height:0;padding:4px 10px;font:600 12.5px var(--mono);border-radius:8px}
+.skill-card .links{display:flex;gap:12px;font:13px var(--mono);flex-wrap:wrap;color:var(--mut)}
+.skill-card .links a{color:var(--ink)}
+.skill-card .chips button{font:12.5px var(--mono);border:1px solid var(--ink);border-radius:999px;padding:2px 10px;background:var(--card);min-height:0}
+.skill-card .chips button[aria-pressed=true]{background:var(--ink);color:var(--bg)}
+.live{display:inline-flex;align-items:center;gap:6px}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--mut)}
+.live.on i{background:var(--ok)}
+</style>
 </head>
 <body>
 <div id="site-nav"></div>
-<div class="wrap">
-  <header class="page-hero">
-    <div class="kick">My Skills</div>
+<div class="cur-wrap">
+  <header class="cur-hero">
+    <div class="kick">MY SKILLS</div>
     <h1>Skills for working with agents</h1>
     <p class="lead">Reusable instructions that make coding agents dependable on real engineering work. They live in one GitHub repo; this page reads its index, so a new skill appears here after the next push.</p>
-    <div class="searchbar" role="search"><span id="ico"></span><input id="q" type="text" autocomplete="off" spellcheck="false" placeholder="Search skills: research, review, pipeline…" aria-label="Search skills"><kbd>/</kbd></div>
-    <div class="filters" id="tags"></div>
+    <div class="cur-search" role="search"><span id="ico"></span><input id="q" type="text" autocomplete="off" spellcheck="false" placeholder="Search skills: research, review, pipeline…" aria-label="Search skills"><kbd>/</kbd></div>
+    <div class="chips" id="tags" style="display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 0"></div>
+    <div class="cur-status"><span id="status" aria-live="polite"></span> · <span class="live" id="live"><i></i><span>bundled snapshot</span></span> · <a id="repo" href="#">Repository ↗</a></div>
   </header>
   <main>
-    <div class="status"><span id="status" aria-live="polite"></span> · <span class="live" id="live"><i></i><span>bundled snapshot</span></span> · <a id="repo" href="#">Repository ↗</a></div>
-    <div class="grid wide" id="skills"></div>
+    <div class="cgrid" id="skills" style="margin-top:18px"></div>
   </main>
+  <footer class="cur-foot" id="site-foot"></footer>
 </div>
-<div id="site-foot"></div>
 <script src="data/profile.js"></script>
 <script src="data/skills.js"></script>
 <script src="assets/site.js"></script>
+<script src="assets/thumbs.js"></script>
 <script>
 (function(){
   const {esc,hi,search,bindSearch,norm}=Site,$=id=>document.getElementById(id),on=new Set();
@@ -34,18 +50,19 @@
   const RAW='https://raw.githubusercontent.com/'+D.repo+'/main/skills.json';
   $('ico').innerHTML=Site.ICON; $('repo').href='https://github.com/'+D.repo;
   const ago=iso=>{if(!iso)return '';const d=(Date.now()-new Date(iso))/864e5;return d<1?'today':d<30?Math.floor(d)+'d ago':new Date(iso).toLocaleDateString('en',{year:'numeric',month:'short',day:'numeric'})};
-  function tagBar(){const t=[...new Set(D.skills.flatMap(s=>s.tags||[]))].sort();$('tags').innerHTML=t.map(x=>`<button type="button" aria-pressed="${on.has(x)}" data-k="${esc(x)}">${esc(x)}</button>`).join('')}
-  $('tags').onclick=e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k;on.has(k)?on.delete(k):on.add(k);b.setAttribute('aria-pressed',on.has(k));render()};
+  function tagBar(){const t=[...new Set(D.skills.flatMap(s=>s.tags||[]))].sort();$('tags').innerHTML=t.map(x=>`<button type="button" aria-pressed="${on.has(x)}" data-k="${esc(x)}" style="font:13px var(--mono);border:1px solid var(--ink);border-radius:999px;padding:3px 11px;background:${on.has(x)?'var(--ink)':'var(--card)'};color:${on.has(x)?'var(--bg)':'var(--ink)'};min-height:0">${esc(x)}</button>`).join('')}
+  $('tags').onclick=e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k;on.has(k)?on.delete(k):on.add(k);tagBar();render()};
   function render(){
     const q=$('q').value,toks=norm(q).split(/\s+/).filter(Boolean);
     const pool=D.skills.filter(s=>!on.size||(s.tags||[]).some(t=>on.has(t)));
     const hits=search(pool,q,[['name',6],['tags',4],['description',1]]);
     $('status').textContent=`${hits.length} of ${D.skills.length} skills`;
-    $('skills').innerHTML=hits.length?hits.map(({item:s})=>{const cmd=`npx degit ${D.repo}/${s.path} ~/.claude/skills/${s.name}`;
-      return `<article class="tile skill"><h3>${hi(s.name,toks)}</h3><p>${hi(s.description,toks)}</p>
-      <div class="chips">${(s.tags||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join('')}</div>
+    $('skills').innerHTML=hits.length?hits.map(({item:s},i)=>{const cmd=`npx degit ${D.repo}/${s.path} ~/.claude/skills/${s.name}`;
+      return `<article class="ccard skill-card" style="--p:var(--p${i%8});cursor:default"><div class="art">${window.Thumbs.svg('skill')}</div>
+      <div class="body"><h3 style="word-break:break-word">${hi(s.name,toks)}</h3><p>${hi(s.description,toks)}</p>
+      <div class="chips">${(s.tags||[]).map(t=>`<span>${esc(t)}</span>`).join('')}</div>
       <div class="install"><code>${esc(cmd)}</code><button type="button" data-cmd="${esc(cmd)}">Copy</button></div>
-      <div class="links"><a href="${esc(s.url)}">View on GitHub ↗</a>${s.updated?`<span style="color:var(--mut)">updated ${ago(s.updated)}</span>`:''}</div></article>`}).join('')
+      <div class="links"><a href="${esc(s.url)}" target="_blank" rel="noopener">View on GitHub ↗</a>${s.updated?`<span>updated ${ago(s.updated)}</span>`:''}</div></div></article>`}).join('')
       :`<div class="empty" style="grid-column:1/-1"><b>${D.skills.length?'No skill matches':'No skills yet'}</b>${D.skills.length?'Try another word or clear the tag filters.':'Add a skill to the repo and push.'}</div>`;
   }
   $('skills').onclick=e=>{const b=e.target.closest('button[data-cmd]');if(!b)return;(navigator.clipboard?navigator.clipboard.writeText(b.dataset.cmd):Promise.reject()).then(()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy',1200)},()=>{b.textContent='Select + copy'})};

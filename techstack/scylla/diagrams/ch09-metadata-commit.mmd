@@ -1,0 +1,7 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  DDL["DDL or topology change"] --> Ready{"Current-term entry<br/>replicated on a majority?"}
+  Ready -->|Yes| Commit["Commit prefix,<br/>apply in order"]
+  Ready -->|No| Pending["Entry stays uncommitted"]
+  Pending --> Timeout["Client can time out"]
+  Timeout --> Check["Inspect final state<br/>before retrying"]

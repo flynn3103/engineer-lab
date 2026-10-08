@@ -1,0 +1,8 @@
+/* Database Systems scenes: chip tones and line styles the shared curriculum.css does not define. */
+.scene .tok[data-tone=bad] rect{fill:color-mix(in srgb,var(--bad) 30%,var(--card))}
+.scene .tok[data-tone=mut] rect{fill:var(--soft)}
+.scene .tok[data-tone=acc] rect{fill:color-mix(in srgb,var(--acc) 28%,var(--card))}
+.scene .dbl{fill:none;stroke:var(--ink);stroke-linecap:round;pointer-events:none}
+@media(max-width:820px){
+  .lx-body.explain{grid-template-columns:minmax(0,1fr)}
+}

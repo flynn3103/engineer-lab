@@ -5,7 +5,7 @@ window.SITE_TECH_INDEX = [
 "system": "spark",
 "title": "Apache Spark internals, end to end",
 "summary": "Turn 2 TB of order logs into a revenue-per-city report by 6 AM, when no single machine can finish in time.",
-"body": "Partitions, lazy lineage, DAG stages, tasks and retries, shuffle, actions.",
+"body": "Splits and partitions, lazy lineage, DAG stages, task retries, shuffle, skew and AQE, join strategies, executor memory and spill, output commit, UI and explain.",
 "url": "techstack/spark/01-spark-internals-end-to-end.html",
 "tags": [
 "tour",
@@ -16,12 +16,13 @@ window.SITE_TECH_INDEX = [
 {
 "type": "Chapter",
 "system": "spark",
-"title": "Apache Spark · 1. Read source",
-"summary": "How do 50 machines read one 2 TB file without overlapping or losing a line?",
-"body": "file → partitions Reading is the first bottleneck. Cut into 128 MB splits, a 2 TB file becomes about 16,000 partitions that can be read in parallel. But a byte cut almost never lands on a line break. Cut the file into N equal byte ranges and parse each one  Cut by bytes for parallelism, but give each line to the partition where it starts: a reader skips the partial line at its start and reads past its end to finish its last line.",
+"title": "Apache Spark · 1. Read Source",
+"summary": "How do 50 machines read one 2 TB log without overlapping, losing, or cutting a line in half?",
+"body": "Source and file index list the files and cut them into splits of at most spark.sql.files.maxPartitionBytes (128 MB by default). Each split becomes one partition and one task.",
 "url": "techstack/spark/01-spark-internals-end-to-end.html#ch0",
 "tags": [
-"file",
+"files",
+"splits",
 "partitions"
 ],
 "id": 1
@@ -29,1001 +30,1633 @@ window.SITE_TECH_INDEX = [
 {
 "type": "Chapter",
 "system": "spark",
-"title": "Apache Spark · 2. Build lineage",
-"summary": "The user chains filter, map and reduceByKey. When should the 2 TB actually be read?",
-"body": "lazy RDD graph If every call ran at once, each step would produce a full 2 TB intermediate before the next could start, and the engine would never see the whole pipeline to plan it. Eager collections: every call computes its result immediately  A transformation returns a new immutable RDD that only remembers its parent, its function and its partitioning: a recipe, called the lineage, not data.",
+"title": "Apache Spark · 2. Build Lineage",
+"summary": "You chain filter and map and nothing happens. When is the 2 TB actually read, and what does each report pay for?",
+"body": "RDD node: a list of partitions, its dependencies on parent RDDs, and a compute function for one partition. DataFrames are planned on top of the same idea. Narrow vs shuffle dependency: a narrow child partition reads a fixed few parent partitions, a shuffle child reads from all of them.",
 "url": "techstack/spark/01-spark-internals-end-to-end.html#ch1",
 "tags": [
 "lazy",
-"rdd",
-"graph"
+"rdd graph",
+"persist"
 ],
 "id": 2
 },
 {
 "type": "Chapter",
 "system": "spark",
-"title": "Apache Spark · 3. Plan stages",
-"summary": "The action fires. Which steps can run together, and where must the job stop and wait?",
-"body": "DAGScheduler Narrow steps can be chained inside one task with no data movement. A shuffle needs every map output to exist before any reducer starts, so it is a hard barrier. One task per operator, run in topological order  Walk backward from the final RDD: narrow dependencies stay in the current stage, and every shuffle dependency cuts off a new parent stage. Stages, not operators, are what gets scheduled.",
+"title": "Apache Spark · 3. Plan Stages",
+"summary": "The UI shows 3 stages for a job you wrote in 4 lines. How does Spark decide where a stage ends?",
+"body": "DAGScheduler turns a job into stages by walking dependencies backwards from the final RDD. Narrow dependencies (map, filter, coalesce without shuffle, co-partitioned joins) are pipelined inside one stage.",
 "url": "techstack/spark/01-spark-internals-end-to-end.html#ch2",
 "tags": [
-"dagscheduler"
+"dagscheduler",
+"narrow",
+"shuffle"
 ],
 "id": 3
 },
 {
 "type": "Chapter",
 "system": "spark",
-"title": "Apache Spark · 4. Schedule tasks",
-"summary": "50 executors, 16,000 tasks, and a machine dies at minute 40. Who runs what, and what runs again?",
-"body": "driver ↔ executors Without one owner of the job state, two machines may run the same partition, or none will. Spark retries a failing task up to spark.task.maxFailures (4) times before it fails the job. Every worker grabs partitions from a shared list  One driver owns all state. It turns each stage into a set of tasks, gives them to free executor slots, retries failed attempts, and opens a stage only after its parents have succeeded.",
+"title": "Apache Spark · 4. Schedule Tasks and Retries",
+"summary": "One of 50 machines dies at minute 40. Which tasks run again, and who remembers that?",
+"body": "DAGScheduler submits a stage only when its parent stages are complete and tracks which map outputs exist. TaskScheduler and TaskSetManager own one TaskSet per stage attempt, hand tasks to free slots, and retry a failed task up to spark.task.maxFailures (4 by default).",
 "url": "techstack/spark/01-spark-internals-end-to-end.html#ch3",
 "tags": [
 "driver",
-"executors"
+"task sets",
+"retries"
 ],
 "id": 4
 },
 {
 "type": "Chapter",
 "system": "spark",
-"title": "Apache Spark · 5. Run narrow tasks",
-"summary": "Inside one task, how do filter and map process 128 MB without building a list at every step?",
-"body": "rows through closures A task owns one partition. If each operator built a full list, a task would need several times its partition in memory, and an executor runs many tasks at once. Run each operator over the whole partition  Compose the narrow functions into one chain of iterators: each row is pulled from the source, filtered, mapped and handed on before the next row is read.",
+"title": "Apache Spark · 5. Run Narrow Tasks",
+"summary": "Each step of the task only filters and maps, so why does a task holding one 128 MB partition run out of memory?",
+"body": "Iterator chaining: an RDD’s compute returns an iterator over its parent’s iterator, so map and filter add wrappers, not copies. One pass: the task calls next() on the last iterator; the call pulls one row through every step before the next row is read.",
 "url": "techstack/spark/01-spark-internals-end-to-end.html#ch4",
 "tags": [
-"rows",
-"through",
-"closures"
+"iterators",
+"fused closures",
+"codegen"
 ],
 "id": 5
 },
 {
 "type": "Chapter",
 "system": "spark",
-"title": "Apache Spark · 6. Shuffle & reduce",
-"summary": "Revenue per city: each city’s rows are spread over all 16,000 partitions. How do they meet?",
-"body": "repartition by key Grouping needs every value of a key on one machine. That all-to-all copy is usually the most expensive step of a job: a disk write, a network transfer and a barrier between stages. Send every pair to one central reducer  Each map task hashes the key to choose one of R reduce partitions and writes one block per destination. Each reduce task fetches its block from every map output, so equal keys always meet in the same task.",
+"title": "Apache Spark · 6. Shuffle Write and Read",
+"summary": "Each city’s orders are spread across every partition. How does revenue per city get to one place without a single machine?",
+"body": "Hash partitioner sends a key to reduce partition hash(key) mod R, so all rows of a key meet in one reducer. Map-side combine pre-aggregates per key in the map task, which is why reduceByKey shuffles far less than groupByKey. Sort-based shuffle writes one data file plus an index per map task.",
 "url": "techstack/spark/01-spark-internals-end-to-end.html#ch5",
 "tags": [
-"repartition",
-"key"
+"hash partitioning",
+"combine",
+"fetch"
 ],
 "id": 6
 },
 {
 "type": "Chapter",
 "system": "spark",
-"title": "Apache Spark · 7. Action result",
-"summary": "Thousands of tasks finish in random order, some of them twice. How do you get one correct answer?",
-"body": "count / collect / write Retries and speculative copies mean one partition can produce output twice. A half-written output folder that the next job reads is worse than a failed job. Every task appends straight to the final output  Results are merged by partition index, not by arrival: count sums one number per partition, collect concatenates in partition order, and writes go to per-attempt temporary files that are published at job commit.",
+"title": "Apache Spark · 7. Skew and Adaptive Query Execution",
+"summary": "199 of 200 reducers finish in a minute and one runs for two hours. Why does more parallelism not help?",
+"body": "Runtime statistics: after a shuffle map stage, AQE knows the exact bytes per reduce partition and re-plans the rest of the query (spark.sql.adaptive.enabled, on by default in 3.2+).",
 "url": "techstack/spark/01-spark-internals-end-to-end.html#ch6",
 "tags": [
-"count",
-"collect",
-"write"
+"hot keys",
+"aqe",
+"salting"
 ],
 "id": 7
 },
 {
 "type": "Chapter",
 "system": "spark",
-"title": "Apache Spark · 8. Events & explain",
-"summary": "Last night the job took 3 hours instead of 20 minutes. How do you find out why, after it has finished?",
-"body": "observability Log lines from 50 machines disagree and vanish with the executors. You need one ordered record of what the scheduler decided, and a way to see the plan without running it. Print logs and bump counters wherever something happens  The driver emits one ordered stream of lifecycle events. The UI, the event log and every metric are folded from that stream, and explain prints the plan from metadata only.",
+"title": "Apache Spark · 8. Join Strategies",
+"summary": "A 2 TB fact table is joined to a 5 MB city table, and both sides are shuffled. Why did the planner choose that?",
+"body": "BroadcastHashJoin collects the small side on the driver, ships it to all executors, and joins with no shuffle of the big side. SortMergeJoin shuffles both sides by the join key, sorts, and merges; it scales to big × big.",
 "url": "techstack/spark/01-spark-internals-end-to-end.html#ch7",
 "tags": [
-"observability"
+"broadcast",
+"sort-merge",
+"hints"
 ],
 "id": 8
+},
+{
+"type": "Chapter",
+"system": "spark",
+"title": "Apache Spark · 9. Executor Memory and Spill",
+"summary": "The nightly job now logs huge Spill (Disk) numbers and then OutOfMemoryError. How much memory does one task really get?",
+"body": "Unified memory: (heap − 300 MB reserved) × spark.memory.fraction (0.6 by default) is shared by execution (shuffles, sorts, joins) and storage (cache). Storage fraction: spark.memory.storageFraction (0.5) is the part of the pool protected from execution eviction; execution can borrow unused storage.",
+"url": "techstack/spark/01-spark-internals-end-to-end.html#ch8",
+"tags": [
+"unified memory",
+"cores",
+"overhead"
+],
+"id": 9
+},
+{
+"type": "Chapter",
+"system": "spark",
+"title": "Apache Spark · 10. Action Results and Output Commit",
+"summary": "Tasks finish in random order and some run twice. Why did yesterday’s output have duplicate rows and a half-written folder?",
+"body": "Result merge: count and collect send results to the driver, which orders them by partition index, not arrival order. The total is capped by spark.driver.maxResultSize (1 GiB by default).",
+"url": "techstack/spark/01-spark-internals-end-to-end.html#ch9",
+"tags": [
+"collect",
+"write",
+"commit protocol"
+],
+"id": 10
+},
+{
+"type": "Chapter",
+"system": "spark",
+"title": "Apache Spark · 11. Events, UI and Explain",
+"summary": "Last night’s job took 3 hours instead of 20 minutes, and the application is gone. How do you find out why?",
+"body": "Listener bus: the driver posts ordered events (SparkListenerJobStart, SparkListenerStageSubmitted, SparkListenerTaskEnd, SparkListenerStageCompleted). UI and metrics are listeners that fold these events into stage and task tables; nothing is read from executors after the fact.",
+"url": "techstack/spark/01-spark-internals-end-to-end.html#ch10",
+"tags": [
+"listener bus",
+"event log",
+"explain"
+],
+"id": 11
 },
 {
 "type": "Tour",
 "system": "scylla",
 "title": "ScyllaDB internals, end to end",
 "summary": "Keep accepting 30,000 orders a second while machines die and you add new ones.",
-"body": "Token ring, quorum, commit log and SSTables, compaction, tombstones, tablets, Raft.",
+"body": "Token ring, coordinator and consistency levels, retries, write and read paths, compaction, tombstones, repair, tablets, Raft metadata.",
 "url": "techstack/scylla/01-scylla-internals-end-to-end.html",
 "tags": [
 "tour",
 "interactive"
-],
-"id": 9
-},
-{
-"type": "Chapter",
-"system": "scylla",
-"title": "ScyllaDB · 1. Partition & token ring",
-"summary": "Which machine owns customer C101’s orders?",
-"body": "key → token → owner 40 million customers cannot live on one machine. Every client and every node must agree on the owner of a row without asking anyone. Hash the key and take the remainder  Hash keys onto a ring, place nodes on the same ring. A key belongs to the next node clockwise, so a new node only steals a slice from its neighbours.",
-"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch0",
-"tags": [
-"key",
-"token",
-"owner"
-],
-"id": 10
-},
-{
-"type": "Chapter",
-"system": "scylla",
-"title": "ScyllaDB · 2. Route & replicate",
-"summary": "A node dies in the middle of a write. Is the order lost?",
-"body": "coordinator + CL With one copy, yes. With several copies the question becomes: how many must answer before you tell the client OK? This chapter is about row data: quorum counts responses from replicas, but does not put concurrent writes into one agreed order. Write to the owner, replicate in the background  Any node can be the coordinator. It sends the write to all 3 replicas in parallel and answers once enough of them acknowledge (the consistency level).",
-"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch1",
-"tags": [
-"coordinator"
-],
-"id": 11
-},
-{
-"type": "Chapter",
-"system": "scylla",
-"title": "ScyllaDB · 3. Replica write path",
-"summary": "The process is killed right after we said OK. Is the data still there?",
-"body": "commitlog → memtable → SSTable RAM is fast but forgets on a crash. Disk is durable but slow for random writes. A database needs both speed and durability. Update the row in place on disk  Append writes to a sequential commit log, apply them to a sorted memtable, then flush immutable SSTables. This lab models sync-before-ACK for strict local crash durability; ScyllaDB’s periodic commitlog mode can ACK before fsync, while batch mode waits for the sync.",
-"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch2",
-"tags": [
-"commitlog",
-"memtable",
-"sstable"
 ],
 "id": 12
 },
 {
 "type": "Chapter",
 "system": "scylla",
-"title": "ScyllaDB · 4. Read path",
-"summary": "One row can live in the memtable and a dozen files. How do we read it without opening them all?",
-"body": "Bloom → index → merge → cache Every flush creates another file. Newer data shadows older data, so a read must still find the newest version of the key. Scan every file and merge  Give each SSTable a Bloom filter (a cheap \"definitely not here\") and a sparse index (jump close to the key), then merge only the few candidates and cache hot results.",
-"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch3",
+"title": "ScyllaDB · 1. Partition Key and Token Ring",
+"summary": "Why does one celebrity seller melt a single node while the other nodes sit idle, and how does adding a node change who owns what?",
+"body": "Partition key → token: the Murmur3 partitioner hashes the partition key to a 64-bit token. The same key always lands on the same token. The ring and vnodes: every node owns several token positions (num_tokens). The owner of a token is the first node position clockwise from it.",
+"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch0",
 "tags": [
-"bloom",
-"index",
-"merge",
-"cache"
+"key",
+"token",
+"owner"
 ],
 "id": 13
 },
 {
 "type": "Chapter",
 "system": "scylla",
-"title": "ScyllaDB · 5. Compaction",
-"summary": "Flushes keep adding files, reads slow down, and old overwritten data fills the disk. Now what?",
-"body": "STCS · LCS · TWCS Immutable files are great for writes and bad for accumulating. Something must tidy them in the background without changing what reads return. Either never merge, or merge everything every time  Compaction merges sorted files in the background. Size-tiered (STCS) merges similar-size files, leveled (LCS) keeps non-overlapping levels, time-window (TWCS) groups by time. Each trades write, read and space amplification differently.",
-"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch4",
+"title": "ScyllaDB · 2. Coordinator and Consistency Levels",
+"summary": "RF=3, one replica missed a price update and later some reads showed the old price. When is a read guaranteed to see the latest write?",
+"body": "Coordinator: whichever node receives the request. It computes the replica set from the token and sends the mutation to all replicas in parallel. Consistency level: how many replica answers the coordinator waits for. ONE, QUORUM, LOCAL_QUORUM, ALL are the usual levels.",
+"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch1",
 "tags": [
-"stcs",
-"lcs",
-"twcs"
+"coordinator",
+"rf",
+"cl"
 ],
 "id": 14
 },
 {
 "type": "Chapter",
 "system": "scylla",
-"title": "ScyllaDB · 6. Deletes & TTL",
-"summary": "How do you delete a row that also lives in five immutable files and on three replicas?",
-"body": "tombstones & purge guard You cannot edit an SSTable, and a replica that was offline has never heard of the delete. Just remove the row  A delete is a write: a tombstone with a newer version that shadows everything older. Compaction may only purge it once it is safe.",
-"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch5",
+"title": "ScyllaDB · 3. Timeouts, Retries and Routing",
+"summary": "Client timeouts climb faster than traffic and healthy coordinators burn CPU. How many requests reach the replicas per user request during overload?",
+"body": "Shard-per-core: each CPU core owns a slice of the data. A request that arrives at the wrong node or shard must be forwarded. Token-aware and shard-aware drivers compute the token from the prepared statement and send the request to a replica, and to the right shard on it.",
+"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch2",
 "tags": [
-"tombstones",
-"purge",
-"guard"
+"token-aware",
+"shard-aware",
+"retries"
 ],
 "id": 15
 },
 {
 "type": "Chapter",
 "system": "scylla",
-"title": "ScyllaDB · 7. Tablets & migration",
-"summary": "You add a node. How do you move data without stopping traffic or losing writes?",
-"body": "split · move · epoch Data must move while clients keep writing, and clients with a stale map must not write to the old owner after the cut-over. Pause, copy the ranges, resume  Split the table into tablets: token ranges that each carry their own replica set and an epoch. Moving a replica copies a snapshot, catches up, fences the old owner, then commits the new epoch.",
-"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch6",
+"title": "ScyllaDB · 4. Replica Write Path",
+"summary": "The power fails right after the client got OK. Is the order still there, and what decides the answer?",
+"body": "Commitlog: every mutation is appended to a segment file first. It is sequential, so it is cheap, and it is replayed after a crash. Sync mode: commitlog_sync: periodic acknowledges at once and syncs every commitlog_sync_period_in_ms.",
+"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch3",
 "tags": [
-"split",
-"move",
-"epoch"
+"commitlog",
+"memtable",
+"sstable"
 ],
 "id": 16
 },
 {
 "type": "Chapter",
 "system": "scylla",
-"title": "ScyllaDB · 8. Raft consensus",
-"summary": "Who decides the tablet map when nodes disagree or the network splits?",
-"body": "quorum replicated log Tablet placement must have one agreed order of changes. Chapter 2 can acknowledge row writes on overlapping replica sets, but it cannot decide whether “move tablet” happened before or after “split tablet” when coordinators disagree. Let every node edit the map and gossip it  For the metadata in this model, Raft elects one leader per term and commits placement changes in log order after a majority stores them. The minority cannot commit a competing map; ordinary row writes continue through the chapter 2 path.",
-"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch7",
+"title": "ScyllaDB · 5. Read Path",
+"summary": "A point read takes 40 ms (illustrative) and the replica checked 11 SSTables. How does a read skip files that cannot hold the key?",
+"body": "Bloom filter (per SSTable): says “definitely absent” or “maybe present”. The size is about 1.44·log₂(1/p) bits per key, where p is bloom_filter_fp_chance. Partition index and summary: after a “maybe”, the index jumps close to the partition’s position in the data file.",
+"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch4",
 "tags": [
-"quorum",
-"replicated",
-"log"
+"bloom",
+"index",
+"merge",
+"cache"
 ],
 "id": 17
+},
+{
+"type": "Chapter",
+"system": "scylla",
+"title": "ScyllaDB · 6. Compaction",
+"summary": "After a week of writes, read p99 doubled and the disk alarm fired. Which compaction strategy fits which workload, and at what cost?",
+"body": "STCS: merges SSTables of similar size once enough of them exist. Cheap for writes, but a merge may need as much temporary space as its inputs. LCS: levels of small non-overlapping SSTables. Reads touch few files, at the cost of rewriting data several times.",
+"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch5",
+"tags": [
+"stcs",
+"lcs",
+"twcs"
+],
+"id": 18
+},
+{
+"type": "Chapter",
+"system": "scylla",
+"title": "ScyllaDB · 7. Deletes, TTL and Tombstones",
+"summary": "A queue table (insert, read, delete) gets slower every hour although it is nearly empty. What is the read still scanning?",
+"body": "Tombstone kinds: cell, row, range and partition. A range or partition tombstone is one marker that shadows many rows, but the shadowed rows still sit in older SSTables. TTL: an expired cell is treated as a tombstone;",
+"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch6",
+"tags": [
+"tombstones",
+"ttl",
+"range deletes"
+],
+"id": 19
+},
+{
+"type": "Chapter",
+"system": "scylla",
+"title": "ScyllaDB · 8. Repair and gc_grace_seconds",
+"summary": "A deleted order reappeared two weeks later. What must be true about tombstones, repair and a replica that missed the delete?",
+"body": "Hinted handoff: the coordinator stores a hint for a replica that missed a write, but only while the replica is down for less than max_hint_window_in_ms (3 hours by default). Row-level repair (nodetool repair): compares replicas and streams the differences, including tombstones.",
+"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch7",
+"tags": [
+"anti-entropy",
+"grace",
+"resurrection"
+],
+"id": 20
+},
+{
+"type": "Chapter",
+"system": "scylla",
+"title": "ScyllaDB · 9. Tablets and Migration",
+"summary": "The team adds a node at peak. Will traffic stop, will writes be lost, and when does the new node actually take load?",
+"body": "Tablet map: each table is split into tablets. Each tablet has a token range, a replica set and a state. The map is metadata managed through Raft (next chapter). Load balancer: runs in the background, moves tablets from loaded nodes to emptier ones and balances shards inside a node.",
+"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch8",
+"tags": [
+"split",
+"move",
+"epoch"
+],
+"id": 21
+},
+{
+"type": "Chapter",
+"system": "scylla",
+"title": "ScyllaDB · 10. Raft Metadata Consensus",
+"summary": "Two nodes are cut off from the third. Who may change the schema or the tablet map, and what stops two histories from forming?",
+"body": "Group 0: one Raft group that holds the metadata state machine for schema and topology (including the tablet map). Terms and leader: an election creates a leader for a new term; only the leader appends entries. Commit rule: an entry is committed once a majority of voters stores it.",
+"url": "techstack/scylla/01-scylla-internals-end-to-end.html#ch9",
+"tags": [
+"leader",
+"term",
+"majority"
+],
+"id": 22
 },
 {
 "type": "Tour",
 "system": "redis",
 "title": "Redis internals, end to end",
 "summary": "Answer 50,000 requests a second (sessions, counters, leaderboards, job queues) in microseconds, and recover cleanly after a crash or a failover.",
-"body": "Event loop, typed keyspace, expiry, eviction, AOF and RDB, replication, failover, cluster slots, streams.",
+"body": "RESP and event loop, command cost, typed keyspace, expiry, eviction, AOF and RDB, replication, pipelining, Sentinel, cluster slots, streams.",
 "url": "techstack/redis/01-redis-internals-end-to-end.html",
 "tags": [
 "tour",
 "interactive"
-],
-"id": 18
-},
-{
-"type": "Chapter",
-"system": "redis",
-"title": "Redis · 1. RESP & event loop",
-"summary": "Thousands of clients send commands at once over TCP. How do you run them without locks or lost updates?",
-"body": "bytes → frames → 1 executor Two clients each run read counter, add 1, write it back 5 times. If their steps interleave, the counter ends below 10, and at 100k ops/s a lock per key becomes the bottleneck. One thread per connection, a shared map, read-then-write  Frame every request with length prefixes (RESP) so any byte is safe inside a value, then let one thread execute complete commands one at a time: each command is atomic without a single lock.",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch0",
-"tags": [
-"bytes",
-"frames",
-"executor"
-],
-"id": 19
-},
-{
-"type": "Chapter",
-"system": "redis",
-"title": "Redis · 2. Typed keyspace",
-"summary": "A cart, a leaderboard and a session share one keyspace. How do commands on them stay fast and safe?",
-"body": "strings · hashes · lists · sets · zsets If every value is an opaque blob, adding one item to a 2,000-item cart means fetching, decoding, editing and rewriting the whole thing, from every client. Store everything as a JSON string  Give each value a type with its own server-side structure and operations (HSET, LPUSH, ZADD...), and check the type before a command touches anything.",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch1",
-"tags": [
-"strings",
-"hashes",
-"lists",
-"sets",
-"zsets"
-],
-"id": 20
-},
-{
-"type": "Chapter",
-"system": "redis",
-"title": "Redis · 3. Key expiration",
-"summary": "A million sessions must disappear after 30 minutes. Who deletes them, and when?",
-"body": "lazy + active cycle Scanning every key each second would stall the single thread; never deleting them leaks memory; and a read must never return a session that has expired. Scan the whole keyspace every second  Store an absolute deadline per key, check it on every access (lazy expiry), and reclaim untouched keys with a small random-sampling cycle that only repeats while many sampled keys are expired.",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch2",
-"tags": [
-"lazy",
-"active",
-"cycle"
-],
-"id": 21
-},
-{
-"type": "Chapter",
-"system": "redis",
-"title": "Redis · 4. Memory & eviction",
-"summary": "The memory budget is full and a new key arrives. What do you throw away?",
-"body": "maxmemory · sampled LRU/LFU As a cache, rejecting writes breaks the app, and evicting the wrong keys drops the hit rate and sends that load straight back to the database. Exact LRU with one global linked list  Do not keep a global order: sample a few random keys and evict the worst of them, judged by a per-key access clock (LRU) or a decaying frequency counter (LFU).",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch3",
-"tags": [
-"maxmemory",
-"sampled",
-"lru/lfu"
-],
-"id": 22
-},
-{
-"type": "Chapter",
-"system": "redis",
-"title": "Redis · 5. Persistence",
-"summary": "The machine loses power right after the server replied OK. What is still there after the restart?",
-"body": "AOF · RDB · crash recovery Everything lives in RAM. Without a disk copy a restart empties every session. Bytes handed to the OS survive a process crash but not a power cut; only fsync survives that, and fsyncing every write makes each one wait for the disk. Dump the whole map to a file every 5 minutes  Append every write to a log (AOF) and fsync it on a declared policy; write snapshots (RDB) to a temp file with a checksum and publish them with an atomic rename.",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch4",
-"tags": [
-"aof",
-"rdb",
-"crash",
-"recovery"
 ],
 "id": 23
 },
 {
 "type": "Chapter",
 "system": "redis",
-"title": "Redis · 6. Replication",
-"summary": "The primary's machine is gone, RAM and disk included. Where is an up-to-date copy?",
-"body": "offsets · backlog · resync Persistence only helps if the same box comes back. You need a second live copy that keeps up with 100k writes per second. Copy the whole dataset to a replica every minute  Stream every write to the replicas in order and number the stream by byte offset; a replica that reconnects asks to continue from its offset and gets the gap from a bounded backlog.",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch5",
+"title": "Redis · 1. RESP and the Event Loop",
+"summary": "A request arrives split across three TCP reads. When does Redis run it, and why is every command atomic?",
+"body": "RESP is length-prefixed: arrays (*2\\r\\n) of bulk strings ($4\\r\\nINCR\\r\\n). Binary data is safe because the length is known first. Query buffer: each client has its own input buffer; processInputBuffer consumes only complete frames and leaves the rest for the next read.",
+"url": "techstack/redis/01-redis-internals-end-to-end.html#ch0",
 "tags": [
-"offsets",
-"backlog",
-"resync"
+"resp",
+"event loop",
+"one executor"
 ],
 "id": 24
 },
 {
 "type": "Chapter",
 "system": "redis",
-"title": "Redis · 7. Transactions",
-"summary": "Move 10 credits out of a balance. How do you stop another client changing it halfway?",
-"body": "pipeline · MULTI · WATCH Each command is atomic, but a business operation is several commands, and another client's write can land between them. Read, compute, write back  MULTI queues commands and EXEC runs them back-to-back on the single executor; WATCH adds an optimistic check that aborts EXEC if a watched key changed in the meantime.",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch6",
+"title": "Redis · 2. Command Cost and the Single Thread",
+"summary": "With one executor, one slow command stalls every client. How do you keep each command cheap?",
+"body": "Time complexity is a latency budget: the docs list it for every command. O(N) commands over large collections are the usual cause of stalls. SCAN, HSCAN, SSCAN and ZSCAN walk the keyspace in small cursor steps (COUNT is a hint), so other commands interleave between steps.",
+"url": "techstack/redis/01-redis-internals-end-to-end.html#ch1",
 "tags": [
-"pipeline",
-"multi",
-"watch"
+"o(1) vs o(n)",
+"slowlog",
+"lazyfree"
 ],
 "id": 25
 },
 {
 "type": "Chapter",
 "system": "redis",
-"title": "Redis · 8. Failover",
-"summary": "The primary stops answering at 3 a.m. Who decides it is dead, and who takes over?",
-"body": "sentinels · promotion · fencing Promote too eagerly and a network blip creates two primaries; too slowly and writes fail for minutes. And replication is asynchronous, so the newest writes may exist only on the dead machine. Every client fails over on its own timeout  Several independent sentinels must agree the primary is down (quorum), then one elected leader promotes the replica with the highest replication offset and fences the old primary with a higher epoch.",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch7",
+"title": "Redis · 3. Typed Keyspace and Encodings",
+"summary": "Every key holds a typed value with its own encoding. What happens when a client or a size limit breaks that contract?",
+"body": "redisObject: every value has a type (string, list, hash, set, zset, stream) and an encoding. Commands check the type first and fail with WRONGTYPE. Compact encodings: small hashes and sorted sets use a listpack (a flat, contiguous array); sets of integers use intset;",
+"url": "techstack/redis/01-redis-internals-end-to-end.html#ch2",
 "tags": [
-"sentinels",
-"promotion",
-"fencing"
+"types",
+"listpack",
+"wrongtype"
 ],
 "id": 26
 },
 {
 "type": "Chapter",
 "system": "redis",
-"title": "Redis · 9. Cluster slots",
-"summary": "The data outgrows one machine's RAM. How does a client know which machine holds a key?",
-"body": "CRC16 · redirects · resharding Every request must reach its owner in one hop, and adding a machine must move only a slice of the keys, online, while traffic continues. Hash the key modulo the number of nodes  Hash keys into a fixed set of 16,384 slots with CRC16, assign slot ranges to nodes, and move one slot at a time while nodes redirect stale clients with MOVED and ASK.",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch8",
+"title": "Redis · 4. Key Expiration",
+"summary": "A million sessions share a 30-minute TTL. How does Redis delete them without a pause, and when is memory really freed?",
+"body": "Absolute deadline: EXPIRE stores a unix time in the separate expires dictionary, so checking is a cheap lookup. Lazy expiry: every access calls expireIfNeeded; if the deadline passed, the key is deleted and treated as missing.",
+"url": "techstack/redis/01-redis-internals-end-to-end.html#ch3",
 "tags": [
-"crc16",
-"redirects",
-"resharding"
+"ttl",
+"lazy",
+"active cycle"
 ],
 "id": 27
 },
 {
 "type": "Chapter",
 "system": "redis",
-"title": "Redis · 10. Streams",
-"summary": "A pool of workers processes order events. One worker crashes mid-job. Is that event lost?",
-"body": "entry ids · consumer groups Background jobs (emails, payments, stock updates) must each be done at least once, even when workers die, and you need to see which job is stuck where. A list as a queue  Keep events in an append-only log with time-ordered IDs; a consumer group remembers what it delivered to whom (the pending entries list) until each consumer acknowledges.",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch9",
+"title": "Redis · 5. Memory and Eviction",
+"summary": "The memory budget is full and a new key arrives. What do you throw away, and what if you throw away the wrong thing?",
+"body": "maxmemory is the byte budget. When used memory exceeds it, the next command that may add data triggers the policy. Policies: noeviction, allkeys-lru, allkeys-lfu, allkeys-random and the volatile-* variants that only consider keys with a TTL. Sampled LRU (evict.c): no global list.",
+"url": "techstack/redis/01-redis-internals-end-to-end.html#ch4",
 "tags": [
-"entry",
-"ids",
-"consumer",
-"groups"
+"maxmemory",
+"sampled lru/lfu"
 ],
 "id": 28
+},
+{
+"type": "Chapter",
+"system": "redis",
+"title": "Redis · 6. Persistence: AOF and RDB",
+"summary": "The machine loses power right after Redis replied OK. What survives the restart, and what does that choice cost?",
+"body": "AOF: every write command is appended to a log. appendfsync sets when it is forced to disk: always, everysec (default) or no (the OS decides). AOF rewrite: a background child compacts the log; in Redis 7 the AOF is multi-part (a base file plus incremental files in appendonlydir).",
+"url": "techstack/redis/01-redis-internals-end-to-end.html#ch5",
+"tags": [
+"aof",
+"rdb",
+"fork",
+"fsync"
+],
+"id": 29
+},
+{
+"type": "Chapter",
+"system": "redis",
+"title": "Redis · 7. Replication",
+"summary": "A replica on a flaky link keeps doing full resyncs. How does a replica catch up, and when can it only start over?",
+"body": "Replication ID and offset: the primary numbers its write stream by bytes. INFO replication shows master_repl_offset and each replica offset. Backlog: a ring buffer of recent writes sized by repl-backlog-size (1 MB default). It lets a returning replica resume with PSYNC.",
+"url": "techstack/redis/01-redis-internals-end-to-end.html#ch6",
+"tags": [
+"replication offset",
+"backlog",
+"resync"
+],
+"id": 30
+},
+{
+"type": "Chapter",
+"system": "redis",
+"title": "Redis · 8. Pipelining and Transactions",
+"summary": "Moving credit between two balances takes several commands. How do you keep another client from seeing or changing the halfway state?",
+"body": "Pipelining sends many commands without waiting for replies. It saves round trips but gives no atomicity or isolation. MULTI/EXEC queues commands and runs them back to back with nothing in between. A command with a queue-time error makes EXEC fail with EXECABORT;",
+"url": "techstack/redis/01-redis-internals-end-to-end.html#ch7",
+"tags": [
+"pipeline",
+"multi/exec",
+"watch"
+],
+"id": 31
+},
+{
+"type": "Chapter",
+"system": "redis",
+"title": "Redis · 9. Sentinel Failover",
+"summary": "At 3 a.m. the primary stops answering. Who decides it is dead, who takes over, and what happens to writes it accepted meanwhile?",
+"body": "SDOWN: one Sentinel sees the primary unreachable for down-after-milliseconds. ODOWN: at least quorum Sentinels agree. Leader election: Sentinels vote for one leader per failover epoch; the leader needs a majority of all known Sentinels, not just the quorum.",
+"url": "techstack/redis/01-redis-internals-end-to-end.html#ch8",
+"tags": [
+"sdown",
+"odown",
+"promotion"
+],
+"id": 32
+},
+{
+"type": "Chapter",
+"system": "redis",
+"title": "Redis · 10. Cluster Slots",
+"summary": "The data no longer fits one machine. How does Redis Cluster decide which node owns a key, and what breaks when a command touches two keys?",
+"body": "Key to slot: CRC16(key) mod 16384. If the key has a hash tag {...}, only the tag is hashed. CLUSTER KEYSLOT key shows it. Slot map: every primary owns slot ranges and every node knows the whole map (CLUSTER SHARDS shows it in 7.x). Multi-key commands require all keys in one slot, else CROSSSLOT.",
+"url": "techstack/redis/01-redis-internals-end-to-end.html#ch9",
+"tags": [
+"crc16",
+"moved/ask",
+"resharding"
+],
+"id": 33
+},
+{
+"type": "Chapter",
+"system": "redis",
+"title": "Redis · 11. Streams and Consumer Groups",
+"summary": "A worker crashes halfway through an order event. Is the event lost, or processed twice, and how do you get the message back?",
+"body": "Entry IDs are ms-seq and grow monotonically. XADD appends; the stream is a log. Consumer group: stores the last-delivered-id. XREADGROUP with > delivers only new entries. PEL: per consumer, the entries delivered but not acknowledged, with idle time and delivery count (see XPENDING).",
+"url": "techstack/redis/01-redis-internals-end-to-end.html#ch10",
+"tags": [
+"entry ids",
+"pel",
+"xack"
+],
+"id": 34
 },
 {
 "type": "Tour",
 "system": "kafka",
 "title": "Apache Kafka internals, end to end",
 "summary": "Fan 50,000 order events a second out to twelve teams, in order, with no loss and no duplicates when a broker fails.",
-"body": "Log and offsets, produce path (routing, batching, idempotence), replication and ISR, consumer groups, retention and compaction, transactions, metadata quorum.",
+"body": "Log segments and offsets, crash recovery, partitioning, producer batching and idempotence, ISR, reassignment, consumer offsets and groups, retention, transactions, KRaft.",
 "url": "techstack/kafka/01-kafka-internals-end-to-end.html",
 "tags": [
 "tour",
 "interactive"
-],
-"id": 29
-},
-{
-"type": "Chapter",
-"system": "kafka",
-"title": "Apache Kafka · 1. The log",
-"summary": "Where do we put 50,000 events per second so any reader can resume from any point?",
-"body": "segments · offsets · recovery Readers need a stable position to resume from after a crash, reads from an old position must not scan everything before it, and a crash mid-write must not corrupt what was already stored. Append JSON lines to one big file Never modify, only append. A record's offset is its permanent address. Immutability is what makes everything else cheap: closed files can be cached, copied and deleted whole, and after a crash only the tail of the last file can be wrong. Cut the log into segment files named by their first offset, keep a sparse index per segment, and frame every record with a length and a checksum so the end of the valid data is always detectable.",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch0",
-"tags": [
-"segments",
-"offsets",
-"recovery"
-],
-"id": 30
-},
-{
-"type": "Chapter",
-"system": "kafka",
-"title": "Apache Kafka · 2. Produce",
-"summary": "One log cannot take 50,000 events/s. How do clients spread the writes, keep each order in order, and survive retries?",
-"body": "route · batch · retry A single log is one leader on one disk. Splitting it must not break created → paid → shipped for one order, a request per record would drown the broker, and a timeout is ambiguous: a blind retry may write the payment twice. Round-robin every record, one request each, retry on timeout Put the cleverness on the client and keep the broker a dumb, fast appender. The client picks the partition (hash(key)), amortises request cost over many records (batches), and makes its own retries recognisable (producer ID + sequence numbers). Three decisions, all made before the bytes leave the producer: route equal keys to one partition (order is kept per key, not globally), batch by size and time inside a bounded buffer (overload becomes back-pressure, not a crash), and number every batch so the leader can tell a retry from new data.",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch1",
-"tags": [
-"route",
-"batch",
-"retry"
-],
-"id": 31
-},
-{
-"type": "Chapter",
-"system": "kafka",
-"title": "Apache Kafka · 3. Replicate",
-"summary": "A broker dies right after saying OK. Are the acknowledged events gone?",
-"body": "ISR · high watermark · move With one copy, yes. With copies, two questions remain: when may the leader say OK, and which copy may take over? And later, how do we put a copy on a brand-new machine without stopping anything? Leader acks after its own write, copies in the background Replicate the log, not the state. A follower is just a consumer of the leader's log. A record is committed once every in-sync replica has it, and only an in-sync replica may become leader, so nothing committed can be lost. Moving a partition is the same trick: add one more follower, switch when it has caught up. Track the ISR (replicas that keep up). The high watermark is the smallest log end in the ISR: consumers read only below it and acks=all answers when the watermark passes the record.",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch2",
-"tags": [
-"isr",
-"high",
-"watermark",
-"move"
-],
-"id": 32
-},
-{
-"type": "Chapter",
-"system": "kafka",
-"title": "Apache Kafka · 4. Consume",
-"summary": "Twelve teams read the same events at their own pace. How does each remember where it stopped, and share the work?",
-"body": "offsets · groups · rebalance Each team must see every event, be able to crash and resume, and spread its work over several machines without two of them processing the same partition. A work queue that deletes a message once it is acked Readers own their position; the broker keeps no per-message state. A reader's whole state is one number per partition (stored in a log of its own), and who reads which partition is a lease with a generation number that fences stale owners. Do not delete on read: the log stays, any number of groups read it independently, and a group coordinator hands out partitions and bumps a generation whenever membership changes.",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch3",
-"tags": [
-"offsets",
-"groups",
-"rebalance"
-],
-"id": 33
-},
-{
-"type": "Chapter",
-"system": "kafka",
-"title": "Apache Kafka · 5. Clean up",
-"summary": "Disks fill up within days. What do we delete, and what if we only need the latest value per key?",
-"body": "retention · tiers · compaction 50,000 events/s at 1 KB each is about 4 TB per day per replica. Something must go, a stuck consumer must not be able to stop that, and a changelog of 40 million customers must stay replayable forever without keeping every old version. Delete a record once every group has read it Cleanup is a background rewrite of closed segments, driven by policy, never by readers. Retention drops whole old files (by time or size); compaction rewrites them keeping the latest value per key. Offsets are never renumbered, and deletes are just records (tombstones). Two cleaners over the same segments: delete old files on a clock, or compact to the latest value per key. A reader that fell behind is told (OFFSET_OUT_OF_RANGE) instead of being waited for; tiered storage moves verified old segments to cheap storage.",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch4",
-"tags": [
-"retention",
-"tiers",
-"compaction"
-],
-"id": 34
-},
-{
-"type": "Chapter",
-"system": "kafka",
-"title": "Apache Kafka · 6. Transactions",
-"summary": "A job reads orders, writes invoices, then commits its offset. A crash in between: duplicate invoices?",
-"body": "markers · last stable offset The output write and the offset commit are two separate writes. A crash between them means redoing work (duplicates) or skipping it. Write the outputs, then commit the input offset Atomicity is a marker in the same log. Write the data now, decide its visibility later with a COMMIT or ABORT control record. Treat the consumer offset as just another output, so one atomic commit covers the results and the progress; readers simply stop at the last stable offset. A transaction coordinator maps transactional.id to a producer ID and epoch (fencing zombies), tracks which partitions were written, and writes the markers. read_committed consumers filter on them.",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch5",
-"tags": [
-"markers",
-"last",
-"stable",
-"offset"
 ],
 "id": 35
 },
 {
 "type": "Chapter",
 "system": "kafka",
-"title": "Apache Kafka · 7. Control plane",
-"summary": "Who decides which broker leads each partition, and what if that decider dies?",
-"body": "metadata quorum · epochs Every failover from chapter 3 needs one authority. Two deciders that disagree means two leaders for one partition, and diverging data. One controller process Metadata is also a log. Apply the same idea to the controller itself: a small quorum keeps a replicated metadata log that only advances with a majority, and an epoch on every message fences the stale, so there can never be two authorities. A few controller nodes (KRaft) elect one active controller per epoch. Topic, placement, leader and ISR changes are entries in the metadata log; brokers apply only committed entries and reject older epochs.",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch6",
+"title": "Apache Kafka · 1. Log Segments and Offsets",
+"summary": "Reading must resume from any offset, but scanning a 1 TB partition for offset 9,000,000 is far too slow. How does Kafka find it?",
+"body": "Segment files: a partition is a directory of .log files named by the base offset of their first record. Only the newest (active) segment is written; it rolls at segment.bytes or segment.ms.",
+"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch0",
 "tags": [
-"metadata",
-"quorum",
-"epochs"
+"append",
+"segments",
+"sparse index"
 ],
 "id": 36
+},
+{
+"type": "Chapter",
+"system": "kafka",
+"title": "Apache Kafka · 2. Log Crash Recovery",
+"summary": "A broker with thousands of partitions was killed with kill -9. Why does the restart take 40 minutes, and what is it doing?",
+"body": "Clean shutdown marker: any clean shutdown flushes the logs and leaves a marker, so the next start skips recovery (a controlled shutdown also moves leadership off the broker first).",
+"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch1",
+"tags": [
+"recovery point",
+"crc",
+"truncation"
+],
+"id": 37
+},
+{
+"type": "Chapter",
+"system": "kafka",
+"title": "Apache Kafka · 3. Partitioning and Keys",
+"summary": "After the team scaled a topic from 6 to 12 partitions, orders for one seller arrive out of order. What changed?",
+"body": "Default partitioner: with a key, partition = toPositive(murmur2(keyBytes)) % numPartitions. For a fixed partition count the same key always maps to the same partition.",
+"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch2",
+"tags": [
+"key hash",
+"order per key",
+"stickiness"
+],
+"id": 38
+},
+{
+"type": "Chapter",
+"system": "kafka",
+"title": "Apache Kafka · 4. Producer Batching and Buffering",
+"summary": "Brokers run at 90% CPU serving one request per event though bandwidth is low. How do we do the same work with far fewer requests?",
+"body": "RecordAccumulator: keeps a queue of batches per partition and appends each record to the open batch. Batch close: a batch is sent when it holds batch.size bytes or linger.ms has passed since its first record, whichever comes first.",
+"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch3",
+"tags": [
+"linger",
+"batch.size",
+"buffer.memory"
+],
+"id": 39
+},
+{
+"type": "Chapter",
+"system": "kafka",
+"title": "Apache Kafka · 5. Idempotent Producer and Retries",
+"summary": "A lost ack made the producer retry, and finance sees one order twice and another out of order. How do retries become safe?",
+"body": "Producer ID and epoch: with enable.idempotence=true (the default since Kafka 3.0, KIP-679) the broker assigns the producer an ID. Sequence numbers: each batch carries a per-partition sequence.",
+"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch4",
+"tags": [
+"producer id",
+"sequence",
+"delivery timeout"
+],
+"id": 40
+},
+{
+"type": "Chapter",
+"system": "kafka",
+"title": "Apache Kafka · 6. Replication, ISR and High Watermark",
+"summary": "A broker acknowledged an order and died a moment later. Are the acknowledged events gone, and what decides that?",
+"body": "Leader and followers: clients talk to the partition leader; followers fetch from it like consumers and append to their own log. ISR: the leader plus the followers that caught up within replica.lag.time.max.ms (default 30 s). A follower that lags longer leaves the ISR and returns when it catches up.",
+"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch5",
+"tags": [
+"isr",
+"high watermark",
+"acks"
+],
+"id": 41
+},
+{
+"type": "Chapter",
+"system": "kafka",
+"title": "Apache Kafka · 7. Partition Reassignment and Placement",
+"summary": "New brokers were added, and moving partitions onto them saturated the network so producers timed out. How do we move data safely?",
+"body": "Add, catch up, remove: kafka-reassign-partitions.sh --execute adds the target replicas, they fetch the log, join the ISR, and then the old replicas are dropped.",
+"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch6",
+"tags": [
+"reassign",
+"throttle",
+"rack"
+],
+"id": 42
+},
+{
+"type": "Chapter",
+"system": "kafka",
+"title": "Apache Kafka · 8. Consumer Offsets and Commits",
+"summary": "Twelve teams read the same topic. After a crash, billing skipped some orders and replayed others. Where is each reader’s position kept?",
+"body": "Reading does not delete: every group keeps its own committed offset per partition, so twelve teams read independently. Position and commit: the fetch position advances with poll(); the committed offset is what a restart resumes from.",
+"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch7",
+"tags": [
+"position",
+"commit",
+"reset"
+],
+"id": 43
+},
+{
+"type": "Chapter",
+"system": "kafka",
+"title": "Apache Kafka · 9. Consumer Groups and Rebalance",
+"summary": "Every few minutes all consumers in the group stop for 30 seconds and lag climbs. What makes the group reshuffle itself?",
+"body": "Group coordinator: one broker per group tracks the members, runs JoinGroup and SyncGroup, and increments the generation on every membership change. Two liveness clocks: heartbeats must reach the coordinator within session.timeout.ms (45 s by default), and poll() must be called within…",
+"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch8",
+"tags": [
+"coordinator",
+"generation",
+"assignment"
+],
+"id": 44
+},
+{
+"type": "Chapter",
+"system": "kafka",
+"title": "Apache Kafka · 10. Retention, Tiered Storage and Compaction",
+"summary": "Disks fill within days, yet a “latest price” topic must keep only the newest value per key. What decides what is deleted, and when?",
+"body": "Delete policy: the broker deletes closed segments whose newest record is older than retention.ms, or the oldest segments when a partition exceeds retention.bytes (a per-partition limit).",
+"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch9",
+"tags": [
+"retention",
+"tiers",
+"compaction"
+],
+"id": 45
+},
+{
+"type": "Chapter",
+"system": "kafka",
+"title": "Apache Kafka · 11. Transactions and Exactly-Once",
+"summary": "A job reads orders, writes invoices and then commits its offset. A crash in between causes duplicate invoices. Can these steps be atomic?",
+"body": "transactional.id: initTransactions() registers it with the transaction coordinator, which returns a producer ID and bumps the epoch. An older producer with the same id is fenced (ProducerFencedException).",
+"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch10",
+"tags": [
+"transactional.id",
+"markers",
+"lso"
+],
+"id": 46
+},
+{
+"type": "Chapter",
+"system": "kafka",
+"title": "Apache Kafka · 12. KRaft Control Plane",
+"summary": "Who decides which broker leads each partition, and what happens if that decider dies or is cut off from the rest?",
+"body": "Metadata is a log: the __cluster_metadata topic holds every change (topics, partition leaders, configs), replicated with a Raft-based protocol (KIP-500, KIP-595, KIP-631).",
+"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch11",
+"tags": [
+"metadata quorum",
+"epochs",
+"fencing"
+],
+"id": 47
 },
 {
 "type": "Tour",
 "system": "postgres",
 "title": "PostgreSQL internals, end to end",
 "summary": "Take 2,000 checkout transactions a second while finance runs 10-minute reports, and never lose a committed row to a power cut.",
-"body": "Pages and buffer pool, executor, B-tree, MVCC, WAL and recovery, VACUUM, planner, isolation.",
+"body": "Parser and catalog, heap pages and buffer pool, executor, B-tree, MVCC, WAL and recovery, VACUUM, planner, joins and work_mem, checkpoints, isolation, replication.",
 "url": "techstack/postgres/01-postgres-internals-end-to-end.html",
 "tags": [
 "tour",
 "interactive"
 ],
-"id": 37
+"id": 48
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 1. SQL & catalog",
-"summary": "A user types SELECT t.nope FROM t. When should the engine notice the mistake?",
-"body": "parse · bind · logical plan If you only notice while reading rows, a typo on a 50 GB table fails after minutes of I/O, or silently returns nothing on an empty table. The engine must know every table, column and type before it reads data. Evaluate the SQL text row by row  Separate understanding a query from running it: once every name is resolved against the catalog, the engine knows the query is meaningful before it spends any I/O.",
+"title": "PostgreSQL · 1. SQL, Parser and Catalog",
+"summary": "A deploy renamed one column. Some app servers fail at once with a name error, others fail later with a different error. Why does PostgreSQL fail before it reads a single row?",
+"body": "Parser checks grammar only and produces a raw parse tree. It does not look at any table, so SELEC fails here with SQLSTATE 42601. Analyzer resolves every table and column through the catalogs (pg_class, pg_attribute, pg_namespace), using search_path for unqualified names.",
 "url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch0",
 "tags": [
 "parse",
-"bind",
-"logical",
+"analyze",
+"rewrite",
 "plan"
 ],
-"id": 38
+"id": 49
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 2. Heap & buffer pool",
-"summary": "Where does row 17 physically live, and how do we avoid going to disk every time we need it?",
-"body": "pages · frames · eviction A disk read costs around 100 µs on an SSD, about a thousand times more than RAM. Rows need a stable address an index can point to, and hot pages must stay in memory within a fixed budget. One file per table, read it whole  Make the page, not the row, the unit of storage and caching: a fixed-size block is what disks read cheaply and what memory can hold a fixed number of, and a slot indirection gives each row an address that never moves.",
+"title": "PostgreSQL · 2. Heap Pages and the Buffer Pool",
+"summary": "The same orders lookup takes 2 ms in the morning and 300 ms after the nightly batch. Nothing changed in the query. What did the batch change?",
+"body": "8 kB page: the unit of storage and caching. A page has a header, an array of line pointers growing down, and tuples growing up. A row is addressed as (page, line pointer).",
 "url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch1",
 "tags": [
 "pages",
-"frames",
-"eviction"
+"shared_buffers",
+"clock sweep"
 ],
-"id": 39
+"id": 50
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 3. Iterator execution",
-"summary": "How do you run … ORDER BY amount LIMIT 5 without holding the whole table in memory?",
-"body": "scan · filter · join · sort A plan can combine scans, joins, sorts and limits in any shape. Materialising every intermediate result costs as much memory as the table, and the first row arrives only at the very end. Every step returns a full array  Invert control: the consumer pulls one row at a time from its child, so memory follows the few blocking operators instead of the size of the table, and a LIMIT simply stops pulling.",
+"title": "PostgreSQL · 3. Iterator Execution",
+"summary": "ORDER BY amount LIMIT 5 over ten million rows reads everything, while LIMIT 5 alone returns instantly. What decides whether a query can stop early?",
+"body": "ExecProcNode: each node returns one row per call by calling its child, so a tree runs as nested pulls. Streaming nodes (scan, filter, limit, nested loop) pass rows through and hold almost nothing. Blocking nodes (Sort, Hash, HashAggregate) must read their input first.",
 "url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch2",
 "tags": [
-"scan",
-"filter",
-"join",
-"sort"
+"volcano",
+"pull",
+"blocking nodes"
 ],
-"id": 40
+"id": 51
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 4. B-tree index",
-"summary": "Find the order with amount = 99 among 10 million rows without reading every page.",
-"body": "insert · split · scan A full scan of 10 million rows reads about 100,000 pages. A B-tree answers the same point query in 3 or 4 page reads, and keeps doing so while rows keep arriving. A sorted array of (key, row ID)  Keep the order but give up contiguity: a tree of pages stays sorted while each change touches only one root-to-leaf path, so a lookup or an insert costs a few page reads whatever the table size.",
+"title": "PostgreSQL · 4. B-tree Index",
+"summary": "Finding amount = 99 in ten million rows scans every page, and after adding an index inserts get slower. What does an index cost and buy?",
+"body": "Search: from the root page, binary-search each page to pick a child, down to a leaf. The number of page reads is the tree height. Page split: when a leaf is full, PostgreSQL allocates a new page, moves about half of the entries and adds a downlink in the parent. Splits can cascade up.",
 "url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch3",
 "tags": [
-"insert",
+"descend",
 "split",
-"scan"
+"index-only"
 ],
-"id": 41
+"id": 52
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 5. Transactions & MVCC",
-"summary": "The finance report reads a row while checkout updates it. Who has to wait?",
-"body": "versions · snapshots With one copy per row, either the report blocks checkout for 10 minutes, or it reads a half-updated, inconsistent picture of the books. One copy per row, protected by a lock  Keep several copies: if a writer never modifies the version a reader is looking at, readers and writers never have to wait for each other.",
+"title": "PostgreSQL · 5. Transactions and MVCC",
+"summary": "The finance report reads an order while checkout updates it. Who waits for whom?",
+"body": "Tuple header: every row version carries xmin (the creating transaction) and xmax (the deleting or updating one). An UPDATE sets xmax on the old version and writes a new version.",
 "url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch4",
 "tags": [
-"versions",
-"snapshots"
+"xmin/xmax",
+"snapshots",
+"hot"
 ],
-"id": 42
+"id": 53
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 6. WAL & recovery",
-"summary": "The power fails right after we answered COMMIT. Is the paid order still there?",
-"body": "log before page Writing every changed page at COMMIT means many random writes per transaction, and a crash in the middle leaves some pages new and some old. We need durability for the price of one sequential write per commit. Write every dirty page at COMMIT  Treat the log as the source of truth and the data pages as a lazily written cache of it: only the sequential log has to be durable at COMMIT.",
+"title": "PostgreSQL · 6. WAL and Crash Recovery",
+"summary": "Power fails right after COMMIT returned. Is the paid order still there, and what did PostgreSQL write to make it so?",
+"body": "WAL record: describes a change, identified by an increasing LSN. WAL is appended to WAL buffers in memory and written to pg_wal files. Commit: with synchronous_commit = on the backend waits until WAL up to its commit record is flushed to disk (fsync).",
 "url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch5",
 "tags": [
-"log",
-"before",
-"page"
+"log before page",
+"fsync",
+"redo"
 ],
-"id": 43
+"id": 54
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 7. VACUUM",
-"summary": "Every UPDATE leaves an old version behind. When is it safe to throw one away?",
-"body": "dead versions · horizon A table updated 1,000 times per second collects 86 million dead versions a day. Left alone, the table and its indexes bloat and every scan slows down. Delete the old version as soon as the update commits  The oldest observer, not the moment of the commit, decides when a version becomes garbage.",
+"title": "PostgreSQL · 7. VACUUM and the Horizon",
+"summary": "The orders table doubles in size every week while its row count stays flat. Why can the old rows not be removed?",
+"body": "Dead tuple: a version whose deleter committed. It stays on the page until VACUUM reclaims its space for reuse. xmin horizon: the oldest transaction ID any snapshot may still need. Held back by long transactions, replication slots, prepared transactions and standbys with hot_standby_feedback.",
 "url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch6",
 "tags": [
-"dead",
-"versions",
-"horizon"
+"dead tuples",
+"horizon",
+"freeze"
 ],
-"id": 44
+"id": 55
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 8. Planner & statistics",
-"summary": "One SQL query can run as a scan, an index lookup, a hash join or a nested loop. Which?",
-"body": "cost · estimates On a large table the wrong choice is the difference between 5 ms and 5 minutes, and the right choice depends on how many rows actually match. Fixed rule: use an index whenever one matches  Turn plan choice into arithmetic: if you can estimate how many rows each step produces, you can price every equivalent plan and let the numbers, not fixed rules, decide.",
+"title": "PostgreSQL · 8. Planner and Statistics",
+"summary": "After the nightly bulk load a 5 ms query takes 5 minutes, though the query and the schema did not change. What did the planner decide differently?",
+"body": "pg_statistic (shown in pg_stats): per column null fraction, n_distinct, most common values and a histogram, sampled by ANALYZE with default_statistics_target (default 100).",
 "url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch7",
 "tags": [
+"selectivity",
 "cost",
-"estimates"
+"analyze"
 ],
-"id": 45
+"id": 56
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 9. Sort & hash join",
-"summary": "ORDER BY over 50 GB with 64 MB of memory. Does the query crash?",
-"body": "work_mem · spill A query runs alongside hundreds of others. If every sort or hash join takes as much memory as its input, the server runs out of RAM. Load the whole input into memory  Make every big operation decomposable: split the input into pieces that each fit in memory and finish them one by one from disk, so a fixed budget handles any input size.",
+"title": "PostgreSQL · 9. Sort and Hash Join under work_mem",
+"summary": "An ORDER BY over 50 GB runs with only 64 MB of memory per operation. Does it fail, and what does it do instead?",
+"body": "work_mem is the budget per sort or hash operation, not per query or per server. One query can have several such nodes, and each parallel worker gets its own budget.",
 "url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch8",
 "tags": [
 "work_mem",
-"spill"
+"spill",
+"batches"
 ],
-"id": 46
+"id": 57
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 10. Checkpoint & WAL",
-"summary": "The WAL grows forever. After a crash, do we replay a year of log?",
-"body": "recovery time Recovery time is downtime. Replaying from the very first record makes every restart take hours, and no WAL file can ever be deleted. Keep all WAL and replay it from the start  Recovery only needs the log written since the last moment every page was known to be on disk, so create such moments on purpose.",
+"title": "PostgreSQL · 10. Checkpoints",
+"summary": "The WAL directory keeps growing and every five minutes write latency spikes. Why does PostgreSQL write checkpoints at all, and what do the knobs trade off?",
+"body": "Checkpoint: flush every dirty buffer, then write a checkpoint record. The redo point is where recovery will start. Triggers: checkpoint_timeout (default 5 min) or WAL growth approaching max_wal_size, whichever comes first.",
 "url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch9",
 "tags": [
-"recovery",
-"time"
+"checkpoint",
+"max_wal_size",
+"recovery time"
 ],
-"id": 47
+"id": 58
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 11. Isolation & deadlocks",
-"summary": "Two transactions touch the same rows at once. What may each see, and what if each waits for the other?",
-"body": "anomalies · wait-for Running transactions one at a time is correct but slow; anything faster allows anomalies. And as soon as writers wait for locks, two of them can wait for each other forever. Lock rows as you touch them, wait as long as it takes  Concurrency correctness is a contract, not one rule: name the anomalies each level allows, and treat waiting as something that can fail, because a cycle of waiters never ends by itself.",
+"title": "PostgreSQL · 11. Isolation and Deadlocks",
+"summary": "Two transactions update the same two accounts in opposite order and one of them gets an error. Why does PostgreSQL kill a query that did nothing wrong?",
+"body": "Isolation levels: Read Committed takes a new snapshot per statement; Repeatable Read one per transaction; Serializable adds SSI conflict detection on top of it.",
 "url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch10",
 "tags": [
 "anomalies",
-"wait-for"
+"ssi",
+"wait-for graph"
 ],
-"id": 48
+"id": 59
+},
+{
+"type": "Chapter",
+"system": "postgres",
+"title": "PostgreSQL · 12. Streaming Replication and synchronous_commit",
+"summary": "The primary crashes and the team fails over, and two minutes of paid orders are missing. What does a COMMIT actually wait for?",
+"body": "WAL sender and receiver: the primary streams WAL records to each standby, which writes, flushes and replays them in order. Commit levels: local waits for the primary's flush only, remote_write for the standby's OS write, on for the standby's flush, remote_apply for replay so reads on the standby…",
+"url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch11",
+"tags": [
+"wal sender",
+"slots",
+"sync standby"
+],
+"id": 60
 },
 {
 "type": "Tour",
 "system": "k8s",
 "title": "Kubernetes internals, end to end",
 "summary": "Keep 600 containers running on 120 machines through 50 deploys a day and a machine failing every other day, with no human in the loop.",
-"body": "API server, etcd and watches, controllers, scheduler, kubelet, services, rolling updates, autoscaling.",
+"body": "kubectl apply, API server admission, etcd and watches, controllers, scheduler, kubelet, probes, services, rolling updates, HPA, node failure.",
 "url": "techstack/k8s/01-k8s-internals-end-to-end.html",
 "tags": [
 "tour",
 "interactive"
 ],
-"id": 49
-},
-{
-"type": "Chapter",
-"system": "k8s",
-"title": "Kubernetes · 1. kubectl apply",
-"summary": "You run kubectl apply. Who actually starts the containers, and when?",
-"body": "end-to-end sequence One command has to end with 3 running, reachable containers on the right machines, and must still end there if any component crashes halfway through. One imperative script that does everything in order  Store only the desired state in one place, and let independent components, each watching that place, push reality one step closer to it.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch0",
-"tags": [
-"end-to-end",
-"sequence"
-],
-"id": 50
-},
-{
-"type": "Chapter",
-"system": "k8s",
-"title": "Kubernetes · 2. API server",
-"summary": "Anyone with network access can write cluster state. How do you stop bad or malicious objects?",
-"body": "authn · RBAC · admission One malformed Deployment, say a selector that matches no pod, would make controllers loop forever. One leaked credential with write access is a full cluster takeover. Let every client write straight to the database  Put one gatekeeper in front of the store: every request passes the same chain, and the first failing stage rejects it before anything is written.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch1",
-"tags": [
-"authn",
-"rbac",
-"admission"
-],
-"id": 51
-},
-{
-"type": "Chapter",
-"system": "k8s",
-"title": "Kubernetes · 3. etcd & watch",
-"summary": "Two clients update the same Deployment at the same time. Whose change survives?",
-"body": "revisions · conflicts Controllers, kubectl and autoscalers all write the same objects concurrently, and 30 controllers polling every object every second would melt the store. Read, modify, write back, and poll for changes  Version every write with one global revision: updates become compare-and-swap on resourceVersion, and readers stream changes from a revision instead of polling.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch2",
-"tags": [
-"revisions",
-"conflicts"
-],
-"id": 52
-},
-{
-"type": "Chapter",
-"system": "k8s",
-"title": "Kubernetes · 4. Controllers",
-"summary": "A pod is deleted, and the \"pod deleted\" event is lost. Is it ever replaced?",
-"body": "reconcile loops Events get lost: connections drop, controllers restart, nodes reboot. A system that only works when every single event arrives will drift away from what you asked for. Edge-triggered handlers: react to each event  Make controllers level-triggered: whatever woke them up, they re-read the current state, compare it with the desired state, and take the smallest step to close the gap.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch3",
-"tags": [
-"reconcile",
-"loops"
-],
-"id": 53
-},
-{
-"type": "Chapter",
-"system": "k8s",
-"title": "Kubernetes · 5. Scheduler",
-"summary": "A new pod needs 200m CPU and an SSD. Which of 120 machines should run it?",
-"body": "filter · score · bind Put it on a full node and it gets starved or killed. Ignore labels and taints and a database lands on a disk-less GPU box. Decide badly and some nodes sit idle while others overflow. Round-robin over the nodes  Separate hard rules from preferences: filter out every node that cannot run the pod, score the ones that can, then bind the pod by writing a single field.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch4",
-"tags": [
-"filter",
-"score",
-"bind"
-],
-"id": 54
-},
-{
-"type": "Chapter",
-"system": "k8s",
-"title": "Kubernetes · 6. Kubelet",
-"summary": "A pod is bound to node-1. What turns that record into a running, healthy container?",
-"body": "pod lifecycle · CRI Image pulls fail, apps take seconds to boot, containers crash. The control plane only sees what the node reports, so \"started\" and \"ready to serve\" must be reported separately. Start the container once and mark it Running  Put an agent on every node that reconciles its own pods: watch the pods bound to me, drive the container runtime toward their spec, and report observed status, including readiness, back to the API server.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch5",
-"tags": [
-"pod",
-"lifecycle",
-"cri"
-],
-"id": 55
-},
-{
-"type": "Chapter",
-"system": "k8s",
-"title": "Kubernetes · 7. Services & kube-proxy",
-"summary": "Pods come and go with new IPs every deploy. How do clients find a working one?",
-"body": "endpoints · NAT rules In a single rolling update every pod IP changes. Hard-coded IPs break on the next deploy, and traffic sent to a pod that is still booting or already gone fails. Hard-code pod IPs in the client, or DNS round-robin  Give the service one stable virtual IP, keep a live list of ready pod IPs (Endpoints), and let every node rewrite packets for that virtual IP to one of them.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch6",
-"tags": [
-"endpoints",
-"nat",
-"rules"
-],
-"id": 56
-},
-{
-"type": "Chapter",
-"system": "k8s",
-"title": "Kubernetes · 8. Rolling update",
-"summary": "Ship version 2 to all pods without ever dropping below full capacity. How?",
-"body": "surge · unavailable 50 deploys a day. Each one must keep serving, must stop by itself if v2 is broken, and must be undoable in seconds. Delete all old pods, then create the new ones  A new pod template gets its own ReplicaSet. The Deployment controller shifts replicas from old to new in steps bounded by maxSurge and maxUnavailable, counting only Ready pods.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch7",
-"tags": [
-"surge",
-"unavailable"
-],
-"id": 57
-},
-{
-"type": "Chapter",
-"system": "k8s",
-"title": "Kubernetes · 9. Autoscaling",
-"summary": "Traffic jumps 7x at 8 p.m. How many replicas do you need, and when do you scale back?",
-"body": "HPA Too few pods and requests time out; too many and you pay for idle machines. Load moves faster than any human can edit YAML. Add one pod above 80% CPU, remove one below 40%  Compute the needed replicas proportionally from utilisation versus a target, scale up quickly, and scale down only to the highest recommendation seen during a stabilisation window.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch8",
-"tags": [
-"hpa"
-],
-"id": 58
-},
-{
-"type": "Chapter",
-"system": "k8s",
-"title": "Kubernetes · 10. Node failure",
-"summary": "A machine loses power at 3 a.m. How does the cluster notice and heal?",
-"body": "heartbeat · taint · evict A dead node sends nothing. The control plane cannot tell dead from slow network, and reacting to every blip would reshuffle thousands of pods. One missed heartbeat: delete its pods and move them  Treat silence as suspicion, not death: after a grace period mark the node NotReady and taint it, evict its pods only after a toleration period, and let the normal ReplicaSet loop create replacements.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch9",
-"tags": [
-"heartbeat",
-"taint",
-"evict"
-],
-"id": 59
-},
-{
-"type": "Tour",
-"system": "os",
-"title": "Operating System & Concurrency internals, end to end",
-"summary": "Run 200 programs at once on 4 cores, 8 GB of RAM and one disk, and stay safe, fast and consistent when programs crash or the power fails.",
-"body": "Syscalls and the kernel boundary, CPU scheduling, virtual memory and the TLB, page replacement, concurrency versus parallelism, locks and deadlock, event loops and async/await, Go goroutines and channels, actors and Scala, the Python GIL, inodes and the page cache, journaling, disk scheduling.",
-"url": "techstack/os/01-os-internals-end-to-end.html",
-"tags": [
-"tour",
-"interactive"
-],
-"id": 60
-},
-{
-"type": "Chapter",
-"system": "os",
-"title": "Operating System & Concurrency · 1. Kernel boundary",
-"summary": "Any program may run any instruction. How do you stop one of them from halting the machine or touching the disk?",
-"body": "syscalls · interrupts · modes If every program can execute every instruction and access every address, a single bug takes the whole machine down, and there is no way to enforce any other rule such as memory isolation or file permissions. Trust programs to call the hardware directly Enforce rules in hardware, then let one trusted program use them. The CPU refuses privileged instructions in user mode and jumps to the kernel at an address the kernel chose, so a program can ask the kernel for work but never run its own code with kernel rights. A timer interrupt guarantees the kernel always gets control back. Run the CPU in two modes. User mode can only compute on its own memory. Anything privileged (devices, page tables, halting) runs in kernel mode, and the only way in is a controlled trap to a fixed entry point: a system call, a fault, or a hardware interrupt.",
-"url": "techstack/os/01-os-internals-end-to-end.html#ch0",
-"tags": [
-"syscalls",
-"interrupts",
-"modes"
-],
 "id": 61
 },
 {
 "type": "Chapter",
-"system": "os",
-"title": "Operating System & Concurrency · 2. CPU scheduling",
-"summary": "200 programs share 4 cores. Who runs next, and for how long, so that short jobs are not stuck behind long ones?",
-"body": "run queue · quantum · fairness A batch job that computes for an hour must not delay a web handler that needs 2 ms of CPU, and a scheduler that switches too often wastes the CPU on switching itself. First come, first served, run to completion Fairness is bookkeeping. Keep one number per task (CPU time received, divided by its weight) and always run the task with the smallest number. A task that sleeps falls behind, so when it wakes it runs soon: interactive tasks get low latency without being labelled interactive. Slice time. The timer interrupt preempts the running task and the scheduler picks another from the run queue. Round robin gives equal slices; a fair scheduler tracks how much CPU each task has received and always runs the one that has had the least, weighted by priority.",
-"url": "techstack/os/01-os-internals-end-to-end.html#ch1",
+"system": "k8s",
+"title": "Kubernetes · 1. kubectl apply, End to End",
+"summary": "kubectl apply returns in 200 ms and says \"configured\", yet the new pods appear 20 seconds later or never. Who actually starts the containers?",
+"body": "Desired state in one store. Every object is {apiVersion, kind, metadata, spec, status}. spec is what you want; status is what controllers observed. Watch, do not call. Components never call each other. Each one watches the API server for the kinds it owns and writes the next object.",
+"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch0",
 "tags": [
-"run",
-"queue",
-"quantum",
-"fairness"
+"desired state",
+"watch chain"
 ],
 "id": 62
 },
 {
 "type": "Chapter",
-"system": "os",
-"title": "Operating System & Concurrency · 3. Virtual memory",
-"summary": "Two programs both use address 0x00400000. How can they, and why can neither touch the other's data?",
-"body": "page tables · TLB · faults If programs use physical addresses they collide, a bug in one corrupts another, and each program would have to be loaded at an address that is free right now. Give each program a base address and a size Add a level of indirection the hardware enforces. Programs only ever name virtual addresses; the kernel decides what each one means and can leave a page unmapped, share it, make it read-only or fetch it lazily. A missing mapping raises a page fault instead of an error. Give every process its own virtual address space, cut into 4 KB pages. A per-process page table maps virtual pages to physical frames, with permission bits. The MMU translates every access in hardware, and a small cache called the TLB makes it fast.",
-"url": "techstack/os/01-os-internals-end-to-end.html#ch2",
+"system": "k8s",
+"title": "Kubernetes · 2. API Server: Authentication, RBAC, Admission",
+"summary": "A CI token can delete production namespaces, and one broken admission webhook blocks every deploy. What decides whether a request is stored?",
+"body": "Authentication maps a token, certificate or OIDC identity to a user and groups, or answers 401. RBAC authorization checks Role/ClusterRole rules bound by RoleBinding/ClusterRoleBinding for a verb on a resource in a namespace, or answers 403. There is no deny rule, only allows.",
+"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch1",
 "tags": [
-"page",
-"tables",
-"tlb",
-"faults"
+"authn",
+"authz",
+"admission",
+"validation"
 ],
 "id": 63
 },
 {
 "type": "Chapter",
-"system": "os",
-"title": "Operating System & Concurrency · 4. Page replacement",
-"summary": "All frames of RAM are in use and a program touches a page that is on disk. Which page do you throw out?",
-"body": "FIFO · LRU · clock · thrashing A disk read is about 100,000 times slower than a RAM access. Evict the wrong page and the next access is another disk read, so a bad choice can make the whole machine crawl. Evict the page that has been in memory the longest (FIFO) The past predicts the near future. Programs reuse recent pages (locality), so evicting the least recently used page is nearly the best possible choice. True LRU needs an update on every access, so real kernels approximate it with one hardware bit and a sweep. Approximate LRU. Keep a reference bit per page that the hardware sets on access, and sweep the frames like a clock: a page with the bit set gets a second chance, one with the bit clear is evicted. Reclaim in the background, and keep each process's working set resident.",
-"url": "techstack/os/01-os-internals-end-to-end.html#ch3",
+"system": "k8s",
+"title": "Kubernetes · 3. etcd, resourceVersion and Watch",
+"summary": "Two controllers update the same Deployment at the same moment and one change silently disappears. How does the store stop that?",
+"body": "Global revision. etcd keeps MVCC history; every write increments one revision, exposed as metadata.resourceVersion. Optimistic concurrency. An update that carries a resourceVersion only succeeds if it still matches; otherwise HTTP 409. Watch from a revision.",
+"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch2",
 "tags": [
-"fifo",
-"lru",
-"clock",
-"thrashing"
+"revisions",
+"conflicts",
+"watch"
 ],
 "id": 64
 },
 {
 "type": "Chapter",
-"system": "os",
-"title": "Operating System & Concurrency · 5. Concurrency Internal",
-"summary": "Your server handles one request at a time and is slow. Do you add threads, processes or cores, and why does adding cores not make it N times faster?",
-"body": "concurrent · parallel · process · thread Programs spend their time doing two different things: waiting (for a disk, a network, a database) and computing. Waiting needs no CPU, so it can overlap with other work; computing needs a core. Mix the two up and you add threads that queue for nothing, or cores that sit idle. Handle one request at a time Concurrency is a way to structure a program; parallelism is a way to run it. A concurrent program can run on one core or many; a parallel speedup needs independent work and is bounded by its serial fraction: with 10% serial work, no number of cores gives more than 10&times;. The unit you pick (process, thread, coroutine) decides how heavy each task is and who schedules it. Separate two ideas. Concurrency is structuring work as independent tasks whose lifetimes overlap, so a core can run another task while one waits; one core is enough. Parallelism is running tasks at the same instant on different cores. Use concurrency to hide waiting, parallelism to speed up computing, and measure the part that cannot be split (Amdahl's law).",
-"url": "techstack/os/01-os-internals-end-to-end.html#ch4",
+"system": "k8s",
+"title": "Kubernetes · 4. Controllers and Reconcile Loops",
+"summary": "A pod is deleted while the controller is restarting and the delete event is lost. Will the pod ever be replaced?",
+"body": "Reflector and informer. A reflector does LIST then WATCH and fills a local cache, so controllers read from memory instead of the API server. Work queue. Event handlers enqueue only the object key.",
+"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch3",
 "tags": [
-"concurrent",
-"parallel",
-"process",
-"thread"
+"informers",
+"work queue",
+"level-triggered"
 ],
 "id": 65
 },
 {
 "type": "Chapter",
-"system": "os",
-"title": "Operating System & Concurrency · 6. Synchronization",
-"summary": "Two threads each add 1 to a shared counter 5 times. Why does it end at 7 instead of 10, and how do you fix it without freezing everything?",
-"body": "races · locks · deadlock counter++ is three steps: load, add, store. The scheduler can switch threads between any two of them, so updates are overwritten, and the bug only appears on some runs. Hope the threads do not interleave Shared mutable state needs a single point of ordering. Either serialize access (mutex), make the operation indivisible (atomic), or avoid sharing. Deadlock needs four conditions at once (mutual exclusion, hold and wait, no preemption, circular wait); break one, usually circular wait with lock ordering. Make the critical section atomic. A mutex lets one thread in and puts the others to sleep; a single atomic instruction (such as fetch-and-add) does a read-modify-write that no one can split. Take multiple locks in one global order so they cannot wait on each other in a cycle.",
-"url": "techstack/os/01-os-internals-end-to-end.html#ch5",
+"system": "k8s",
+"title": "Kubernetes · 5. Scheduler: Filter, Score, Bind",
+"summary": "A new pod asks for 200m CPU and an SSD node, yet it sits Pending while 120 nodes look half empty. Why can the scheduler not place it?",
+"body": "Filter removes infeasible nodes. NodeResourcesFit checks requests against allocatable, TaintToleration checks taints, NodeAffinity checks nodeSelector and affinity, InterPodAffinity checks pod (anti-)affinity.",
+"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch4",
 "tags": [
-"races",
-"locks",
-"deadlock"
+"requests",
+"taints",
+"affinity"
 ],
 "id": 66
 },
 {
 "type": "Chapter",
-"system": "os",
-"title": "Operating System & Concurrency · 7. Event loop & async/await",
-"summary": "Ten thousand clients are connected and nearly all of them are waiting. How can one thread serve them all, and what does await actually do?",
-"body": "reactor · epoll · coroutines A thread costs a kernel task, a stack (typically 8 MB of virtual address space on Linux, 1 MB by default on the JVM) and context switches. Ten thousand threads that sleep most of their life waste memory and scheduler time; ten thousand coroutines parked in an event loop do not. One thread per connection, blocking calls Never wait on a thread: ask the kernel to tell you when you can proceed. This is the reactor pattern: an event demultiplexer (epoll) plus handlers. async/await is syntax that turns straight-line code into those handlers (a compiler-generated state machine), so you do not write callbacks by hand. It works only while every handler returns quickly: scheduling is cooperative, nothing preempts a coroutine. Make waiting cheap. Put sockets in non-blocking mode and register them with the kernel's readiness API (epoll on Linux, kqueue on BSD and macOS, IOCP on Windows). One loop asks the kernel \"which of these is ready?\", runs the code waiting on each ready one, and sleeps in epoll_wait when none is. A coroutine is a function whose local state is saved at each await, so the loop can resume it later.",
-"url": "techstack/os/01-os-internals-end-to-end.html#ch6",
+"system": "k8s",
+"title": "Kubernetes · 6. Kubelet and Pod Lifecycle",
+"summary": "The pod is bound to node-1 but never becomes Running, or it restarts every few minutes. What does the node agent do, and what does it report?",
+"body": "Pod phase and container state. Phases are Pending, Running, Succeeded, Failed, Unknown. Each container is Waiting (with a reason), Running or Terminated. CRI.",
+"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch5",
 "tags": [
-"reactor",
-"epoll",
-"coroutines"
+"cri",
+"restarts",
+"limits"
 ],
 "id": 67
 },
 {
 "type": "Chapter",
-"system": "os",
-"title": "Operating System & Concurrency · 8. Go: goroutines & channels",
-"summary": "You want straight-line code for a million concurrent tasks that still uses every core. How does Go run a million goroutines on a few threads, and why are channels safer than shared memory?",
-"body": "GMP scheduler · stealing · CSP OS threads are too heavy for a million tasks, and a single event loop uses one core and forces callbacks. You want cheap tasks, automatic use of all cores, and a way to pass data between tasks without a lock around every variable. One OS thread per task Do not communicate by sharing memory; share memory by communicating. This is CSP (Hoare, 1978): when a value moves through a channel its ownership moves too, so only one goroutine touches it at a time. A work-stealing scheduler gives you parallelism and a bounded channel gives you back-pressure, without writing either yourself. Schedule goroutines in user space. The runtime keeps one processor (P) per core, each with a local run queue; an OS thread (M) must hold a P to run goroutines (G). An idle P steals half of another P's queue. A goroutine that blocks in a system call gives its P to another thread, network waits park the goroutine in a netpoller (epoll), and a goroutine that runs too long is preempted. Goroutines start with a tiny growable stack. Channels are typed queues: a goroutine that cannot send or receive is parked, not blocking a thread.",
-"url": "techstack/os/01-os-internals-end-to-end.html#ch7",
+"system": "k8s",
+"title": "Kubernetes · 7. Probes and Readiness",
+"summary": "During a short database blip every replica restarts at once and the outage gets longer. How does the kubelet decide to restart a container or to stop sending it traffic?",
+"body": "Liveness answers \"is this process stuck?\". After failureThreshold consecutive failures the kubelet restarts the container. Readiness answers \"can I take traffic now?\". It sets the pod's Ready condition and removes it from or returns it to endpoints.",
+"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch6",
 "tags": [
-"gmp",
-"scheduler",
-"stealing",
-"csp"
+"liveness",
+"readiness",
+"startup"
 ],
 "id": 68
 },
 {
 "type": "Chapter",
-"system": "os",
-"title": "Operating System & Concurrency · 9. Actors & Scala",
-"summary": "Instead of locks around shared state, can each piece of state have a single owner that you talk to by messages? What do actors give you in Scala, and what do you pay for it?",
-"body": "mailbox · supervision · reactive streams Locks do not compose, deadlock, and are easy to forget. Distributed systems already communicate only by messages; the actor model applies that discipline inside one process and across machines, and adds a standard way to handle failure. Shared state behind locks Isolation, messages and supervision. One-at-a-time processing makes the actor its own mutex; failure is contained and handled outside the failing code (\"let it crash\", from Erlang); and sending to a local or a remote actor looks the same. The cost is that all coordination becomes asynchronous messaging, with a queue (the mailbox) you must watch. An actor has private state, an address and a mailbox. Senders put immutable messages in the mailbox and return immediately. The actor takes one message at a time, may change its own state, send messages or create child actors. A dispatcher runs many actors on a few threads. A parent supervises its children: when one throws, a strategy (resume, restart, stop, escalate) decides what happens. Reactive Streams adds back-pressure between stages.",
-"url": "techstack/os/01-os-internals-end-to-end.html#ch8",
+"system": "k8s",
+"title": "Kubernetes · 8. Services, EndpointSlices and kube-proxy",
+"summary": "Pod IPs change on every deploy, and during scale-down users see 502 errors for a few seconds. How does traffic find the right pods?",
+"body": "Service has a selector and a stable virtual IP (ClusterIP) that does not belong to any interface. EndpointSlices list the IPs of pods that match the selector and are ready; a terminating pod is marked not ready.",
+"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch7",
 "tags": [
-"mailbox",
-"supervision",
-"reactive",
-"streams"
+"virtual ip",
+"endpoints",
+"nat rules"
 ],
 "id": 69
 },
 {
 "type": "Chapter",
-"system": "os",
-"title": "Operating System & Concurrency · 10. Python: the GIL & speed",
-"summary": "Why does a Python program often run dozens of times slower than the same loop in a compiled language, and why do four threads not make a CPU-bound job four times faster?",
-"body": "interpreter · GIL · asyncio · free-threading Two separate costs. The interpreter runs every operation through dynamic checks on heap objects, and the global interpreter lock (GIL) lets only one thread execute Python bytecode at a time, so CPU-bound threads cannot use more than one core. Four threads for a CPU-heavy job The GIL protects the interpreter, not your data. It keeps reference counting and the object model simple and fast for one thread; it does not make your code thread-safe (x += 1 still races across bytecodes) and it is the reason threads help with waiting but not with computing. Speed and parallelism are separate problems: boxed objects and dispatch make each step slow; the GIL stops steps from running side by side. Choose the tool by the bottleneck. I/O-bound: threads or asyncio, because the GIL is released while waiting. CPU-bound: multiprocessing (separate interpreters with separate GILs, data pickled between them), native libraries that release the GIL (NumPy and many C extensions), or a free-threaded build with no GIL (experimental in 3.13, officially supported but optional since 3.14). For raw speed, move hot loops into compiled or vectorized code.",
-"url": "techstack/os/01-os-internals-end-to-end.html#ch9",
+"system": "k8s",
+"title": "Kubernetes · 9. Rolling Update",
+"summary": "How do you ship version 2 to every pod without dropping below full capacity, when yesterday's rollout fell to 50%?",
+"body": "One ReplicaSet per template. A new spec.template gets a new pod-template hash and a new ReplicaSet; old ones are kept (scaled to 0) for rollback. Bounds. Total pods stay at most replicas + maxSurge; Ready pods stay at least replicas - maxUnavailable. Both default to 25%. They cannot both be 0.",
+"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch8",
 "tags": [
-"interpreter",
-"gil",
-"asyncio",
-"free-threading"
+"replicasets",
+"maxsurge",
+"maxunavailable"
 ],
 "id": 70
 },
 {
 "type": "Chapter",
-"system": "os",
-"title": "Operating System & Concurrency · 11. Files & page cache",
-"summary": "A program reads the same log file twice. How does the kernel find the bytes, and why should the second read take microseconds?",
-"body": "inodes · block pointers · caching A path name is just text, the disk only understands numbered blocks, and a disk read costs 100 microseconds (SSD) to 10 milliseconds (hard disk) against 100 nanoseconds for RAM. Search the disk for a file by name on every read Name, metadata and data are three different things. The inode is the file: a name is just a directory entry that points to it, so hard links, renames and permissions are cheap. A small number of pointer levels covers files from bytes to terabytes, and caching hides the device latency. Separate names from data. A directory maps a name to an inode number; the inode holds the size, permissions and pointers to the data blocks (direct pointers, then indirect blocks). Recently used blocks are kept in the page cache in RAM, so most reads never reach the disk.",
-"url": "techstack/os/01-os-internals-end-to-end.html#ch10",
+"system": "k8s",
+"title": "Kubernetes · 10. Horizontal Pod Autoscaler",
+"summary": "Traffic jumps 7 times at 8 p.m. How many replicas do you need, how fast, and when do you scale back without flapping?",
+"body": "Metrics pipeline. The kubelet exposes usage, metrics-server serves it through the metrics.k8s.io API, and the HPA controller queries it every 15 s by default. Utilisation is relative to requests. No CPU request on a container means no utilisation, so no scaling decision. Tolerance.",
+"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch9",
 "tags": [
-"inodes",
-"block",
-"pointers",
-"caching"
+"target utilisation",
+"stabilisation"
 ],
 "id": 71
 },
 {
 "type": "Chapter",
-"system": "os",
-"title": "Operating System & Concurrency · 12. Crash consistency",
-"summary": "Appending one block to a file changes three things on disk. If the power fails between them, what state is the disk in?",
-"body": "journal · commit · recovery Adding a block updates the data block, the inode (size and pointer) and the free-space bitmap. The disk completes each write on its own, so a crash can leave any subset of them. Write the three blocks in some order and hope Make a multi-step change atomic with a single commit point. Everything before the commit record can be thrown away, everything after it can be replayed, so recovery looks at a small log instead of the whole disk. The same write-ahead idea powers databases. Write intent first. Before changing the real locations, write the planned updates to a journal and then a commit record. After a crash, replay transactions that have a commit and ignore the rest: every transaction is applied entirely or not at all.",
-"url": "techstack/os/01-os-internals-end-to-end.html#ch11",
+"system": "k8s",
+"title": "Kubernetes · 11. Node Failure and Self-Healing",
+"summary": "A machine loses power at 3 a.m. How does the cluster notice and heal, and why did the StatefulSet pod not come back?",
+"body": "Lease heartbeats. Each kubelet renews a Lease in kube-node-lease (about every 10 s); the node lifecycle controller marks a node Unknown after node-monitor-grace-period (40 s; 50 s from 1.32). Taints. It adds node.kubernetes.io/unreachable:NoExecute (or not-ready).",
+"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch10",
 "tags": [
-"journal",
-"commit",
-"recovery"
+"leases",
+"taints",
+"eviction"
 ],
 "id": 72
 },
 {
-"type": "Chapter",
-"system": "os",
-"title": "Operating System & Concurrency · 13. Disk scheduling",
-"summary": "Eight requests are queued for a spinning disk. In what order do you serve them to keep the head moving as little as possible?",
-"body": "seek · elevator · fairness On a hard disk a seek costs milliseconds, and the head can only be in one place. Serving requests in arrival order makes it swing back and forth across the platter, but a greedy order can starve requests at the edge. Serve requests in arrival order (FCFS) Trade a little latency for a lot of throughput, but bound the wait. Batching and sorting requests turns random access into mostly sequential motion. The elevator gives every request a worst case of about two sweeps, which greedy shortest-seek cannot promise. Reorder the queue. Shortest-seek-first minimizes movement but can starve far requests. The elevator (SCAN) sweeps in one direction serving everything on the way, then reverses; C-SCAN only serves while sweeping one way for more even waits. Flash storage has no head, so it uses simple or deadline schedulers.",
-"url": "techstack/os/01-os-internals-end-to-end.html#ch12",
+"type": "Tour",
+"system": "concurrency",
+"title": "Concurrency, the course",
+"summary": "Make programs correct and fast on many cores: CPU, threads and the scheduler first, then CPU-bound vs I/O-bound, blocking vs async, locks, deadlock, transactions and crash recovery, with the bugs people really hit in production.",
+"body": "CPU, cores, cache and RAM, processes and threads, CPU-bound and I/O-bound work, concurrent versus parallel, blocking, non-blocking and async, mutual exclusion, dining philosophers, semaphores, monitors and condition variables, deadlock and lock ordering, actors and channels, transactions (2PL, timestamps, OCC), write-ahead logging, lock-free CAS.",
+"url": "techstack/concurrency/01-concurrency-end-to-end.html",
 "tags": [
-"seek",
-"elevator",
-"fairness"
+"tour",
+"interactive"
 ],
 "id": 73
+},
+{
+"type": "Chapter",
+"system": "concurrency",
+"title": "Concurrency · 1. How a computer runs your program",
+"summary": "Why does a loop over a million items take 1 ms one way and 100 ms another, on the same machine?",
+"body": "CPU · cores · cache · RAM · disk · the latency gap Because a CPU is thousands of times faster than the memory, disk and network it waits on, and caches hide that gap only when access is predictable.  A CPU executes one instruction per cycle per core; reading RAM costs about a hundred cycles, an SSD a hundred thousand, a network hop millions. Programs are fast when they stay in cache. Keep hot data small and contiguous so it stays in cache, and treat every trip to RAM, disk or network as expensive work you must overlap or avoid.",
+"url": "techstack/concurrency/01-concurrency-end-to-end.html#ch0",
+"tags": [
+"cpu",
+"cores",
+"cache",
+"ram",
+"disk",
+"the",
+"latency",
+"gap"
+],
+"id": 74
+},
+{
+"type": "Chapter",
+"system": "concurrency",
+"title": "Concurrency · 2. Processes, threads & parallelism",
+"summary": "You have a CPU-heavy job and 8 cores. How do you use them, and why is the speedup never 8 times?",
+"body": "address space · scheduler · CPU-bound · concurrent vs parallel · Amdahl Because only as many threads run at once as there are cores, threads share memory, and the part of the job that cannot be split limits the total gain.  A process owns an address space; its threads share it but each has its own stack. The scheduler runs one thread per core and time-slices the rest. Parallelism needs cores; the serial fraction caps the speedup (Amdahl's law). For CPU-bound work use about one worker per core, share as little as possible, cut the serial part, and measure the speedup instead of assuming it.",
+"url": "techstack/concurrency/01-concurrency-end-to-end.html#ch1",
+"tags": [
+"address",
+"space",
+"scheduler",
+"cpu-bound",
+"concurrent",
+"parallel",
+"amdahl"
+],
+"id": 75
+},
+{
+"type": "Chapter",
+"system": "concurrency",
+"title": "Concurrency · 3. Asynchronous programming",
+"summary": "One thread must serve 10,000 connections that spend 99% of their time waiting. How, without 10,000 threads?",
+"body": "I/O-bound · blocking · event loop · callbacks · coroutines By never blocking: start the I/O, go and do other work, and come back when the OS says it is ready. That is an event loop, and async/await is the way to write it.  A blocking call parks the thread until it finishes. A non-blocking call returns at once and the result arrives later as an event, callback, future or await. I/O-bound work needs overlapped waiting, not more cores. Use an event loop (epoll/kqueue/io_uring) with non-blocking I/O, or lightweight threads that the runtime parks for you. Never run long CPU work or blocking calls on the loop.",
+"url": "techstack/concurrency/01-concurrency-end-to-end.html#ch2",
+"tags": [
+"i/o-bound",
+"blocking",
+"event",
+"loop",
+"callbacks",
+"coroutines"
+],
+"id": 76
+},
+{
+"type": "Chapter",
+"system": "concurrency",
+"title": "Concurrency · 4. Threads & mutual exclusion",
+"summary": "Two threads each run count++ one million times. Why is the total almost never 2,000,000?",
+"body": "interleaving · atomicity · mutex Because count++ is three steps (load, add, store) and the scheduler may switch threads between any two of them.  An operation that looks like one step is several machine steps. Mutual exclusion makes a critical section behave as one. Wrap the read-modify-write in a mutex so only one thread is inside at a time. Keep the section short.",
+"url": "techstack/concurrency/01-concurrency-end-to-end.html#ch3",
+"tags": [
+"interleaving",
+"atomicity",
+"mutex"
+],
+"id": 77
+},
+{
+"type": "Chapter",
+"system": "concurrency",
+"title": "Concurrency · 5. Safety, liveness & hardware atomics",
+"summary": "Five philosophers each pick up the left fork, then the right fork. What happens, and what hardware makes locks possible at all?",
+"body": "deadlock · dining philosophers · test-and-set · bakery If everyone holds one fork and waits for the other, nobody ever eats: a deadlock.  Safety means nothing bad happens; liveness means something good eventually happens. Deadlock is a liveness failure. Break the cycle: make one philosopher pick the other fork first, or impose a global order on forks. Locks themselves rest on atomic hardware instructions.",
+"url": "techstack/concurrency/01-concurrency-end-to-end.html#ch4",
+"tags": [
+"deadlock",
+"dining",
+"philosophers",
+"test-and-set",
+"bakery"
+],
+"id": 78
+},
+{
+"type": "Chapter",
+"system": "concurrency",
+"title": "Concurrency · 6. Semaphores & producer-consumer",
+"summary": "A producer makes items faster than the consumer eats them. How do you stop the buffer overflowing without spinning in a loop?",
+"body": "bounded buffer · condition sync · readers-writer A semaphore counts free slots and full slots, so each side sleeps exactly when it must.  A semaphore is a counter with atomic wait (decrement, sleep if zero) and signal (increment, wake one). Use two semaphores, empty (starts at capacity) and full (starts at 0), plus a mutex for the buffer itself.",
+"url": "techstack/concurrency/01-concurrency-end-to-end.html#ch5",
+"tags": [
+"bounded",
+"buffer",
+"condition",
+"sync",
+"readers-writer"
+],
+"id": 79
+},
+{
+"type": "Chapter",
+"system": "concurrency",
+"title": "Concurrency · 7. Monitors & condition variables",
+"summary": "A consumer is waiting for the queue to be non-empty. Why must the check be a while loop, not an if?",
+"body": "wait · signal · while not if Between being woken and running, another thread may have taken the item, so the condition must be checked again.  A monitor bundles a lock with condition variables. Waiting releases the lock; waking does not guarantee the condition still holds. Always write while (!condition) wait(). With signal-continue (the common kind) the signaller keeps running and the woken thread re-checks later.",
+"url": "techstack/concurrency/01-concurrency-end-to-end.html#ch6",
+"tags": [
+"wait",
+"signal",
+"while",
+"not"
+],
+"id": 80
+},
+{
+"type": "Chapter",
+"system": "concurrency",
+"title": "Concurrency · 8. Deadlock & liveness guarantees",
+"summary": "Thread A holds lock 1 and wants lock 2; thread B holds lock 2 and wants lock 1. How do you detect that cycle, and make it impossible?",
+"body": "resource graph · lock order · priority inversion A resource-allocation graph shows the cycle; a global lock order removes it.  Deadlock needs four things at once: mutual exclusion, hold-and-wait, no preemption, and a cycle of waiting. Remove any one. Prevent it by ordering locks, avoid it by checking safety before each grant, or detect it with a graph and recover by aborting a victim.",
+"url": "techstack/concurrency/01-concurrency-end-to-end.html#ch7",
+"tags": [
+"resource",
+"graph",
+"lock",
+"order",
+"priority",
+"inversion"
+],
+"id": 81
+},
+{
+"type": "Chapter",
+"system": "concurrency",
+"title": "Concurrency · 9. Concurrency without shared data",
+"summary": "If shared memory is the problem, what if nobody shares it? How do you transfer $10 between two accounts safely?",
+"body": "actors · channels · composite operations Give each piece of state one owner that handles one message at a time, and talk to it by sending messages.  No shared data means no data race. The owner serialises access by processing its mailbox in order. Actors (or CSP processes) own their state. A transfer that touches two owners still needs a transaction so both sides change or neither does.",
+"url": "techstack/concurrency/01-concurrency-end-to-end.html#ch8",
+"tags": [
+"actors",
+"channels",
+"composite",
+"operations"
+],
+"id": 82
+},
+{
+"type": "Chapter",
+"system": "concurrency",
+"title": "Concurrency · 10. Transactions & isolation",
+"summary": "Two transactions interleave their reads and writes. Is the result the same as running them one after the other?",
+"body": "serialisability · 2PL · timestamps · OCC Only if the schedule is serialisable: its conflict graph has no cycle.  Serialisability: the outcome equals some serial order of the transactions. Concurrency control must only allow such schedules. Two-phase locking (grow, then shrink), timestamp ordering, or optimistic validation each guarantee serialisable schedules by different means.",
+"url": "techstack/concurrency/01-concurrency-end-to-end.html#ch9",
+"tags": [
+"serialisability",
+"2pl",
+"timestamps",
+"occ"
+],
+"id": 83
+},
+{
+"type": "Chapter",
+"system": "concurrency",
+"title": "Concurrency · 11. Crash recovery & lock-free code",
+"summary": "The power fails halfway through a transfer. What does the disk look like after reboot, and can we avoid locks altogether?",
+"body": "write-ahead log · CAS · ABA A write-ahead log lets recovery redo what committed and undo what did not; compare-and-swap lets threads update without locks.  Log first, write data later. After a crash, replay the log: committed work is redone, unfinished work is undone. Write the log record to disk before the data page. Lock-free structures retry a CAS in a loop instead of blocking.",
+"url": "techstack/concurrency/01-concurrency-end-to-end.html#ch10",
+"tags": [
+"write-ahead",
+"log",
+"cas",
+"aba"
+],
+"id": 84
+},
+{
+"type": "Tour",
+"system": "distributed",
+"title": "Distributed Systems, the course",
+"summary": "Keep data correct when one machine is not enough: copies that lag, partitions that get hot, leaders that pause, clocks that lie, and the algorithms that cope with all of them.",
+"body": "When concurrency and async stop helping · Remote calls & RPC · Leaders, followers and failover · Replication lag and what users see · Writes everywhere: conflicts and quorums · Splitting data: partitioning · Pauses, leases and fencing · Clocks and order · Linearizability · Agreeing on a leader: consensus · Atomic commit: two-phase commit · Batch processing: MapReduce · Stream processing: logs and events. Amdahl · shared bottleneck · availability · latency floor. partial failure · timeouts · retries · idempotence. sync vs async · replication log · lost writes. read-your-writes · monotonic reads · consistent prefix. multi-leader · W + R > N · sloppy quorums. key range · hash · hot spots · rebalancing. zombie leader · fencing tokens · majority · Byzantine. clock skew · last-write-wins · Lamport · vector clocks. one current value · what it costs · CAP. terms · majority commit · Raft election. prepare · in doubt · coordinator crash. map · shuffle · reduce · recompute. offsets · change capture · event sourcing · late events",
+"url": "techstack/distributed/01-distributed-systems-end-to-end.html",
+"tags": [
+"tour",
+"interactive"
+],
+"id": 85
+},
+{
+"type": "Chapter",
+"system": "distributed",
+"title": "Distributed Systems · 1. When concurrency and async stop helping",
+"summary": "You made the code concurrent, parallel and async. The server is still at 100% and the next Black Friday is 5 times bigger. What now?",
+"body": "Amdahl · shared bottleneck · availability · latency floor Because threads, cores and async only help inside one machine, and one machine has a ceiling, a single point of failure and a shared bottleneck. Concurrency, parallelism and async overlap work on one computer. They cannot add a second computer, cannot remove a shared bottleneck, cannot survive the machine dying, and cannot shorten the speed of light.",
+"url": "techstack/distributed/01-distributed-systems-end-to-end.html#ch0",
+"tags": [
+"amdahl",
+"shared",
+"bottleneck",
+"availability"
+],
+"id": 86
+},
+{
+"type": "Chapter",
+"system": "distributed",
+"title": "Distributed Systems · 2. Remote calls & RPC",
+"summary": "A function call crosses the network and the reply never arrives. Did it run?",
+"body": "partial failure · timeouts · retries · idempotence You cannot know: the request may have been lost, the server may have crashed, or only the reply may have been lost. In a distributed system messages can be delayed or lost and nodes can fail independently (partial failure). A timeout is a guess, not a fact.",
+"url": "techstack/distributed/01-distributed-systems-end-to-end.html#ch1",
+"tags": [
+"partial",
+"failure",
+"timeouts",
+"retries"
+],
+"id": 87
+},
+{
+"type": "Chapter",
+"system": "distributed",
+"title": "Distributed Systems · 3. Leaders, followers and failover",
+"summary": "The leader confirmed the order, then crashed before it reached the replicas. The customer has a receipt for something the system no longer knows. Which copy should have been trusted, and when?",
+"body": "sync vs async · replication log · lost writes One leader, many copies. A single leader takes every write and appends it to a replication log. Followers receive the same log in the same order and apply it, so each one becomes a copy of the leader that is a little behind. Asynchronous: the leader confirms a write as soon as it has the write itself. This is fast, but if the leader dies before shipping the entry, the client already has a confirmation for a write that now exists nowhere.",
+"url": "techstack/distributed/01-distributed-systems-end-to-end.html#ch2",
+"tags": [
+"sync",
+"vs",
+"async",
+"replication"
+],
+"id": 88
+},
+{
+"type": "Chapter",
+"system": "distributed",
+"title": "Distributed Systems · 4. Replication lag and what users see",
+"summary": "Alice posts a comment and it vanishes on reload. Her friend sees it fine. Nothing was lost, so which promise did the system make, and which one did it quietly skip?",
+"body": "read-your-writes · monotonic reads · consistent prefix Lag is a fact of life. A follower shows the leader's state as it was some time ago. Unless the application does something about it, two reads a few seconds apart can come from two different moments in time. Read-your-writes: once a user has written something, their later reads should include that write. Fix: read the user's own data from the leader, or from a replica known to be at least as new as their last write.",
+"url": "techstack/distributed/01-distributed-systems-end-to-end.html#ch3",
+"tags": [
+"read-your-writes",
+"monotonic",
+"reads",
+"consistent"
+],
+"id": 89
+},
+{
+"type": "Chapter",
+"system": "distributed",
+"title": "Distributed Systems · 5. Writes everywhere: conflicts and quorums",
+"summary": "A data centre drops off the network for ten minutes, and both sides keep accepting writes. How many replicas must confirm a write, and how many must answer a read, so that a read can never miss a confirmed write?",
+"body": "multi-leader · W + R > N · sloppy quorums No leader, so any node can take a write. The client (or a coordinator) sends the write to all replicas and counts acknowledgements. Two numbers matter: W acks to confirm a write, and R replies to answer a read. The quorum rule. With N replicas, if W + R > N then every read set overlaps every write set in at least one node. That node holds the newest value, so the read can pick it. If W + R ≤ N the two sets can be disjoint, and the read can return an old value.",
+"url": "techstack/distributed/01-distributed-systems-end-to-end.html#ch4",
+"tags": [
+"multi-leader",
+"w",
+"+",
+"r"
+],
+"id": 90
+},
+{
+"type": "Chapter",
+"system": "distributed",
+"title": "Distributed Systems · 6. Splitting data: partitioning",
+"summary": "One table has outgrown its machine. How do you split it so that each machine gets an equal share of the data and traffic, and adding a machine later does not force almost every row to move?",
+"body": "key range · hash · hot spots · rebalancing Partitioning assigns each record to one partition by a function of its key. Each partition is a small database that can live on any node. Replication (chapters 3 to 5) copies each partition for safety. Key-range partitioning gives each partition a contiguous range of keys. Range scans are cheap, but a key that always grows (a timestamp) sends every new write to the last partition.",
+"url": "techstack/distributed/01-distributed-systems-end-to-end.html#ch5",
+"tags": [
+"key",
+"range",
+"hash",
+"hot"
+],
+"id": 91
+},
+{
+"type": "Chapter",
+"system": "distributed",
+"title": "Distributed Systems · 7. Pauses, leases and fencing",
+"summary": "A worker holds a lease on a shared file. Its process freezes for 40 seconds in a garbage collection pause, the lease expires, and another worker takes over. Then the first one wakes up, sure it still holds the lease. What stops its write from landing on top of the new owner's work?",
+"body": "zombie leader · fencing tokens · majority · Byzantine A paused process cannot know it is paused. Garbage collection, a VM being migrated, a swapped-out page or an overloaded CPU can freeze a process for longer than any timeout. When it resumes, it believes what it believed before the pause. A lease is a promise with a clock. It is safe only if the holder finishes its work before the lease ends. A pause that outlasts the lease breaks that promise, and the holder's own timers cannot tell it so.",
+"url": "techstack/distributed/01-distributed-systems-end-to-end.html#ch6",
+"tags": [
+"zombie",
+"leader",
+"fencing",
+"tokens"
+],
+"id": 92
+},
+{
+"type": "Chapter",
+"system": "distributed",
+"title": "Distributed Systems · 8. Clocks and order",
+"summary": "Two clients write the same key, and the later write is silently discarded because its timestamp is smaller. What should \"later\" mean when the clocks disagree, and can the system tell two writes that were not ordered at all?",
+"body": "clock skew · last-write-wins · Lamport · vector clocks Clocks drift and disagree. Quartz crystals drift by parts per million, NTP only bounds the error, and the wall clock can jump backwards. A timestamp says what one machine thought the time was, not when the event really happened relative to others. Last-write-wins is cheap and simple, and it is only correct when the clocks agree to better than the gap between writes. Otherwise it keeps the write from the machine with the fastest clock, not the most recent one.",
+"url": "techstack/distributed/01-distributed-systems-end-to-end.html#ch7",
+"tags": [
+"clock",
+"skew",
+"last-write-wins",
+"lamport"
+],
+"id": 93
+},
+{
+"type": "Chapter",
+"system": "distributed",
+"title": "Distributed Systems · 9. Linearizability",
+"summary": "A user transfers money and sees the new balance. They refresh, and the old balance is back, even though a second device saw the new one a moment earlier. Which promise did the system break, and what would it cost to keep it?",
+"body": "one current value · what it costs · CAP Linearizability means the system behaves as if there were one copy of the data. Each operation takes effect at one instant between its start and its end, and those instants line up with real time: if one operation finished before another started, the second must see its effect. Check it on a history. A history is the list of operations with start, end and result. It is linearizable if some order of the operations is consistent with real time and with the rules of a register (a read returns the last write before it).",
+"url": "techstack/distributed/01-distributed-systems-end-to-end.html#ch8",
+"tags": [
+"one",
+"current",
+"value",
+"what"
+],
+"id": 94
+},
+{
+"type": "Chapter",
+"system": "distributed",
+"title": "Distributed Systems · 10. Agreeing on a leader: consensus",
+"summary": "The leader of a five-node cluster dies, and a network split leaves two nodes on one side. How do the rest agree on exactly one new leader, and how does the side that lost its leader avoid confirming writes that will later be undone?",
+"body": "terms · majority commit · Raft election Majority is the trick. A value is committed only when a majority of nodes has stored it. Any two majorities share at least one node, so a later leader always meets someone who knows the committed value. Terms are the clock of leadership. Each election starts a new term with a higher number. A node votes at most once per term, and a leader that sees a higher term steps down. A stale leader can still believe it leads, but it can never gather a majority.",
+"url": "techstack/distributed/01-distributed-systems-end-to-end.html#ch9",
+"tags": [
+"terms",
+"majority",
+"commit",
+"raft"
+],
+"id": 95
+},
+{
+"type": "Chapter",
+"system": "distributed",
+"title": "Distributed Systems · 11. Atomic commit: two-phase commit",
+"summary": "A transfer must debit account A on one database and credit account B on another. The coordinator crashes between the two. Should the participants commit, abort, or wait, and who decides when nobody can ask the coordinator?",
+"body": "prepare · in doubt · coordinator crash Two-phase commit (2PC) splits the transfer into a vote and a decision. In phase 1 (prepare), each participant does the work, locks it, writes a prepare record, and votes yes or no. In phase 2 (commit), the coordinator writes its decision to its own log, then tells everyone. The promise is the danger. After voting yes, a participant may not abort on its own, because the coordinator might have decided to commit. It holds its locks and waits. This is the in-doubt state.",
+"url": "techstack/distributed/01-distributed-systems-end-to-end.html#ch10",
+"tags": [
+"prepare",
+"in",
+"doubt",
+"coordinator"
+],
+"id": 96
+},
+{
+"type": "Chapter",
+"system": "distributed",
+"title": "Distributed Systems · 12. Batch processing: MapReduce",
+"summary": "A job must count page views over 500 files spread across 50 machines. Machines fail during the run, one is much slower than the others, and the output must be right even when a task runs twice. How do you structure the work so that all three are safe?",
+"body": "map · shuffle · reduce · recompute Map, shuffle, reduce. A map function turns each input record into key-value pairs (page, 1). The framework groups the pairs by key (the shuffle), sending each key to one reducer. A reduce function combines the values for each key (sum). Immutable input, immutable output. Batch jobs read files and write new files. Nothing is updated in place, so a failed job can be started again from the same input.",
+"url": "techstack/distributed/01-distributed-systems-end-to-end.html#ch11",
+"tags": [
+"map",
+"shuffle",
+"reduce",
+"recompute"
+],
+"id": 97
+},
+{
+"type": "Chapter",
+"system": "distributed",
+"title": "Distributed Systems · 13. Stream processing: logs and events",
+"summary": "Orders are written to one database. A search index, a cache and a warehouse must all reflect every order. If each system is updated by the application at the same time, one update will eventually fail. How do you keep them all in step, when any consumer can crash, restart or fall behind?",
+"body": "offsets · change capture · event sourcing · late events Write the change once, to a log. Every change becomes an event appended to an ordered, durable log. The database and the log are updated from one transaction (the outbox pattern, or change data capture reading the database's own log). Each consumer keeps its own offset. A consumer records how far it has read in the log. It can crash, restart and resume from that point, and a slow consumer does not hold back a fast one.",
+"url": "techstack/distributed/01-distributed-systems-end-to-end.html#ch12",
+"tags": [
+"offsets",
+"change",
+"capture",
+"event"
+],
+"id": 98
+},
+{
+"type": "Tour",
+"system": "database-systems",
+"title": "Database Systems, the course",
+"summary": "Follow data from relational rows and disk pages through indexes, execution, optimization, transactions and recovery, then scale the same ideas into distributed OLTP, cloud warehouses and lakehouses.",
+"body": "Relational model and SQL, pages and buffer pools, columnar formats, indexes, execution and joins, optimization, vectorization, isolation, MVCC, WAL, distributed OLTP, cloud warehouses, lakehouses and embedded analytics.",
+"url": "techstack/database-systems/01-database-systems-end-to-end.html",
+"tags": [
+"tour",
+"interactive"
+],
+"id": 99
+},
+{
+"type": "Chapter",
+"system": "database-systems",
+"title": "Database Systems · 1. SQL Visual Cheat Sheet",
+"summary": "How do we prevent duplicate data and incorrect joins from corrupting business results?",
+"body": "query order · windows · CTEs Relations, constraints and SQL state the data contract while the database chooses how to retrieve it.  Model facts as relations and enforce invariants at the database boundary. Choose keys, constraints and query semantics before optimizing access paths.",
+"url": "techstack/database-systems/01-database-systems-end-to-end.html#ch0",
+"tags": [
+"query",
+"order",
+"windows",
+"ctes"
+],
+"id": 100
+},
+{
+"type": "Chapter",
+"system": "database-systems",
+"title": "Database Systems · 2. Pages, Records, and the Buffer Pool",
+"summary": "How can a database serve records from a 200 GB table when only a fraction fits in RAM?",
+"body": "pages · frames · eviction Fixed-size pages move between durable storage and a bounded in-memory buffer pool.  Manage data in pages and make replacement decisions from observed access patterns. Track frames, pins and dirty state so reads are cached without losing writes.",
+"url": "techstack/database-systems/01-database-systems-end-to-end.html#ch1",
+"tags": [
+"pages",
+"frames",
+"eviction"
+],
+"id": 101
+},
+{
+"type": "Chapter",
+"system": "database-systems",
+"title": "Database Systems · 3. Storage Models, File Formats, and Compression",
+"summary": "How should data be arranged when transactions need rows but analytics reads only a few columns?",
+"body": "rows · columns · encoding Physical layout and encoding should match the workload that reads the data.  Minimize bytes read and decoded for the dominant access pattern. Choose row or column organization, then add encodings and pruning metadata.",
+"url": "techstack/database-systems/01-database-systems-end-to-end.html#ch2",
+"tags": [
+"rows",
+"columns",
+"encoding"
+],
+"id": 102
+},
+{
+"type": "Chapter",
+"system": "database-systems",
+"title": "Database Systems · 4. Hash Tables, Indexes, and Filters",
+"summary": "How can one matching row be found without scanning 100 million records?",
+"body": "hashing · B+ trees · Bloom filters Auxiliary access structures eliminate rows that cannot match.  Pay controlled write and storage cost to accelerate important reads. Match hash tables, B+ trees and probabilistic filters to query shape.",
+"url": "techstack/database-systems/01-database-systems-end-to-end.html#ch3",
+"tags": [
+"hashing",
+"trees",
+"bloom",
+"filters"
+],
+"id": 103
+},
+{
+"type": "Chapter",
+"system": "database-systems",
+"title": "Database Systems · 5. Query Execution Engine",
+"summary": "How can a query return 100 rows without materializing gigabytes of intermediate data?",
+"body": "operators · pipelines · pushdown A physical plan can stream tuples through operators and push work toward the data source.  Move and materialize only the rows and columns the result needs. Compose operators into pipelines and isolate unavoidable pipeline breakers.",
+"url": "techstack/database-systems/01-database-systems-end-to-end.html#ch4",
+"tags": [
+"operators",
+"pipelines",
+"pushdown"
+],
+"id": 104
+},
+{
+"type": "Chapter",
+"system": "database-systems",
+"title": "Database Systems · 6. Sorting, Aggregation, and Join Algorithms",
+"summary": "Which physical algorithm keeps a large join or aggregation within its memory and I/O budget?",
+"body": "sort · hash · spill Sorting, hashing and joining have different costs under different sizes, orderings and distributions.  Select physical algorithms from input properties and available memory. Partition or spill deliberately when working state cannot remain in memory.",
+"url": "techstack/database-systems/01-database-systems-end-to-end.html#ch5",
+"tags": [
+"sort",
+"hash",
+"spill"
+],
+"id": 105
+},
+{
+"type": "Chapter",
+"system": "database-systems",
+"title": "Database Systems · 7. Server-Side Logic and UDFs",
+"summary": "When does moving application logic into a UDF make a query slower instead of faster?",
+"body": "inlining · batching · vectorization Database logic performs well only when the optimizer can inspect, inline and batch it.  Keep computation visible and set-oriented so the engine can optimize it. Prefer relational expressions or batchable functions over opaque row-at-a-time calls.",
+"url": "techstack/database-systems/01-database-systems-end-to-end.html#ch6",
+"tags": [
+"inlining",
+"batching",
+"vectorization"
+],
+"id": 106
+},
+{
+"type": "Chapter",
+"system": "database-systems",
+"title": "Database Systems · 8. Database Networking and Data Transfer",
+"summary": "Why can returning query results take longer than computing them?",
+"body": "protocols · fetch size · Arrow Round trips, serialization, copies and client materialization often dominate data transfer.  Move results in bounded, efficient batches with minimal conversion. Tune fetch size and choose formats that both producer and consumer understand.",
+"url": "techstack/database-systems/01-database-systems-end-to-end.html#ch7",
+"tags": [
+"protocols",
+"fetch",
+"size",
+"arrow"
+],
+"id": 107
+},
+{
+"type": "Chapter",
+"system": "database-systems",
+"title": "Database Systems · 9. Query Optimization and Cost Models",
+"summary": "How can two equivalent query plans differ in runtime by a factor of 1,000?",
+"body": "statistics · plan search · cost The optimizer searches equivalent plans and estimates their resource cost.  Plan quality depends on both search strategy and cardinality estimates. Maintain useful statistics and retain enough search budget for important joins.",
+"url": "techstack/database-systems/01-database-systems-end-to-end.html#ch8",
+"tags": [
+"statistics",
+"plan",
+"search",
+"cost"
+],
+"id": 108
+},
+{
+"type": "Chapter",
+"system": "database-systems",
+"title": "Database Systems · 10. Vectorized, Compiled, and Parallel Execution",
+"summary": "How do modern engines use all CPU cores without losing performance to overhead?",
+"body": "SIMD · JIT · work stealing Batching, compiled loops and small schedulable morsels reduce per-row overhead and balance cores.  Feed CPUs regular batches while keeping scheduling and data movement bounded. Choose vector size, compilation scope and work placement from query duration and hardware.",
+"url": "techstack/database-systems/01-database-systems-end-to-end.html#ch9",
+"tags": [
+"simd",
+"jit",
+"work",
+"stealing"
+],
+"id": 109
+},
+{
+"type": "Chapter",
+"system": "database-systems",
+"title": "Database Systems · 11. Transactions and Isolation",
+"summary": "Which interleavings may transactions observe without violating business invariants?",
+"body": "ACID · schedules · anomalies Isolation levels define which intermediate states concurrent transactions may see.  Choose the weakest isolation level that still preserves explicit invariants. Express correctness as schedules and anomalies before selecting a database setting.",
+"url": "techstack/database-systems/01-database-systems-end-to-end.html#ch10",
+"tags": [
+"acid",
+"schedules",
+"anomalies"
+],
+"id": 110
+},
+{
+"type": "Chapter",
+"system": "database-systems",
+"title": "Database Systems · 12. Concurrency Control and MVCC",
+"summary": "Should conflicting transactions wait, abort, or read a different version?",
+"body": "2PL · OCC · versions Concurrency-control protocols enforce isolation through locks, ordering, validation or versions.  Match the conflict policy to contention, read duration and retry behavior. Observe waits, aborts and retained versions instead of treating concurrency control as invisible.",
+"url": "techstack/database-systems/01-database-systems-end-to-end.html#ch11",
+"tags": [
+"2pl",
+"occ",
+"versions"
+],
+"id": 111
+},
+{
+"type": "Chapter",
+"system": "database-systems",
+"title": "Database Systems · 13. Logging and Crash Recovery",
+"summary": "How does a database recover after power fails halfway through a transaction?",
+"body": "WAL · checkpoints · ARIES Write-ahead logging records durable intent before changed data pages reach storage.  Make the log durable first, then use redo and undo to restore a valid state. Coordinate log sequence numbers, page writes, commit records and checkpoints.",
+"url": "techstack/database-systems/01-database-systems-end-to-end.html#ch12",
+"tags": [
+"wal",
+"checkpoints",
+"aries"
+],
+"id": 112
+},
+{
+"type": "Chapter",
+"system": "database-systems",
+"title": "Database Systems · 14. Distributed OLTP Databases",
+"summary": "How can one atomic transaction update data owned by multiple shards?",
+"body": "sharding · replication · 2PC Distributed OLTP coordinates partitioned state across independent failures.  Make ownership explicit and coordinate only the transactions that cross boundaries. Combine routing, replication, idempotency and a commit protocol with recovery rules.",
+"url": "techstack/database-systems/01-database-systems-end-to-end.html#ch13",
+"tags": [
+"sharding",
+"replication",
+"2pc"
+],
+"id": 113
+},
+{
+"type": "Chapter",
+"system": "database-systems",
+"title": "Database Systems · 15. Cloud Data Warehouses",
+"summary": "How can thousands of users query petabytes without every team operating its own cluster?",
+"body": "disaggregation · shuffle · elasticity Cloud warehouses separate durable storage, elastic compute and query coordination.  Scale storage and compute independently while controlling distributed data movement. Schedule scans, shuffles and caches within explicit concurrency and cost budgets.",
+"url": "techstack/database-systems/01-database-systems-end-to-end.html#ch14",
+"tags": [
+"disaggregation",
+"shuffle",
+"elasticity"
+],
+"id": 114
+},
+{
+"type": "Chapter",
+"system": "database-systems",
+"title": "Database Systems · 16. Lakehouse and Embedded Analytics",
+"summary": "When should analytics run as a lakehouse service, a distributed engine, or an embedded process?",
+"body": "object storage · snapshots · local OLAP The engine and transaction boundary should live where the data and users need them.  Choose deployment architecture from data size, update pattern, concurrency and ownership. Separate object-file management from execution, or embed execution when one machine is enough.",
+"url": "techstack/database-systems/01-database-systems-end-to-end.html#ch15",
+"tags": [
+"object",
+"storage",
+"snapshots",
+"local",
+"olap"
+],
+"id": 115
 }
 ];

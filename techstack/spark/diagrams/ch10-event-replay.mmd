@@ -1,0 +1,12 @@
+%%{init: {"theme":"base","fontFamily":"Arial","themeVariables":{"fontSize":"14px","primaryColor":"#edf2ff","primaryTextColor":"#17202c","primaryBorderColor":"#8090ab","lineColor":"#65758c"},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26},"state":{"nodeSpacing":22,"rankSpacing":22},"sequence":{"actorMargin":25,"messageMargin":25,"diagramMarginX":8,"diagramMarginY":8}}}%%
+sequenceDiagram
+ participant D as Driver
+ participant U as Live UI
+ participant L as Event log
+ participant H as History server
+ D->>U: Listener events
+ D->>L: Persist listener events
+ Note over D: Application ends
+ H->>L: Read retained events
+ L-->>H: Recorded facts
+ H->>H: Rebuild views

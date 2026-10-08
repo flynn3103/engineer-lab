@@ -1,0 +1,5 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Key["Partition key: seller_id = 77"] -->|Murmur3 hash| Token["64-bit token"]
+  Token -->|first node clockwise| Owner["Primary owner"]
+  Owner -->|next RF minus 1 distinct nodes| Copies["Replica copies"]

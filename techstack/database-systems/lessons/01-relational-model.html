@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relational Model and SQL · Database Systems</title>
+<meta name="description" content="Chapter 1 of the database systems course: rows as facts, keys and constraints, joins, NULL and money. Animated, with a plain-language explanation.">
+<link rel="stylesheet" href="../../../assets/lab.css">
+<link rel="stylesheet" href="../../../assets/curriculum.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="01-relational-model.js"></script>
+<script src="../../../assets/lesson.js"></script>
+<script>
+Lesson.mount({
+  crumbs: [
+    { t: 'Tech Stack', href: '../../../tech.html' },
+    { t: 'Database Systems', href: '../01-database-systems-end-to-end.html' },
+    { t: 'Relational Model and SQL' }
+  ],
+  course: 'Database Systems',
+  title: 'Relational Model and SQL',
+  lead: 'Revenue is only as right as the joins and constraints under it. Trace how one missing clause or one NULL changes the number.',
+  chapters: [
+    { n: 1, title: 'Relational Model and SQL', current: true },
+    { n: 2, title: 'Pages, Records, and the Buffer Pool', href: '../01-database-systems-end-to-end.html#ch1' },
+    { n: 3, title: 'Storage Models, File Formats, and Compression', href: '../01-database-systems-end-to-end.html#ch2' },
+    { n: 4, title: 'Hash Tables, Indexes, and Filters', href: '../01-database-systems-end-to-end.html#ch3' },
+    { n: 5, title: 'Query Execution Engine', href: '../01-database-systems-end-to-end.html#ch4' },
+    { n: 6, title: 'Sorting, Aggregation, and Join Algorithms', href: '../01-database-systems-end-to-end.html#ch5' },
+    { n: 7, title: 'Server-Side Logic and UDFs', href: '../01-database-systems-end-to-end.html#ch6' },
+    { n: 8, title: 'Database Networking and Data Transfer', href: '../01-database-systems-end-to-end.html#ch7' },
+    { n: 9, title: 'Query Optimization and Cost Models', href: '../01-database-systems-end-to-end.html#ch8' },
+    { n: 10, title: 'Vectorized, Compiled, and Parallel Execution', href: '../01-database-systems-end-to-end.html#ch9' },
+    { n: 11, title: 'Transactions and Isolation', href: '../01-database-systems-end-to-end.html#ch10' },
+    { n: 12, title: 'Concurrency Control and MVCC', href: '../01-database-systems-end-to-end.html#ch11' },
+    { n: 13, title: 'Logging and Crash Recovery', href: '../01-database-systems-end-to-end.html#ch12' },
+    { n: 14, title: 'Distributed OLTP Databases', href: '../01-database-systems-end-to-end.html#ch13' },
+    { n: 15, title: 'Cloud Data Warehouses', href: '../01-database-systems-end-to-end.html#ch14' },
+    { n: 16, title: 'Lakehouse and Embedded Analytics', href: '../01-database-systems-end-to-end.html#ch15' }
+  ],
+  scenarios: window.RELATIONAL_SCENARIOS,
+  explain: `
+<p class="lede">A relational database stores facts as rows in tables. You describe the result you want in SQL, and the database works out how to fetch it.</p>
+
+<h2>Rows are facts</h2>
+<p>A table is a <b>relation</b>. Each row is one fact about one thing: “customer 1 is Ana”. Columns have names and types. Row order means nothing, so use <code>ORDER BY</code> whenever the order matters.</p>
+
+<h2>Keys and constraints keep bad data out</h2>
+<ul>
+  <li><b>Primary key</b>: every row has a unique id, so rows can be referred to.</li>
+  <li><b>Foreign key</b>: <code>orders.customer_id</code> must match a real customer.</li>
+  <li><b>UNIQUE</b>: no two rows may share the same value, such as an email.</li>
+  <li><b>NOT NULL</b>: the value must be present.</li>
+</ul>
+<p>Put the rule in the database and every writer must obey it. Hoping that each application checks is how duplicates appear.</p>
+<figure>
+  <svg viewBox="0 0 560 150" role="img" aria-label="customers.id is the primary key. orders.customer_id is a foreign key that points to it.">
+    <defs><marker id="fk" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8z" style="fill:var(--ok)"/></marker></defs>
+    <rect x="20" y="30" width="200" height="100" rx="12" style="fill:var(--p0);stroke:var(--ink);stroke-width:1.6"/>
+    <text x="120" y="54" text-anchor="middle" style="fill:var(--ink);font:700 14px ui-monospace,Menlo,monospace">customers</text>
+    <text x="36" y="80" style="fill:var(--ink);font:600 13px ui-monospace,Menlo,monospace">id  <tspan style="fill:var(--acc)">PRIMARY KEY</tspan></text>
+    <text x="36" y="102" style="fill:var(--mut);font:13px ui-monospace,Menlo,monospace">name, email</text>
+    <rect x="340" y="30" width="200" height="100" rx="12" style="fill:var(--p2);stroke:var(--ink);stroke-width:1.6"/>
+    <text x="440" y="54" text-anchor="middle" style="fill:var(--ink);font:700 14px ui-monospace,Menlo,monospace">orders</text>
+    <text x="356" y="80" style="fill:var(--ink);font:600 13px ui-monospace,Menlo,monospace">customer_id</text>
+    <text x="356" y="102" style="fill:var(--ok);font:600 13px ui-monospace,Menlo,monospace">FOREIGN KEY</text>
+    <path d="M340 84 C 280 84, 280 80, 220 80" style="fill:none;stroke:var(--ok);stroke-width:2;stroke-dasharray:5 4" marker-end="url(#fk)"/>
+  </svg>
+  <figcaption>Illustrative schema: a foreign key must point at an existing primary key.</figcaption>
+</figure>
+
+<h2>SQL says what, not how</h2>
+<p>You describe the result. The planner picks the access path, such as which index to use and in which order to join. Your job is to make the description say exactly what you mean.</p>
+
+<h2>Joins multiply rows</h2>
+<p>A join keeps a pair of rows only when its condition is true. With no condition, every row pairs with every row: 3 customers and 3 orders make 9 pairs. Any sum over those pairs is wrong, and the mistake is easy to miss because the query still runs.</p>
+
+<h2>NULL means unknown</h2>
+<p>NULL is not zero, and it is not an empty string. A comparison with NULL is <i>unknown</i>, and <code>WHERE</code> keeps only rows that are true. So <code>3 NOT IN (1, 2, NULL)</code> is never true, and the whole query returns nothing. To ask “has no matching row”, use <code>NOT EXISTS</code>.</p>
+
+<h2>Money is decimal</h2>
+<p>Binary floating point cannot store 0.1 or 0.2 exactly, so totals drift. Store money as <code>NUMERIC(10,2)</code>.</p>
+
+<div class="rule"><b>Before you trust a number:</b> count the rows after each join; check that keys match on both sides; check that no NULL can reach a <code>NOT IN</code> list; check that the table has the UNIQUE and NOT NULL constraints the business rule needs.</div>
+
+<h2>Read more</h2>
+<ul>
+  <li><a href="https://www.postgresql.org/docs/current/ddl-constraints.html" target="_blank" rel="noopener">PostgreSQL docs: constraints</a></li>
+  <li><a href="https://www.postgresql.org/docs/current/functions-subquery.html" target="_blank" rel="noopener">PostgreSQL docs: subquery expressions (IN, EXISTS)</a></li>
+  <li><a href="https://www.postgresql.org/docs/current/functions-comparison.html" target="_blank" rel="noopener">PostgreSQL docs: comparison operators and NULL</a></li>
+</ul>
+<p style="font-size:13.5px;color:var(--mut)">Examples use PostgreSQL syntax. All data and money amounts are illustrative; the output shown is representative and wording varies by version.</p>
+`
+});
+</script>
+</body>
+</html>

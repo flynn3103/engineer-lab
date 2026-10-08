@@ -1,0 +1,18 @@
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant L as Raft leader
+    participant F2 as Follower 2
+    participant F3 as Follower 3
+    C->>L: ALTER TABLE
+    L->>L: Append entry to log
+    par Replicate
+      L->>F2: Log entry
+      L->>F3: Log entry
+    end
+    F2-->>L: Stored
+    Note over L,F2: Leader + Follower 2 = majority (2 of 3)
+    L->>L: Commit entry and apply schema change
+    L-->>C: Success
+    F3-->>L: Stored later
+    Note over L,F3: Followers apply committed entries in log order

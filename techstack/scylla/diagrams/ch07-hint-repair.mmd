@@ -1,0 +1,15 @@
+sequenceDiagram
+    autonumber
+    participant W as Writes
+    participant CO as Coordinator
+    participant A as Live replicas
+    participant C as Replica C
+    Note over C: Down 05:00 to 10:00
+    W->>CO: Writes from 05:00 to 08:00
+    CO->>A: Replicate
+    CO->>CO: Store hints for C (3h window)
+    W->>CO: Writes from 08:00 to 10:00
+    CO->>A: Replicate
+    CO->>C: Replay stored hints at 10:00
+    Note over A,C: Two hours of writes are still missing
+    A->>C: Repair streams missing data

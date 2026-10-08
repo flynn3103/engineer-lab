@@ -1,0 +1,8 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b"},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26}}}%%
+flowchart TD
+  Cut["Byte boundary inside a record"] --> R0["Reader 0: record starts before boundary"]
+  Cut --> R1["Reader 1: starts in the record tail"]
+  R0 --> Finish["Read beyond split end to newline"]
+  Finish --> Emit["Emit complete crossing record once"]
+  R1 --> Skip["Discard leading partial record"]
+  Skip --> Next["Read next complete record"]

@@ -5,7 +5,7 @@
   const P = window.SITE_PROFILE || {};
   const nav = document.getElementById('site-nav');
   if (nav) nav.outerHTML = `<header class="site-nav"><div class="wrap">
-    <a class="brand" href="index.html" aria-label="Home"><i>◆</i> <span>${P.handle || 'engineer-lab'}</span></a>
+    <a class="brand" href="index.html" aria-label="Home"><i>◆</i></a>
     <nav aria-label="Main">${PAGES.map(([h, t]) => `<a href="${h}"${h === here ? ' aria-current="page"' : ''}>${t}</a>`).join('')}</nav></div></header>`;
   const foot = document.getElementById('site-foot');
   if (foot) foot.outerHTML = `<footer class="foot"><div class="wrap">© ${new Date().getFullYear()} ${P.name || ''} · everything runs client-side.</div></footer>`;

@@ -1,0 +1,7 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Start["Choose a compaction strategy"] --> Time{"Time-series, one TTL,<br/>mostly new rows?"}
+  Time -->|Yes| TWCS["TWCS: time windows"]
+  Time -->|No| Updates{"Read-heavy,<br/>frequently updated keys?"}
+  Updates -->|Yes| LCS["LCS: fewer read probes,<br/>more rewriting"]
+  Updates -->|No| STCS["STCS: size tiers,<br/>fewer rewrites"]

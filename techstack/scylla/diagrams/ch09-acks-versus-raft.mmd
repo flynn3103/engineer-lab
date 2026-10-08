@@ -1,0 +1,14 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  subgraph Row["Row-write acknowledgements"]
+    direction TB
+    Mutation["Row mutation"] --> Coordinator["Coordinator sends to replicas"]
+    Coordinator --> CL["Chosen CL met by acks"]
+    CL --> Success["Client receives success"]
+  end
+  subgraph Metadata["Raft metadata consensus"]
+    direction TB
+    Proposal["Metadata proposal"] --> Leader["Leader appends index + term"]
+    Leader --> Replicate["Matching replication<br/>reaches majority"]
+    Replicate --> Commit["Commit prefix,<br/>apply in order"]
+  end

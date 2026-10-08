@@ -1,0 +1,11 @@
+%%{init: {"theme":"base","fontFamily":"Arial","themeVariables":{"fontSize":"14px","primaryColor":"#edf2ff","primaryTextColor":"#17202c","primaryBorderColor":"#8090ab","lineColor":"#65758c"},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26},"state":{"nodeSpacing":22,"rankSpacing":22},"sequence":{"actorMargin":25,"messageMargin":25,"diagramMarginX":8,"diagramMarginY":8}}}%%
+sequenceDiagram
+ participant T as Task attempt
+ participant C as Connection
+ T->>C: Acquire once
+ T->>T: Register completion cleanup
+ loop Iterator consumption
+ T->>C: Lookup row
+ C-->>T: Result
+ end
+ T->>C: Close on task completion

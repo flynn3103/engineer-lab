@@ -1,0 +1,9 @@
+/* Distributed Systems scenes: transitions for the parts in dk.js. Reduced motion and the first draw (snap) turn them off. */
+.scene .dk-g{transition:transform .65s cubic-bezier(.3,.7,.2,1),opacity .45s ease}
+.scene .dk-g.fast{transition:transform .9s cubic-bezier(.45,.05,.3,1),opacity .35s ease}
+.scene .dk-g rect,.scene .dk-g circle{transition:fill .4s,stroke .4s,stroke-width .3s}
+.scene .dk-line{transition:stroke .4s,opacity .4s,stroke-width .3s}
+.scene .kt.lg{font-size:14px}
+.scene .kt.end{text-anchor:end}
+@media(prefers-reduced-motion:reduce){.scene .dk-g,.scene .dk-line{transition:none}}
+@media(max-width:820px){.lx-body.explain{grid-template-columns:minmax(0,1fr)}}

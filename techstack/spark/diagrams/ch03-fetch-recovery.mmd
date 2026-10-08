@@ -1,0 +1,10 @@
+%%{init: {"theme":"base","fontFamily":"Arial","themeVariables":{"fontSize":"14px","primaryColor":"#edf2ff","primaryTextColor":"#17202c","primaryBorderColor":"#8090ab","lineColor":"#65758c"},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26},"state":{"nodeSpacing":22,"rankSpacing":22},"sequence":{"actorMargin":25,"messageMargin":25,"diagramMarginX":8,"diagramMarginY":8}}}%%
+sequenceDiagram
+ participant R as Reducer
+ participant D as Driver
+ participant E as Surviving executor
+ R-->>D: FetchFailed for unavailable map output
+ D->>E: Recompute missing map partition
+ E-->>D: Register new shuffle output
+ D->>R: Retry dependent work
+ R->>E: Fetch restored block

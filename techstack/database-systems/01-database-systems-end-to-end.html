@@ -1,0 +1,1674 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Database Systems · course</title>
+<link rel="stylesheet" href="../../assets/lab.css">
+<style>
+:root{--acc:#0f9d8a;--acc2:#d6456b}
+@media(prefers-color-scheme:dark){:root{--acc:#3ccfb8;--acc2:#ff7aa0}}
+body{font-size:16px}
+.topbar .wrap{min-height:50px}
+.topbar .crumb{color:var(--mut);font-size:14px;text-decoration:none}
+.topbar .crumb:hover{color:var(--ink)}
+.hero{padding:34px 0 10px}
+.hero .lead{max-width:60ch}
+.part{margin:28px 0 10px}
+.part h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:0 0 4px}
+.part p{margin:0 0 12px;color:var(--mut);font-size:14.5px;max-width:64ch}
+.map{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr))}
+.tile{display:flex;gap:12px;align-items:flex-start;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;min-height:0;height:100%;width:100%}
+.tile:hover{border-color:var(--acc);transform:translateY(-2px)}
+.tile .n{flex:none;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;background:var(--pc);border:1px solid var(--line)}
+.tile b{display:block;font-size:15px;line-height:1.3}
+.tile small{display:block;color:var(--mut);font-size:12.5px;margin-top:2px;line-height:1.35}
+.chhead{display:flex;gap:12px;align-items:center;margin:22px 0 4px}
+.chhead .n{flex:none;width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px;background:var(--pc);border:1px solid var(--line)}
+.chhead h1{font-size:clamp(22px,4.6vw,30px);letter-spacing:-.4px}
+.chhead small{display:block;color:var(--mut);font-size:13px}
+.ask{font-size:clamp(17px,2.8vw,20px);margin:8px 0 18px;max-width:62ch}
+.blk{margin:0 0 16px}
+.blk>h3{font-size:12.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);margin:0 0 8px;display:flex;align-items:center;gap:8px}
+.blk>h3 i{font-style:normal;width:20px;height:20px;border-radius:50%;background:var(--acc);color:var(--on-brand,#fff);font-size:11px;display:inline-flex;align-items:center;justify-content:center}
+.idea{margin:0;padding-left:20px}.idea li{margin:5px 0}
+.pg{display:grid;gap:12px}
+.pgwhy{margin:0;color:var(--mut);font-size:14px}
+.cp{display:grid;gap:10px}
+@media(min-width:760px){.cp{grid-template-columns:repeat(3,1fr)}}
+.cp>div{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--card)}
+.cp b{display:block;font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;margin-bottom:3px}
+.cp .s b{color:var(--bad)}.cp .c b{color:var(--warn)}.cp .f b{color:var(--ok)}
+.cp p{margin:0;font-size:14.5px}
+.quiz .q{font-weight:600;margin:0 0 8px}
+.quiz .opts{display:grid;gap:6px}
+.quiz .opts button{text-align:left;min-height:0;padding:9px 12px}
+.quiz .opts button.right{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,var(--card))}
+.quiz .opts button.wrong{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,var(--card))}
+.quiz .why{margin-top:8px}
+.pn{display:flex;justify-content:space-between;gap:8px;margin:22px 0 40px}
+.pn button{max-width:48%;text-align:left}
+.pn button:last-child{margin-left:auto;text-align:right}
+/* ---- playground kit ---- */
+.pgbox{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow);display:grid;gap:12px;min-width:0}
+.pgbox .bar{margin:0}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--card)}
+.seg button{border:0;border-radius:0;min-height:36px;padding:6px 12px;font-size:13.5px;background:transparent}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--acc);color:var(--on-brand,#fff);font-weight:600}
+.sl{display:inline-flex;align-items:center;gap:8px;flex-wrap:nowrap}
+.sl input{width:130px}.sl b{color:var(--ink);font-weight:600;min-width:2ch;font-variant-numeric:tabular-nums}
+.out{background:var(--soft);border-radius:10px;padding:10px 12px;font-size:14px;min-width:0}
+.badge{display:inline-block;font-size:12px;font-weight:700;border-radius:999px;padding:2px 9px;border:1px solid var(--line);background:var(--soft);white-space:nowrap}
+.badge.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,var(--line));background:color-mix(in srgb,var(--ok) 10%,var(--card))}
+.badge.bad{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,var(--line));background:color-mix(in srgb,var(--bad) 10%,var(--card))}
+.badge.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,var(--line));background:color-mix(in srgb,var(--warn) 10%,var(--card))}
+.badge.info{color:var(--acc);border-color:color-mix(in srgb,var(--acc) 45%,var(--line));background:color-mix(in srgb,var(--acc) 10%,var(--card))}
+.log{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.5;max-height:190px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:6px 10px;background:var(--card)}
+.log div{padding:1px 0;border-bottom:1px dashed var(--line)}.log div:last-child{border:0}
+.log .bad{color:var(--bad)}.log .ok{color:var(--ok)}.log .mut{color:var(--mut)}
+.stat{display:flex;gap:10px;flex-wrap:wrap}
+.stat>div{border:1px solid var(--line);border-radius:10px;padding:6px 12px;background:var(--card);min-width:84px}
+.stat small{display:block;color:var(--mut);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em}
+.stat b{font-size:20px;font-variant-numeric:tabular-nums}
+.stat .bad b{color:var(--bad)}.stat .ok b{color:var(--ok)}
+.svgw{overflow-x:auto;overscroll-behavior-x:contain}.svgw svg{display:block;max-width:100%}
+.cols{display:grid;gap:12px}
+@media(min-width:760px){.cols.two{grid-template-columns:1fr 1fr}.cols.three{grid-template-columns:repeat(3,1fr)}}
+.cols>*{min-width:0}
+@media(max-width:560px){.chhead{margin-top:14px}}
+.prob{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--acc2);border-radius:12px;padding:12px 16px;margin:0 0 6px}
+.prob p{margin:0 0 .5em}.scene p:last-child{margin:0}
+.prob .q{font-weight:700;font-size:clamp(17px,2.6vw,19px)}
+.arch{margin:0}.arch figcaption{text-align:center}
+.arch svg{overflow:visible}
+.common{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+.common>div{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--card);display:grid;gap:5px;align-content:start}
+.common h4{font-size:15px;line-height:1.3;margin:0}.common h4 i{font-style:normal;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--bad);color:#fff;font-size:11px;margin-right:6px;vertical-align:1px}
+.common p{margin:0;font-size:14px}
+.common b{font-size:11px;text-transform:uppercase;letter-spacing:.07em;margin-right:6px}
+.common .e b{color:var(--acc2)}.common .c b{color:var(--warn)}.common .f b{color:var(--ok)}
+.sw{display:flex;gap:6px;margin-left:auto}
+.sw a{font-size:13px;color:var(--mut);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:4px 12px;white-space:nowrap}
+.sw a:hover{color:var(--ink);border-color:var(--acc)}.sw a.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+.ctabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.ctab{border-radius:999px;font-size:14px;padding:7px 14px;min-height:0}
+.ctab.on{color:var(--ink);background:color-mix(in srgb,var(--acc2) 14%,var(--card));border-color:var(--acc2);font-weight:700}
+.cbody{display:grid;gap:12px}
+.ctitle{font-size:clamp(20px,3.6vw,26px);letter-spacing:-.3px;margin:4px 0 0}
+.csym{font-size:clamp(16px,2.4vw,18.5px);margin:0}
+.ccard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
+.ccard h5{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin:0 0 6px}
+.ccard h5:not(:first-child){margin-top:12px}
+.ccard p{margin:0 0 .5em;font-size:15px}.ccard .seen b{color:var(--acc2);font-size:11.5px;text-transform:uppercase;letter-spacing:.06em}
+.ccard pre{font-size:12.5px}
+.vizc{background:var(--soft)}
+.vhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.vrow{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:center;margin:6px 0}
+@media(max-width:620px){.vrow{grid-template-columns:1fr;gap:4px}}
+.vl{font-size:13px;color:var(--mut)}
+.vcells{display:flex;gap:6px;min-width:0}
+.vc{flex:1 1 0;min-width:0;border:1.5px solid var(--line);border-radius:8px;padding:8px 6px;text-align:center;font-size:12.5px;background:var(--card);overflow-wrap:anywhere}
+.vc.ok{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,var(--card))}
+.vc.bad{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 13%,var(--card))}
+.vc.warn{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 16%,var(--card))}
+.vc.off{border-style:dashed;color:var(--mut);background:transparent}
+.vbar{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+@media(max-width:620px){.vbar{grid-template-columns:1fr}}
+.vtrack{height:16px;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.vtrack i{display:block;height:100%;border-radius:8px;transition:width .35s}
+.vtrack i.bad{background:var(--bad)}.vtrack i.ok{background:var(--ok)}.vtrack i.warn{background:var(--warn)}
+.vt{font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums}
+.fixes{margin:0;padding-left:22px}.fixes li{margin:4px 0}.fixes li::marker{color:var(--acc2);font-weight:700}
+.course-custom{display:grid;gap:18px;margin-bottom:22px}
+.sqlcs-intro{padding:22px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(135deg,color-mix(in srgb,var(--acc) 12%,var(--card)),var(--card) 58%,color-mix(in srgb,var(--acc2) 10%,var(--card)));box-shadow:var(--shadow)}
+.sqlcs-kicker,.sqlcs-eyebrow,.sqlcs-querylabel{font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;font-weight:800;color:var(--acc)}
+.sqlcs-intro h1{font-size:clamp(28px,5vw,46px);letter-spacing:-1.2px;margin:6px 0 8px}
+.sqlcs-intro>p{font-size:clamp(16px,2.4vw,19px);max-width:68ch;color:var(--mut);margin:0}
+.sqlcs-rule{display:flex;gap:8px 10px;flex-wrap:wrap;align-items:center;margin-top:16px;padding:11px 13px;border-radius:11px;background:var(--card);border:1px solid var(--line);font-size:14px}
+.sqlcs-rule strong{color:var(--acc2);text-transform:uppercase;letter-spacing:.07em;font-size:11px;margin-right:4px}
+.sqlcs-section{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:18px;box-shadow:var(--shadow);min-width:0}
+.sqlcs-sectionhead{display:flex;justify-content:space-between;gap:18px;align-items:start;margin-bottom:14px}
+.sqlcs-sectionhead h2{font-size:clamp(22px,3.5vw,30px);letter-spacing:-.45px;margin:3px 0 4px}
+.sqlcs-sectionhead p{margin:0;color:var(--mut);max-width:70ch;font-size:15px}
+.sqlcs-lab{display:grid;gap:14px}
+.sqlcs-query{position:relative;background:#111827;color:#e5edf8;border-radius:12px;padding:24px 14px 12px;overflow:auto;border:1px solid color-mix(in srgb,var(--acc) 35%,#111827)}
+.sqlcs-querylabel{position:absolute;left:14px;top:7px;color:#76e4d2}
+.sqlcs-query pre{margin:0;padding:0;white-space:pre;overflow:visible;font-size:13px;line-height:1.55;background:transparent;border:0;border-radius:0;color:inherit}
+.sqlcs-query code{color:inherit;background:transparent;padding:0}
+.sqlcs-code{display:block;min-width:max-content}
+.sqlcs-code-line{display:block;min-height:1.55em;padding:0 7px;border-left:2px solid transparent;border-radius:3px;transition:background .2s,border-color .2s,opacity .2s}
+.sqlcs-code-line.active{background:rgba(246,193,119,.13);border-left-color:#f6c177}
+.sqlcs-tok.kw{color:#ff7aa2;font-weight:750}.sqlcs-tok.fn{color:#c4a7ff}.sqlcs-tok.id{color:#8bd5ff}.sqlcs-tok.str,.sqlcs-tok.num{color:#f6c177}.sqlcs-tok.op{color:#66e3c4}.sqlcs-tok.comment{color:#8b98b3;font-style:italic}
+.sqlcs-labbody{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;min-width:0}
+.sqlcs-plan{display:grid;gap:10px;padding:4px 0;min-width:0}
+.sqlcs-planrow{display:grid;grid-template-columns:minmax(0,.92fr) 58px minmax(0,1.08fr);align-items:center;min-width:0;transition:opacity .25s,transform .25s}
+.sqlcs-resultcard,.sqlcs-clausecard{border:1px solid var(--line);border-radius:12px;background:var(--card);min-width:0;transition:border-color .25s,box-shadow .25s,background .25s}
+.sqlcs-resultcard{overflow:hidden}
+.sqlcs-resulthead{display:flex;justify-content:space-between;gap:8px;padding:7px 9px;border-bottom:1px solid var(--line);background:var(--soft);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)}
+.sqlcs-resulthead b{font-size:11px;color:var(--ink)}
+.sqlcs-miniwrap{overflow-x:auto}.sqlcs-minitable{width:100%;border-collapse:collapse;font-size:10.5px;font-variant-numeric:tabular-nums}.sqlcs-minitable th,.sqlcs-minitable td{padding:5px 7px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}.sqlcs-minitable th{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}.sqlcs-minitable tbody tr:last-child td{border-bottom:0}.sqlcs-more{display:block;padding:5px 7px;color:var(--mut);font-size:10px;border-top:1px dashed var(--line)}
+.sqlcs-connector{height:100%;min-height:56px;display:grid;place-items:center;position:relative}
+.sqlcs-connector::before{content:'';width:100%;border-top:2px dashed color-mix(in srgb,var(--mut) 55%,transparent)}
+.sqlcs-connector::after{content:'';position:absolute;right:1px;border:5px solid transparent;border-left:7px solid color-mix(in srgb,var(--mut) 70%,transparent);transform:translateX(6px)}
+.sqlcs-connector i{position:absolute;width:9px;height:9px;border-radius:50%;background:var(--mut);left:calc(50% - 4px);transform:scale(.65);transition:background .25s,transform .25s,box-shadow .25s}
+.sqlcs-clausecard{display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;padding:12px;align-items:start}
+.sqlcs-stepnum{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:var(--soft);font-size:10px;font-weight:850;color:var(--mut)}
+.sqlcs-clausecard>div{display:grid;gap:4px;min-width:0}.sqlcs-clausecard b{font-size:14px;letter-spacing:.03em}.sqlcs-clausecard code{font-size:11.5px;white-space:normal;overflow-wrap:anywhere}.sqlcs-clausecard small{font-size:11.5px;color:var(--mut);line-height:1.35}
+.sqlcs-clausecard .sqlcs-tok.kw{color:var(--acc);font-weight:800}.sqlcs-clausecard .sqlcs-tok.fn{color:var(--acc2);font-weight:700}.sqlcs-clausecard .sqlcs-tok.id{color:var(--ink)}.sqlcs-clausecard .sqlcs-tok.str,.sqlcs-clausecard .sqlcs-tok.num{color:var(--warn)}.sqlcs-clausecard .sqlcs-tok.op{color:var(--ok)}
+.sqlcs-planrow.future{opacity:.72}.sqlcs-planrow.done{opacity:.86}.sqlcs-planrow.done .sqlcs-resultcard,.sqlcs-planrow.done .sqlcs-clausecard{border-color:color-mix(in srgb,var(--ok) 48%,var(--line))}.sqlcs-planrow.done .sqlcs-stepnum{background:var(--ok);border-color:var(--ok);color:#fff}.sqlcs-planrow.done .sqlcs-connector::before{border-color:color-mix(in srgb,var(--ok) 65%,transparent)}
+.sqlcs-planrow.active{opacity:1;transform:translateY(-1px)}.sqlcs-planrow.active .sqlcs-resultcard,.sqlcs-planrow.active .sqlcs-clausecard{border-color:var(--acc);box-shadow:0 0 0 2px color-mix(in srgb,var(--acc) 15%,transparent),var(--shadow)}.sqlcs-planrow.active .sqlcs-clausecard{background:color-mix(in srgb,var(--acc) 8%,var(--card))}.sqlcs-planrow.active .sqlcs-stepnum{background:var(--acc);border-color:var(--acc);color:var(--on-brand,#fff)}.sqlcs-planrow.active .sqlcs-connector::before{border-color:var(--acc);animation:sqlcs-dash .65s linear infinite}.sqlcs-planrow.active .sqlcs-connector::after{border-left-color:var(--acc)}.sqlcs-planrow.active .sqlcs-connector i{background:var(--acc);transform:scale(1);box-shadow:0 0 0 5px color-mix(in srgb,var(--acc) 18%,transparent)}
+@keyframes sqlcs-dash{50%{opacity:.35}}
+.sqlcs-panes h3{font-size:13px;margin:0 0 6px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.sqlcs-tablewrap{max-width:100%;overflow-x:auto;border:1px solid var(--line);border-radius:11px;background:var(--card)}
+.sqlcs-table{border-collapse:collapse;width:100%;min-width:420px;font-size:13px;font-variant-numeric:tabular-nums}
+.sqlcs-table th,.sqlcs-table td{padding:7px 9px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+.sqlcs-table tr:last-child td{border-bottom:0}.sqlcs-table th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);background:var(--soft)}
+.sqlcs-row{transition:background .2s,outline-color .2s}.sqlcs-row.active{background:color-mix(in srgb,var(--acc) 20%,var(--card));outline:2px solid var(--acc);outline-offset:-2px}.sqlcs-row.keep{background:color-mix(in srgb,var(--ok) 10%,var(--card))}.sqlcs-row.drop{color:var(--mut);text-decoration:line-through;background:color-mix(in srgb,var(--bad) 7%,var(--card))}.sqlcs-row.match{background:color-mix(in srgb,var(--ok) 17%,var(--card))}
+.sqlcs-row.partition-15445 td:first-child{border-left:4px solid var(--acc)}.sqlcs-row.partition-15721 td:first-child{border-left:4px solid var(--acc2)}.sqlcs-row.partition-15826 td:first-child{border-left:4px solid var(--warn)}
+.sqlcs-anatomy{display:flex;gap:6px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:11px;padding:10px 12px;background:var(--soft);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.sqlcs-anatomy span{border-radius:999px;padding:4px 9px;border:1px solid var(--line);background:var(--card)}.sqlcs-anatomy .part{border-color:var(--acc);color:var(--acc)}.sqlcs-anatomy .sort{border-color:var(--acc2);color:var(--acc2)}.sqlcs-anatomy .frame{border-color:var(--warn);color:var(--warn)}
+.sqlcs-tree{display:grid;grid-template-columns:repeat(2,minmax(100px,1fr));gap:9px;align-content:start}
+.sqlcs-node{border:1px dashed var(--line);border-radius:11px;padding:10px;background:var(--soft);display:grid;gap:2px;transition:opacity .2s,border-color .2s,transform .2s}.sqlcs-node small{font-size:11px;color:var(--mut)}.sqlcs-node.future{opacity:.42}.sqlcs-node.active{opacity:1;border:2px solid var(--acc);background:color-mix(in srgb,var(--acc) 14%,var(--card));transform:translateY(-2px)}.sqlcs-node.done{opacity:1;border-style:solid;border-color:var(--ok)}
+.sqlcs-edges{grid-column:1/-1;font-size:12px;color:var(--mut);border:1px solid var(--line);border-radius:9px;padding:8px;background:var(--card)}
+.sqlcs-footnote{border-left:4px solid var(--acc2);background:var(--soft);border-radius:0 11px 11px 0;padding:11px 14px;font-size:13.5px;color:var(--mut)}
+.sqlcs-footnote b{color:var(--ink)}
+@media(max-width:620px){
+ .course-custom{gap:14px}.sqlcs-intro,.sqlcs-section{padding:14px}.sqlcs-sectionhead{display:block}.sqlcs-query pre{font-size:11.5px}.sqlcs-table{min-width:360px}.sqlcs-intro h1{letter-spacing:-.7px}.sqlcs-rule{display:block}.sqlcs-rule>*{margin-right:4px}
+ .sqlcs-plan{gap:4px}.sqlcs-planrow{grid-template-columns:minmax(0,1fr);gap:0}.sqlcs-clausecard{order:1}.sqlcs-connector{order:2;min-height:28px}.sqlcs-resultcard{order:3}.sqlcs-connector::before{width:0;height:100%;border-top:0;border-left:2px dashed color-mix(in srgb,var(--mut) 55%,transparent)}.sqlcs-connector::after{right:auto;bottom:0;border:5px solid transparent;border-top:7px solid color-mix(in srgb,var(--mut) 70%,transparent);transform:translateY(8px)}.sqlcs-connector i{left:auto;top:calc(50% - 4px)}.sqlcs-planrow.active .sqlcs-connector::after{border-left-color:transparent;border-top-color:var(--acc)}
+}
+@media(prefers-reduced-motion:reduce){.sqlcs-planrow,.sqlcs-resultcard,.sqlcs-clausecard,.sqlcs-code-line,.sqlcs-connector i{transition:none}.sqlcs-planrow.active .sqlcs-connector::before{animation:none}}
+/* chapter 2 · buffer pool playground and architecture animation */
+section.blk .prob p{font-size:15px;line-height:1.55}
+.arch-ctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:4px 0 8px}
+.ar-box rect{fill:var(--card);stroke:var(--line);stroke-width:1.5;transition:opacity .3s,stroke .3s}
+.ar-box.on rect{stroke:var(--acc);stroke-width:3}
+.ar-box.off{opacity:.35}
+.ar-box{transition:opacity .3s}
+.ar-title{font-size:13px;font-weight:700;fill:var(--ink);font-family:system-ui,sans-serif}
+.ar-sub{font-size:11px;fill:var(--mut);font-family:ui-monospace,monospace}
+.ar-arrow line{stroke:var(--mut);stroke-width:1.6;fill:none;color:var(--mut);transition:opacity .3s}
+.ar-arrow.on line{stroke:var(--acc2);stroke-width:3;color:var(--acc2)}
+.ar-arrow:not(.on) line{opacity:.45}
+.ar-lab{font-size:11px;fill:var(--mut);font-family:ui-monospace,monospace}
+.ar-arrow.on .ar-lab{fill:var(--acc2);font-weight:700}
+.ar-dot{fill:var(--acc2);stroke:var(--card);stroke-width:2}
+.ar-step{margin-top:8px;border-left:4px solid var(--acc);background:var(--soft);border-radius:0 10px 10px 0;padding:10px 12px}
+.ar-count{display:block;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.ar-text{margin:4px 0 0;font-size:15px;color:var(--ink)}
+.ar-box{cursor:pointer;outline:none}
+.ar-box:focus-visible rect{stroke:var(--acc);stroke-width:3}
+.ar-box.picked rect{stroke:var(--acc2);stroke-width:3}
+.ar-hint{margin:0;font-size:14px;color:var(--mut)}
+.split{display:grid;gap:14px;align-items:start}
+.split-l,.split-r{min-width:0}
+.split-r{display:grid;gap:10px;align-content:start}
+@media(min-width:760px){.split{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px}}
+
+.ar-comp{display:grid;gap:8px;margin-top:10px}
+.ar-state{display:grid;gap:8px;margin-top:10px;border-top:1px dashed var(--line);padding-top:10px}
+.ar-pt{font-size:13px;color:var(--mut);font-variant-numeric:tabular-nums}
+.ar-lookup{font-weight:700;font-size:14px}
+.ar-lookup.hit{color:var(--ok)}.ar-lookup.miss{color:var(--bad)}
+.ar-frs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.ar-fr{border:1.5px solid var(--line);border-radius:10px;padding:6px;background:var(--card);display:grid;gap:2px;font-size:12px;color:var(--mut)}
+.ar-fr b{font-size:14px;color:var(--ink)}
+.ar-fr.pinned{border-color:var(--acc)}
+.ar-fr.dirty{box-shadow:inset 0 -4px 0 var(--bad)}
+.ar-legend{font-size:12.5px;color:var(--mut);margin:0}
+@media(max-width:620px){.ar-frs{grid-template-columns:repeat(2,1fr)}}
+.sm{display:grid;gap:10px}
+.sm-frames{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.sm-fr{border:1.5px solid var(--line);border-radius:10px;padding:8px 6px;background:var(--card);display:grid;gap:2px;text-align:center;min-height:66px;align-content:center}
+.sm-fr small{font-size:11px;color:var(--mut)}
+.sm-fr b{font-size:15px;color:var(--ink)}
+.sm-fr.pinned{border-color:var(--acc)}
+.sm-fr.dirty{box-shadow:inset 0 -4px 0 var(--bad)}
+.sm-ops{display:flex;flex-wrap:wrap;gap:5px}
+.sm-op{font-size:12.5px;font-weight:700;border:1px solid var(--line);border-radius:7px;padding:3px 7px;color:var(--mut)}
+.sm-op.done.hit{color:var(--ok);border-color:var(--ok)}
+.sm-op.done.miss{color:var(--bad);border-color:var(--bad)}
+.sm-op.now{outline:2px solid var(--acc);outline-offset:2px;color:var(--ink)}
+.sm-op.leak{border-style:dashed}
+.sm-msg{margin:0;font-size:14.5px;color:var(--ink);min-height:3em}
+.sm-cnt{font-size:12.5px;color:var(--mut);font-variant-numeric:tabular-nums;border-top:1px dashed var(--line);padding-top:6px}
+@media(max-width:620px){.sm-frames{grid-template-columns:repeat(2,1fr)}}
+.lay{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+.lay th,.lay td{border:1px solid var(--line);padding:6px 8px;text-align:center}
+.lay th{background:var(--soft);color:var(--mut);font-size:12px;font-weight:600}
+.lay td{color:var(--mut)}
+.lay td.on{background:color-mix(in srgb,var(--acc) 22%,var(--card));color:var(--ink);font-weight:700}
+.lay th.on{color:var(--ink);border-color:var(--acc)}
+.lay-page td{background:transparent;text-align:left;font-size:12px;color:var(--mut);border:none;padding:8px 2px 2px}
+.lay-bytes{margin-top:8px;font-weight:700;font-size:14px;color:var(--ink)}
+.pq-file{border:2px solid var(--line);border-radius:12px;padding:10px;background:var(--card);display:grid;gap:8px}
+.pq-lbl{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.pq-rg{border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--soft);display:grid;gap:6px}
+.pq-rg.skip{opacity:.4;border-style:dashed}
+.pq-chunks{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.pq-ch{border:1px solid var(--line);border-radius:7px;padding:6px 4px;text-align:center;font-size:12.5px;color:var(--mut);background:var(--card)}
+.pq-ch.on{border-color:var(--acc);color:var(--ink);background:color-mix(in srgb,var(--acc) 14%,var(--card));font-weight:700}
+.pq-footer{border:1.5px dashed var(--line);border-radius:9px;padding:8px;font-size:13px;color:var(--mut)}
+.pq-footer.on{border-color:var(--acc2);color:var(--ink)}
+.pq-note{font-size:13px;color:var(--ink);background:var(--soft);border-radius:9px;padding:8px 10px}
+.st-vis{display:grid;gap:8px}
+.st-rgs{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.st-rg{border:1.5px solid var(--line);border-radius:10px;padding:8px;background:var(--card);display:grid;gap:2px}
+.st-rg small{color:var(--mut);font-size:12px}
+.st-rg.read{border-color:var(--ok)}
+.st-rg.skip{border-style:dashed;opacity:.5}
+.st-files{display:grid;gap:6px}
+.st-file{border:1.5px solid var(--line);border-radius:10px;padding:8px;background:var(--card);display:grid;gap:2px}
+.st-file small{color:var(--mut);font-size:12px}
+.st-file.ok{border-color:var(--ok)}
+.st-file.error{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,var(--card))}
+.st-reader{border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--soft);display:grid;gap:2px}
+.st-reader small{color:var(--mut);font-size:12px}
+.st-bars{display:grid;gap:10px}
+.st-bar{display:grid;grid-template-columns:120px 1fr 56px;gap:8px;align-items:center}
+.st-bl{display:grid}
+.st-bl small{color:var(--mut);font-size:12px}
+.st-track{height:16px;background:var(--soft);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.st-track i{display:block;height:100%;background:var(--acc)}
+.st-stats{display:flex;flex-wrap:wrap;gap:6px}
+.st-chip{font-size:12.5px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--ink);background:var(--card)}
+@media(max-width:620px){.st-bar{grid-template-columns:90px 1fr 56px}}
+
+
+.wk{display:grid;gap:10px}
+.wk-sql{display:block;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13.5px;white-space:pre-wrap;overflow-wrap:anywhere}
+.wk-frames{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.wk-fr{border:1.5px solid var(--line);border-radius:10px;padding:8px;background:var(--card);display:grid;gap:2px;color:var(--mut);font-size:13px}
+.wk-fr b{color:var(--ink)}
+.wk-fr.on{border-color:var(--acc)}
+.wk-fr.dirty{box-shadow:inset 0 -4px 0 var(--bad)}
+.wk-page{border:2px solid var(--line);border-radius:12px;padding:10px;background:var(--card);display:grid;gap:6px;width:100%;max-width:520px;box-sizing:border-box}
+.wk-hdr{font-weight:700;font-size:13px;background:var(--soft);border-radius:8px;padding:6px 8px;color:var(--ink)}
+.wk-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin-top:4px}
+.wk-slot{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;border:1px solid var(--line);border-radius:8px;padding:5px 8px;color:var(--mut)}
+.wk-slot.new{border-color:var(--acc);color:var(--ink);background:color-mix(in srgb,var(--acc) 12%,var(--card))}
+.wk-free{border:1.5px dashed var(--line);border-radius:8px;text-align:center;font-size:12.5px;color:var(--mut);padding:10px}
+.wk-recs{display:grid;gap:6px}
+.wk-rec{border:1px solid var(--line);border-radius:8px;padding:6px 8px;display:flex;justify-content:space-between;gap:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;color:var(--ink);background:var(--soft)}
+.wk-rec small{font-family:system-ui,sans-serif;color:var(--mut);font-size:12px}
+.wk-rec.new,.wk-slot.new{box-shadow:0 0 0 2px color-mix(in srgb,var(--acc) 25%,transparent)}
+.wk-rec.scan,.wk-slot.scan{border-color:var(--acc2);color:var(--ink)}
+.wk-rec.match,.wk-slot.match{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 16%,var(--card));color:var(--ink)}
+@media(max-width:620px){.wk-frames{grid-template-columns:1fr}}
+
+.ar-card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.ar-card b{font-size:13px;color:var(--acc)}
+.ar-card p{margin:2px 0 0;font-size:14px;color:var(--ink)}
+/* chapter 3 · the two case studies: a row-based file (Avro) and a column-based file (Parquet) */
+.sx-cs{display:grid;gap:10px}
+.sx-arch{display:flex;flex-wrap:wrap;gap:8px}
+.sx-box{font-family:inherit;font-size:13px;font-weight:700;border:1.5px solid var(--line);border-radius:10px;padding:7px 11px;background:var(--card);color:var(--mut);cursor:pointer}
+.sx-box.on{border-color:var(--acc);color:var(--ink);background:color-mix(in srgb,var(--acc) 14%,var(--card))}
+.sx-box.picked{outline:2px solid var(--acc2);outline-offset:2px}
+.sx-def{border:1px dashed var(--line);border-radius:10px;padding:8px 10px;display:grid;gap:4px;min-height:44px}
+.sx-hint{color:var(--mut);font-size:14px}
+.sx-hdr{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--soft);display:grid;gap:2px}
+.sx-hdr small{color:var(--mut);font-size:12px}
+.sx-blk{border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--card);display:grid;gap:4px}
+.sx-blk.open{border-style:dashed}
+.sx-blk small{color:var(--mut);font-size:12px}
+.sx-rowl{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;border-radius:6px;padding:3px 6px;color:var(--mut)}
+.sx-rowl.new{color:var(--ink);background:color-mix(in srgb,var(--acc) 14%,var(--card))}
+.sx-rowl.decoded{color:var(--ink);background:var(--soft)}
+.sx-rowl.raw{color:var(--ink);border:1px dashed var(--line)}
+.sx-rowl.hit{color:var(--ink);font-weight:700;background:color-mix(in srgb,var(--ok) 18%,var(--card))}
+.sx-rgb{border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--soft);display:grid;gap:6px}
+.sx-rgb small{color:var(--mut)}
+.sx-rgb.skipped{opacity:.4;border-style:dashed}
+.sx-rgb.written{border-color:var(--acc)}
+.sx-chip.new{border-color:var(--acc);color:var(--ink)}
+.sx-chip.read{border-color:var(--ok);color:var(--ink);font-weight:700}
+.sx-cmp td{text-align:left}
+/* chapter 3 · storage models, file formats and compression (custom layout) */
+.sx-sec{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin:0 0 16px;box-shadow:var(--shadow);min-width:0}
+.sx-sec>h2{font-size:18px;margin:0 0 10px}
+.sx-p{margin:0 0 10px;font-size:15px;color:var(--ink);line-height:1.55}
+.sx-q{font-weight:700;font-size:16px;margin:12px 0 0}
+.sx-list{margin:0;padding-left:20px}.sx-list li{margin:6px 0;font-size:15px}
+.sx-controls{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px}
+.sx-vis{display:grid;gap:8px}
+.sx-table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.sx-table th,.sx-table td{border:1px solid var(--line);padding:6px 8px;text-align:center;color:var(--mut)}
+.sx-table th{background:var(--soft);font-weight:600;font-size:12px}
+.sx-table td.on{background:color-mix(in srgb,var(--acc) 22%,var(--card));color:var(--ink);font-weight:700}
+.sx-table tr.touch td,.sx-table th.touch{background:color-mix(in srgb,var(--acc2) 18%,var(--card));color:var(--ink)}
+.sx-table tr.sx-grp td{background:transparent;text-align:left;border:none;font-size:12px;padding:8px 2px 2px}
+.sx-stats{display:flex;flex-wrap:wrap;gap:8px}
+.sx-stat{border:1px solid var(--line);border-radius:10px;padding:6px 10px;background:var(--card);display:grid}
+.sx-stat small{color:var(--mut);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em}
+.sx-stat b{font-size:15px;color:var(--ink)}
+.sx-txt{margin:0;font-size:15px;color:var(--ink);font-weight:600}
+.sx-cnt{font-size:11.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.sx-step{display:grid;gap:10px}
+.sx-line{display:grid;gap:4px;background:var(--soft);border-left:4px solid var(--acc);border-radius:0 10px 10px 0;padding:10px 12px}
+.sx-chip{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;border:1.5px solid var(--line);border-radius:8px;padding:5px 9px;background:var(--card);color:var(--mut)}
+.sx-chip.on,.sx-chip.hit{border-color:var(--acc);color:var(--ink);font-weight:700}
+.sx-chip.hit{border-color:var(--ok)}
+.sx-chip.dim{color:var(--mut)}
+.sx-row{display:flex;flex-wrap:wrap;gap:6px}
+.sx-box{border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--soft);display:grid;gap:6px}
+.sx-cap{margin:0;font-size:13.5px;color:var(--mut)}
+.sx-file{border:2px solid var(--line);border-radius:12px;padding:10px;background:var(--card);display:grid;gap:8px}
+.sx-rg{border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--soft);display:grid;gap:6px}
+.sx-rg small{color:var(--mut);font-size:12px}
+.sx-rg.skip{opacity:.4;border-style:dashed}
+.sx-chunks{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.sx-footer{border:1.5px dashed var(--line);border-radius:9px;padding:8px;font-size:13px;color:var(--mut)}
+.sx-footer.on{border-color:var(--acc2);color:var(--ink)}
+.sx-log{border:1px solid var(--line);background:var(--soft);border-radius:10px;padding:8px 10px;font-size:13px;white-space:pre-wrap;overflow-x:auto}
+.sx-dlog{border:1px dashed var(--line);border-radius:10px;padding:8px 10px;display:grid;gap:2px;color:var(--mut)}
+.sx-dlog.on{border-color:var(--acc);color:var(--ink)}
+.sx-dlog b{color:var(--ink)}
+.sx-files{display:grid;gap:8px}
+.sx-file2{border:1.5px solid var(--line);border-radius:10px;padding:8px;background:var(--card);display:grid;gap:2px}
+.sx-file2 small{color:var(--mut);font-size:12px}
+.sx-file2.skip{border-style:dashed;opacity:.5}
+.sx-file2.read{border-color:var(--ok)}
+.sx-file2.error{border-color:var(--bad)}
+.sx-reader{border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--soft);display:grid;gap:2px}
+.sx-reader small{color:var(--mut);font-size:12px}
+.sx-bars{display:grid;gap:10px}
+.sx-bar{display:grid;grid-template-columns:120px 1fr 56px;gap:8px;align-items:center}
+.sx-bar small{color:var(--mut);font-size:12px}
+.sx-track{height:16px;background:var(--soft);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.sx-track i{display:block;height:100%;background:var(--acc)}
+.sx-rgs{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.sx-rg2{border:1.5px solid var(--line);border-radius:10px;padding:8px;background:var(--card);display:grid;gap:2px}
+.sx-rg2 small{color:var(--mut);font-size:12px}
+.sx-rg2.read{border-color:var(--ok)}
+.sx-rg2.skip{border-style:dashed;opacity:.5}
+.sx-prob h3{font-size:17px;margin:14px 0 8px}
+.sx-tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.sx-fix{margin:0;padding-left:22px}.sx-fix li{margin:4px 0}
+.sx-demo{margin:10px 0}
+@media(max-width:620px){.sx-chunks{grid-template-columns:repeat(2,1fr)}.sx-rgs{grid-template-columns:1fr}.sx-bar{grid-template-columns:90px 1fr 56px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+/* ---- tiny helpers shared by the chapters and playgrounds ---- */
+const PG = {};
+const $ = (s, r) => (r || document).querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const TIMERS = [];
+function stopTimers() { while (TIMERS.length) { const t = TIMERS.pop(); clearInterval(t); clearTimeout(t); } }
+function h(tag, props, ...kids) {
+  const el = document.createElement(tag);
+  for (const k in (props || {})) {
+    const v = props[k];
+    if (v == null || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k === 'style') el.style.cssText = v;
+    else if (k === 'html') el.innerHTML = v;
+    else if (k.slice(0, 2) === 'on') el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  const add = k => { if (k == null || k === false) return; if (Array.isArray(k)) k.forEach(add); else el.append(k.nodeType ? k : document.createTextNode(String(k))); };
+  kids.forEach(add);
+  return el;
+}
+function svg(tag, props, ...kids) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const k in (props || {})) { const v = props[k]; if (v == null || v === false) continue; if (k === 'class') el.setAttribute('class', v); else if (k.slice(0, 2) === 'on') el.addEventListener(k.slice(2), v); else el.setAttribute(k, v); }
+  const add = k => { if (k == null || k === false) return; if (Array.isArray(k)) k.forEach(add); else el.append(k.nodeType ? k : document.createTextNode(String(k))); };
+  kids.forEach(add);
+  return el;
+}
+/* seeded random numbers, so every run of a playground repeats */
+function rng(seed) { let a = (seed >>> 0) || 1; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const bar = (...k) => h('div', { class: 'bar' }, ...k);
+const btn = (label, fn, cls) => h('button', { class: cls || '', onclick: fn }, label);
+const badge = (text, kind) => h('span', { class: 'badge ' + (kind || '') }, text);
+const note = t => h('p', { class: 'note' }, t);
+function seg(opts, val, cb) {          // opts: [{v,l}] or [v]; returns element with .value and .set(v)
+  const el = h('div', { class: 'seg', role: 'group' });
+  const norm = opts.map(o => (typeof o === 'object' ? o : { v: o, l: String(o) }));
+  const paint = () => [...el.children].forEach((b, i) => b.classList.toggle('on', norm[i].v === el.value));
+  norm.forEach(o => el.append(h('button', { onclick() { el.value = o.v; paint(); cb && cb(o.v); } }, o.l)));
+  el.value = val; el.set = v => { el.value = v; paint(); }; paint(); return el;
+}
+function slider(label, min, max, val, step, cb, fmt) {   // returns <label> with .input and .value
+  const out = h('b', {}, fmt ? fmt(val) : val);
+  const input = h('input', { type: 'range', min, max, step: step || 1, value: val, 'aria-label': label });
+  input.addEventListener('input', () => { out.textContent = fmt ? fmt(+input.value) : input.value; cb && cb(+input.value); });
+  const el = h('label', { class: 'sl' }, label, input, out);
+  Object.defineProperty(el, 'value', { get: () => +input.value, set: v => { input.value = v; out.textContent = fmt ? fmt(+v) : v; } });
+  return el;
+}
+function player(o) {   // o.step() -> false when finished, o.reset(), o.speed ms per tick. returns element with .stop()
+  let t = null;
+  const stop = () => { if (t) { clearInterval(t); const i = TIMERS.indexOf(t); if (i >= 0) TIMERS.splice(i, 1); t = null; } play.textContent = '▶ Play'; };
+  const tick = () => { if (o.step() === false) stop(); };
+  const play = btn('▶ Play', () => { if (t) { stop(); return; } t = setInterval(tick, o.speed || 600); TIMERS.push(t); play.textContent = '⏸ Pause'; tick(); }, 'primary');
+  const el = bar(play, btn('Step ›', () => { stop(); tick(); }), btn('⏮ Reset', () => { stop(); o.reset(); }));
+  el.stop = stop; return el;
+}
+function logbox() {
+  const el = h('div', { class: 'log', 'aria-live': 'polite' });
+  return { el, add(text, cls) { el.append(h('div', { class: cls || '' }, text)); el.scrollTop = el.scrollHeight; }, clear() { el.textContent = ''; } };
+}
+function stat(items) {   // items: [{l, v, cls}] -> element; call el.update(items) to refresh
+  const el = h('div', { class: 'stat' });
+  el.update = its => { el.textContent = ''; its.forEach(i => el.append(h('div', { class: i.cls || '' }, h('small', {}, i.l), h('b', {}, i.v)))); };
+  el.update(items || []); return el;
+}
+const API = { h, svg, rng, bar, btn, badge, note, seg, slider, player, logbox, stat, esc, timers: TIMERS };
+/* static architecture diagram: spec = {w,h,boxes:[[id,x,y,w,h,label,tone]],arrows:[[from,to,label,dashed]],cap}; tone 0..7 picks a --p colour; '\n' splits lines */
+function diagram(sp) {
+  const B = {}; sp.boxes.forEach(b => { B[b[0]] = { x: b[1], y: b[2], w: b[3], h: b[4] }; });
+  const s = svg('svg', { viewBox: `0 0 ${sp.w} ${sp.h}`, role: 'img', 'aria-label': sp.cap || 'diagram', style: 'width:100%;min-width:' + Math.min(sp.w, 540) + 'px;max-width:' + sp.w + 'px;height:auto;display:block;margin:0 auto' });
+  s.append(svg('defs', {}, svg('marker', { id: 'ah', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, svg('path', { d: 'M0 0L10 5L0 10z', fill: 'currentColor' }))));
+  const edge = (a, t) => { const cx = a.x + a.w / 2, cy = a.y + a.h / 2, dx = t.x + t.w / 2 - cx, dy = t.y + t.h / 2 - cy; const k = Math.min(dx ? (a.w / 2) / Math.abs(dx) : 1e9, dy ? (a.h / 2) / Math.abs(dy) : 1e9); return [cx + dx * k, cy + dy * k]; };
+  (sp.arrows || []).forEach(([f, t, lab, dash]) => {
+    const [x1, y1] = edge(B[f], B[t]), [x2, y2] = edge(B[t], B[f]);
+    s.append(svg('line', { x1, y1, x2, y2, stroke: 'currentColor', 'stroke-width': 1.6, 'stroke-dasharray': dash ? '5 4' : null, 'marker-end': 'url(#ah)', style: 'color:var(--mut)' }));
+    if (lab) s.append(svg('text', { x: (x1 + x2) / 2, y: (y1 + y2) / 2 - 5, 'text-anchor': 'middle', 'font-size': 11, fill: 'var(--mut)' }, lab));
+  });
+  sp.boxes.forEach(([id, x, y, w, hh, lab, tone]) => {
+    s.append(svg('rect', { x, y, width: w, height: hh, rx: 9, fill: tone == null ? 'var(--card)' : 'var(--p' + tone + ')', stroke: 'var(--line)', 'stroke-width': 1.5 }));
+    const ls = String(lab).split('\n'), y0 = y + hh / 2 - (ls.length - 1) * 8 + 4;
+    ls.forEach((l, i) => s.append(svg('text', { x: x + w / 2, y: y0 + i * 16, 'text-anchor': 'middle', 'font-size': 12.5, fill: 'var(--ink)', 'font-weight': i === 0 && ls.length > 1 ? 700 : 400 }, l)));
+  });
+  return h('figure', { class: 'arch' }, h('div', { class: 'svgw' }, s), sp.cap ? h('figcaption', { class: 'note' }, sp.cap) : null);
+}
+API.diagram = diagram;
+
+/* Database Systems overview. Detailed chapter diagnostics and playgrounds are the next milestone.
+   Keep single-quoted strings and the first four chapter fields in order for tools/build_site_index.py. */
+const COURSE={
+ title:'Database Systems',kick:'16 chapters · CMU 15-445 + CMU 15-721',
+ h1:'Build a database <span>from rows to lakehouses</span>',
+ lead:'A practical path through the foundations in CMU 15-445 and the advanced execution and analytical systems in CMU 15-721. Start with relations and pages, then follow a query through indexes, execution, optimization, transactions, recovery, distributed OLTP, warehouses and lakehouses.',
+ flat:true,parts:[{name:'Database Systems',from:0,to:16}]
+};
+
+const PHASES=[
+ {t:'SQL Visual Cheat Sheet',s:'query order · windows · CTEs'},
+ {t:'Pages, Records, and the Buffer Pool',s:'pages · frames · eviction'},
+ {t:'Storage Models, File Formats, and Compression',s:'rows · columns · encoding'},
+ {t:'Hash Tables, Indexes, and Filters',s:'hashing · B+ trees · Bloom filters'},
+ {t:'Query Execution Engine',s:'operators · pipelines · pushdown'},
+ {t:'Sorting, Aggregation, and Join Algorithms',s:'sort · hash · spill'},
+ {t:'Server-Side Logic and UDFs',s:'inlining · batching · vectorization'},
+ {t:'Database Networking and Data Transfer',s:'protocols · fetch size · Arrow'},
+ {t:'Query Optimization and Cost Models',s:'statistics · plan search · cost'},
+ {t:'Vectorized, Compiled, and Parallel Execution',s:'SIMD · JIT · work stealing'},
+ {t:'Transactions and Isolation',s:'ACID · schedules · anomalies'},
+ {t:'Concurrency Control and MVCC',s:'2PL · OCC · versions'},
+ {t:'Logging and Crash Recovery',s:'WAL · checkpoints · ARIES'},
+ {t:'Distributed OLTP Databases',s:'sharding · replication · 2PC'},
+ {t:'Cloud Data Warehouses',s:'disaggregation · shuffle · elasticity'},
+ {t:'Lakehouse and Embedded Analytics',s:'object storage · snapshots · local OLAP'}
+];
+
+const previewProblems=items=>items.map(t=>({
+ t:t,
+ ex:'Planned from production-facing scenarios in the approved course outline.',
+ why:'The detailed mechanism, representative signal and failure diagram will be added with this chapter.',
+ fix:'The full chapter will provide concrete fix steps and a verification method.'
+}));
+
+const CHAPTERS=[
+{ask:'How do we prevent duplicate data and incorrect joins from corrupting business results?',
+ why:'Relations, constraints and SQL state the data contract while the database chooses how to retrieve it.',
+ principle:'Model facts as relations and enforce invariants at the database boundary.',
+ design:'Choose keys, constraints and query semantics before optimizing access paths.',
+ layout:'custom',
+ scene:['A commerce application stores customers, orders and payments, but duplicate records and an incorrect join inflate reported revenue.','This chapter establishes the language and invariants used by every later chapter.'],
+ idea:['A <b>relation</b> is a set-like collection of tuples with named attributes.','<b>Keys and constraints</b> keep invalid states out of the database.','<b>SQL</b> describes the result; the engine chooses the physical work.'],
+ layout:'custom',pg:'relational'},
+
+{ask:'Why store rows in pages, and keep only some of them in memory?',
+ why:'Disk is far slower than memory, so the database moves fixed-size pages through a bounded set of in-memory frames and keeps the pages that will be reused.',
+ principle:'Manage data in pages, and decide what stays in RAM from how pages are actually accessed.',
+ design:'Track each frame with a pin count and a dirty flag: a page in use is never evicted, and a changed page is never lost.',
+ scene:['A database stores rows on disk. A query can only work on data that is in memory (RAM), and reading from disk is far slower.','So the database groups rows into fixed-size <b>pages</b>, for example 8 KB. Every disk read moves a whole page, so one read can serve many rows.','But a 200 GB table does not fit in 16 GB of RAM (illustrative). A lookup whose pages are in memory takes 2 ms; one that must read them from disk can take 3 seconds.','So the database keeps a limited set of pages in memory, called the <b>buffer pool</b>, and decides which pages stay.'],
+ common:[
+  {tab:'Thrashing',t:'The hot set is bigger than the buffer pool',sym:'<b>Hit rate</b> collapses once the working set stops fitting in the pool.',ctx:'A report reads five pages in a loop, again and again. The pool has 4 frames, so each page is evicted just before it is needed again.',why:'LRU evicts the page that was used longest ago, and in a loop that is exactly the page needed next. Every access misses, so the cache never helps.',log:{text:'-- representative output, counts illustrative\nIndex Scan using orders_customer_idx on orders  (actual time=0.041..2871.337 rows=14 loops=1)\n  Buffers: shared hit=212 read=18427\nExecution Time: 2871.802 ms',note:'Run the same query twice. If <code>shared read</code> stays large and <code>shared hit</code> stays small, the working set is not staying cached.'},sim:{bad:{frames:4,start:'Start: the pool has 4 frames and the report starts its loop.',ops:[{page:'P1'},{page:'P2'},{page:'P3'},{page:'P4'},{page:'P5'},{page:'P1'},{page:'P2'},{page:'P3'},{page:'P4'},{page:'P5'},{page:'P1'},{page:'P2'},{page:'P3'},{page:'P4'},{page:'P5'}]},good:{frames:6,start:'Start: the same loop, but the pool now has 6 frames.',ops:[{page:'P1'},{page:'P2'},{page:'P3'},{page:'P4'},{page:'P5'},{page:'P1'},{page:'P2'},{page:'P3'},{page:'P4'},{page:'P5'},{page:'P1'},{page:'P2'},{page:'P3'},{page:'P4'},{page:'P5'}]}},fix:['Measure first: run <code>EXPLAIN (ANALYZE, BUFFERS)</code> twice on the same query, and read the per-table cache hit ratio from <code>pg_statio_user_tables</code> (<code>heap_blks_hit</code> against <code>heap_blks_read</code>).','Size the pool to the hot set. The PostgreSQL documentation suggests starting <code>shared_buffers</code> at about 25% of RAM on a dedicated server, and leaving the rest to the OS page cache.','Touch fewer pages per request: add an index that covers the predicate, or keep related rows together, so the hot set shrinks.','Verify: run the same query twice after the change. The second run should show almost no <code>read</code>.']},
+  {tab:'Leaked pin',t:'A pin is never released, so its frame can never be reused',sym:'<b>Free frames</b> run out after a few failed requests, and then the next request waits forever.',ctx:'An error path in a storage extension returns early without unpinning. Each failed request leaves its frame pinned for the life of the process.',why:'A pin is a reference count, and eviction needs the count at zero. Time never clears a missing unpin, so the unpinned frames drain until none are left.',log:{text:'-- representative MySQL/InnoDB output, wording varies by version\n[Warning] InnoDB: Difficult to find free blocks in the buffer pool (search iterations ...)!\n\nSHOW ENGINE INNODB STATUS;  ->  BUFFER POOL AND MEMORY: Free buffers 0',note:'Free buffers at 0 with rising search iterations means no frame can be reused. Look for references that never went away.'},sim:{bad:{frames:4,start:'Start: the pool is empty. Requests 2 to 5 fail on an error path.',ops:[{page:'P1'},{page:'P2',leak:true},{page:'P3',leak:true},{page:'P4',leak:true},{page:'P5',leak:true},{page:'P6'}]},good:{frames:4,start:'Start: the same requests, but every path releases its pin.',ops:[{page:'P1'},{page:'P2'},{page:'P3'},{page:'P4'},{page:'P5'},{page:'P6'}]}},fix:['Pair every pin with an unpin on every exit path. Use a guard that releases on scope exit: RAII in C++ or Rust, try-with-resources in Java, defer in Go.','Add an assertion in debug and test builds: when a request ends, every frame it touched must have a pin count of zero.','Find the leaking path with diagnostics. In MySQL, <code>SHOW ENGINE INNODB STATUS</code> reports free buffers and pending reads; in PostgreSQL, the <code>pg_buffercache</code> extension shows what each buffer holds.','Verify: run the failing path 10,000 times in a test, then check that the number of free frames matches the count before the test.']},
+  {tab:'Scan flooding',t:'A one-time scan evicts the hot pages',sym:'<b>Checkout</b> latency rises only while the nightly export runs.',ctx:'A nightly export reads a 180 GB sales table once, page by page. It passes through the same buffer pool that serves checkout, so the checkout hot set is replaced every night.',why:'LRU keeps the most recently used pages. A scan touches many pages exactly once, and each one is more recent than the hot pages, so the scan pushes them out. The export gains nothing from caching, yet it uses the cache that other queries need.',log:{text:'-- representative pg_stat_io (PostgreSQL 16+), counts illustrative\nbackend_type   | context  |   reads     |    hits\nclient backend | normal   |   412,908   |  9,811,002\nclient backend | bulkread | 1,920,000   |          0',note:'A <code>bulkread</code> row with many reads and no hits is a scan. If <code>normal</code> reads rise in the same window, the hot set is being evicted.'},sim:{bad:{frames:4,start:'Start: the pool holds the hot set H1 to H3 and one scan page.',ops:[{page:'H1'},{page:'H2'},{page:'H3'},{page:'H1'},{page:'H2'},{page:'H3'},{page:'S1',scan:true},{page:'S2',scan:true},{page:'S3',scan:true},{page:'S4',scan:true},{page:'S5',scan:true},{page:'S6',scan:true},{page:'H1'},{page:'H2'},{page:'H3'}]},good:{frames:4,scanRing:true,start:'Start: the same workload, but scan pages use one reserved frame.',ops:[{page:'H1'},{page:'H2'},{page:'H3'},{page:'H1'},{page:'H2'},{page:'H3'},{page:'S1',scan:true},{page:'S2',scan:true},{page:'S3',scan:true},{page:'S4',scan:true},{page:'S5',scan:true},{page:'S6',scan:true},{page:'H1'},{page:'H2'},{page:'H3'}]}},fix:['Give large scans a bounded ring. PostgreSQL does this for large sequential scans, VACUUM and COPY: they reuse a small 256 kB ring of buffers instead of the whole pool.','In MySQL/InnoDB, rely on midpoint insertion. Pages read by a scan enter the old sublist first; <code>innodb_old_blocks_time</code> (default 1000 ms) delays promotion, and <code>innodb_old_blocks_pct</code> sets the old-sublist share.','Move the export to a replica or to an off-peak window, so it does not compete with the hot set on the primary.','Verify: compare checkout p99 latency and <code>pg_stat_io</code> reads in context <code>normal</code> across two export runs, before and after the change.']},
+  {tab:'Dirty eviction',t:'A read must write a dirty page before it can reuse the frame',sym:'<b>Read latency</b> spikes during write bursts, while disk read throughput looks normal.',ctx:'An order-ingest service updates about 8,000 rows a second. The background writer cannot flush pages as fast as writers dirty them, so most frames a reader needs hold changes that are not on disk yet.',why:'A frame cannot be reused while it holds unsaved changes. A backend that needs a frame and finds a dirty victim must write it first, so the read waits on a write. That is background flushing work done inside the query path.',log:{text:'-- representative pg_stat_bgwriter (PostgreSQL 16 and earlier), counts illustrative\n buffers_clean | buffers_alloc | buffers_backend\n   1,203,411   |  9,870,114   |   6,402,955   <- written by query backends',note:'A rising <code>buffers_backend</code> means query backends are doing the writer&rsquo;s job. PostgreSQL 17 moved these counts into <code>pg_stat_io</code>.'},sim:{bad:{frames:4,init:[{p:'A',dirty:1},{p:'B',dirty:1},{p:'C',dirty:1},{p:'D',dirty:1}],start:'Start: every frame holds a dirty page. Nothing has been flushed yet.',ops:[{page:'E'},{page:'F'}]},good:{frames:4,init:[{p:'A',dirty:1},{p:'B',dirty:1},{p:'C',dirty:1},{p:'D',dirty:1}],cleaner:true,idle:4,start:'Start: the same dirty pool, and the background writer runs before the requests.',ops:[{page:'E'},{page:'F'}]}},fix:['Keep the background writer ahead of the workload: raise <code>bgwriter_lru_maxpages</code> and lower <code>bgwriter_delay</code>, so dirty pages are written before a backend needs their frames.','Track <code>buffers_backend</code> (or writes by backend in <code>pg_stat_io</code>) as a rate. It should stay small next to background writes.','Spread the writes: commit in smaller batches so dirty pages reach disk steadily, instead of in one burst. Checkpoint I/O bursts are a separate mechanism, covered in chapter 13.','Verify: replay the same write burst and compare p99 read latency before and after the change.']}
+ ],
+walk:{title:'How is a row stored so we can find it again?',note:'Sizes are illustrative: 8 KB page, 24-byte header, 4-byte slots, 14-byte rows. A row is identified by (page, slot).',page:8192,header:24,slot:4,rec:14,
+ data:[{n:'XYZ',a:45,off:8178},{n:'LMN',a:30,off:8164},{n:'ABC',a:123,off:8150}],
+ intro:{sql:"-- customers: page 17 already holds XYZ and LMN",t:"Start: each row is stored inside a page. A page has a header, a slot array that grows down from the top, and records that grow up from the bottom. A row is found again by its record ID: (page, slot).",page:{slots:2,recs:2,hlSlot:-1,hlRec:-1,scan:-1,match:false}},
+ steps:[
+  {sql:"INSERT INTO customers VALUES ('ABC', 123);",t:"The free-space map says page 17 has room. The page header says 8132 bytes are free, enough for a 14-byte row.",page:{slots:2,recs:2,hlSlot:-1,hlRec:-1,scan:-1,match:false}},
+  {sql:"INSERT INTO customers VALUES ('ABC', 123);",t:"Write the record at the end of the free space, at byte 8150. Records grow up from the bottom, so free space shrinks by 14 bytes.",page:{slots:2,recs:3,hlSlot:-1,hlRec:2,scan:-1,match:false}},
+  {sql:"INSERT INTO customers VALUES ('ABC', 123);",t:"Add slot 2 with the record's offset (8150) and length (14). The new row's record ID is (page 17, slot 2).",page:{slots:3,recs:3,hlSlot:2,hlRec:-1,scan:-1,match:false}},
+  {sql:"INSERT INTO customers VALUES ('ABC', 123);",t:"The page is changed in memory and marked dirty. The data file catches up later, when the buffer pool flushes the page.",page:{slots:3,recs:3,hlSlot:-1,hlRec:-1,scan:-1,match:false}},
+  {sql:"SELECT name, age FROM customers WHERE age = 123;",t:"No index exists, so the executor scans the table, starting with slot 0 of page 17.",page:{slots:3,recs:3,hlSlot:-1,hlRec:-1,scan:0,match:false}},
+  {sql:"SELECT name, age FROM customers WHERE age = 123;",t:"Slot 0 gives byte 8178: (XYZ, 45). Age 45 does not match, so the row is skipped.",page:{slots:3,recs:3,hlSlot:-1,hlRec:-1,scan:1,match:false}},
+  {sql:"SELECT name, age FROM customers WHERE age = 123;",t:"Slot 1 gives byte 8164: (LMN, 30). Age 30 does not match, so it is skipped.",page:{slots:3,recs:3,hlSlot:-1,hlRec:-1,scan:2,match:true}},
+  {sql:"SELECT name, age FROM customers WHERE age = 123;",t:"Slot 2 gives byte 8150: (ABC, 123). Age 123 matches, so the row is returned. The row was reached through its slot, not by searching the raw bytes.",page:{slots:3,recs:3,hlSlot:-1,hlRec:-1,scan:2,match:true}}
+ ]},
+ archTitle:'How do we avoid a disk read on every request?',
+ archSteps:{
+ modes:[{v:'free',l:'Pool has free frames'},{v:'full',l:'Pool is full'}],
+ init:{
+  free:[[17,0,0],[8,0,0],null,null],
+  full:[[17,0,0],[8,0,0],[23,0,0],[42,0,1]]
+ },
+ intro:{
+  free:'Start: frame 1 holds page 17 and frame 2 holds page 8. Frames 3 and 4 are free, so the pool has room to spare.',
+  full:'Start: all four frames are used, holding pages 17, 8, 23 and 42. Page 42 is dirty (changed in RAM only) and is the least recently used frame.'
+ },
+ free:[
+  {t:'Read page 17. The executor asks the buffer pool for it and never talks to the disk.',box:['exec','bpm'],arrows:[0],dot:[['exec','bpm']],fx:[]},
+  {t:'Page table lookup: page 17 is in frame 1. This is a hit, so no disk I/O is needed.',box:['bpm'],arrows:[],dot:null,look:17,fx:[]},
+  {t:'Frame 1 is pinned (pin count 0 to 1) and returned to the executor, which reads the row.',box:['bpm','frames','exec'],arrows:[2],dot:[['bpm','frames'],['frames','exec']],fx:[{f:0,pin:1}]},
+  {t:'The executor unpins frame 1 (pin count back to 0). The frame can be evicted again.',box:['frames'],arrows:[],dot:null,fx:[{f:0,pin:-1}]},
+  {t:'Insert a new row that belongs on page 17. The executor asks the buffer pool for page 17.',box:['exec','bpm'],arrows:[0],dot:[['exec','bpm']],fx:[]},
+  {t:'Page 17 is in frame 1, so this is a hit. The row is written into frame 1, so the frame is pinned and marked dirty.',box:['bpm','frames'],arrows:[2],dot:[['bpm','frames']],look:17,fx:[{f:0,pin:1},{f:0,dirty:1}]},
+  {t:'The executor unpins frame 1 (pin count back to 0). Page 17 stays dirty in RAM until a flush writes it to the data file.',box:['frames'],arrows:[],dot:null,fx:[{f:0,pin:-1}]},
+  {t:'Read page 99. Page 99 is not in the pool, so this is a miss.',box:['exec','bpm'],arrows:[0],dot:[['exec','bpm']],look:99,fx:[]},
+  {t:'Page table lookup fails. The buffer pool finds free frame 3, so it does not need to evict anything. The replacer stays idle.',box:['bpm','frames'],arrows:[2],dot:[['bpm','frames']],fx:[]},
+  {t:'The disk manager reads page 99 from the data file into frame 3. A free frame holds nothing, so no write-back is needed.',box:['disk','file','frames'],arrows:[5],dot:[['file','disk'],['disk','frames']],fx:[{f:2,load:99}]},
+  {t:'The page table maps page 99 to frame 3, the frame is pinned (pin count 1), and the page is returned to the executor.',box:['bpm','frames','exec'],arrows:[2],dot:[['frames','exec']],fx:[{f:2,pin:1}]},
+  {t:'Insert a new row into page 99. The row is written into frame 3 while it is still pinned, and the frame is marked dirty. Nothing reaches disk yet.',box:['exec','bpm','frames'],arrows:[0,2],dot:[['exec','bpm'],['bpm','frames']],fx:[{f:2,dirty:1}]},
+  {t:'Summary: 4 requests, 1 disk read, 0 writes. The executor releases its pin, so frame 3 is unpinned and dirty. The pool had room, so nothing was evicted.',box:[],arrows:[],dot:null,fx:[{f:2,pin:-1}]}
+ ],
+ full:[
+  {t:'Read page 17. The executor asks the buffer pool for it and never talks to the disk.',box:['exec','bpm'],arrows:[0],dot:[['exec','bpm']],fx:[]},
+  {t:'Page table lookup: page 17 is in frame 1. This is a hit, so no disk I/O is needed.',box:['bpm'],arrows:[],dot:null,look:17,fx:[]},
+  {t:'Frame 1 is pinned (pin count 0 to 1) and returned to the executor, which reads the row.',box:['bpm','frames','exec'],arrows:[2],dot:[['bpm','frames'],['frames','exec']],fx:[{f:0,pin:1}]},
+  {t:'The executor unpins frame 1 (pin count back to 0). The frame can be evicted again.',box:['frames'],arrows:[],dot:null,fx:[{f:0,pin:-1}]},
+  {t:'Insert a new row that belongs on page 17. The executor asks the buffer pool for page 17.',box:['exec','bpm'],arrows:[0],dot:[['exec','bpm']],fx:[]},
+  {t:'Page 17 is in frame 1, so this is a hit. The row is written into frame 1, so the frame is pinned and marked dirty.',box:['bpm','frames'],arrows:[2],dot:[['bpm','frames']],look:17,fx:[{f:0,pin:1},{f:0,dirty:1}]},
+  {t:'The executor unpins frame 1 (pin count back to 0). Page 17 stays dirty in RAM until a flush writes it to the data file.',box:['frames'],arrows:[],dot:null,fx:[{f:0,pin:-1}]},
+  {t:'Read page 99. Page 99 is not in the pool, so this is a miss.',box:['exec','bpm'],arrows:[0],dot:[['exec','bpm']],look:99,fx:[]},
+  {t:'Page table lookup fails. No frame is free, so the buffer pool must evict a page and asks the replacer for a victim.',box:['bpm','repl'],arrows:[1],dot:[['bpm','repl']],fx:[]},
+  {t:'The replacer picks frame 4, which holds page 42: the least recently used frame, and it is not pinned (pin count 0).',box:['repl','frames'],arrows:[],dot:[['repl','frames']],fx:[]},
+  {t:'Frame 4 is dirty, so page 42 must be written back to the data file before the frame can be reused. This extra write is the cost of a full pool.',box:['frames','disk','file'],arrows:[4,5],dot:[['frames','disk'],['disk','file']],fx:[{f:3,flush:1}]},
+  {t:'The disk manager reads page 99 from the data file into frame 4.',box:['disk','file','frames'],arrows:[5],dot:[['file','disk'],['disk','frames']],fx:[{f:3,load:99}]},
+  {t:'The page table maps page 99 to frame 4, the frame is pinned (pin count 1), and the page is returned to the executor.',box:['bpm','frames','exec'],arrows:[2],dot:[['frames','exec']],fx:[{f:3,pin:1}]},
+  {t:'Insert a new row into page 99. The row is written into frame 4 while it is still pinned, and the frame is marked dirty. Nothing reaches disk yet.',box:['exec','bpm','frames'],arrows:[0,2],dot:[['exec','bpm'],['bpm','frames']],fx:[{f:3,dirty:1}]},
+  {t:'Summary: 4 requests, 1 disk read and 1 disk write. The dirty victim had to be flushed first, so the same requests take longer when the pool is full.',box:[],arrows:[],dot:null,fx:[{f:3,pin:-1}]}
+ ]},
+ arch:{w:620,h:330,
+ comp:{
+  exec:{n:'Executor',d:'The part of the query engine that needs a row. It does not know where the row is stored. It only asks the buffer pool for a page ID, such as page 17, and then reads the record it needs from that page.'},
+  bpm:{n:'Buffer pool manager',d:'The coordinator. Every page request goes through it. It checks the <b>page table</b>, a map from page ID to frame (page 17 to frame 3): an entry means a <b>hit</b>, no entry means a <b>miss</b>. It calls the replacer and the disk manager when needed, and keeps the bookkeeping that makes caching safe.'},
+  frames:{n:'Buffer frames',d:'Fixed-size slots in RAM, each holding exactly one page. Each frame has a <b>pin count</b>, the number of users using it now (a pinned frame can never be evicted), and a <b>dirty flag</b>, which means its content differs from disk and must be written back before reuse.'},
+  repl:{n:'Replacer',d:'Picks a <b>victim</b> frame when no frame is free, and only from unpinned frames. <b>LRU</b> picks the least recently used frame. <b>Clock</b> approximates LRU cheaply with one reference bit per frame and a moving hand.'},
+  disk:{n:'Disk manager',d:'The only component that calls the operating system file API. It reads a whole page from the data file into a frame, and writes a dirty page back. It moves pages, never single rows.'},
+  file:{n:'Data file',d:'The durable copy of every page. Each page is a <b>slotted page</b>: a header, records packed from one end and a slot array from the other. A record ID (page and slot) stays stable even when records move inside the page.'}
+ },
+
+cap:'One request through the buffer pool. Illustrative flow: press Play or Step.',boxes:[['exec',10,125,110,70,'Executor\nasks for page 17',0],['bpm',230,125,190,80,'Buffer pool manager\npage table: page to frame',1],['repl',230,10,190,64,'Replacer\nLRU or Clock',2],['frames',230,245,190,64,'Buffer frames\npin count, dirty flag',3],['disk',480,125,130,80,'Disk manager\nread and write',4],['file',480,245,130,64,'Data file\nfixed-size pages',5]],arrows:[['exec','bpm','1 fetch'],['bpm','repl','3 miss: pick victim'],['bpm','frames','2 hit: return frame'],['bpm','disk','4 read'],['frames','disk','dirty: flush',true],['disk','file','I/O']]}},
+
+{ask:'How should data be arranged when transactions need rows but analytics reads only a few columns?',why:'Physical layout and encoding should match the workload that reads the data.',principle:'Minimize the bytes read and decoded for the dominant access pattern.',design:'Choose row or column organization, then add encodings and pruning metadata that match the filters.',layout:'custom',pg:'storage'},
+{ask:'How can one matching row be found without scanning 100 million records?',
+ why:'Auxiliary access structures eliminate rows that cannot match.',
+ principle:'Pay controlled write and storage cost to accelerate important reads.',
+ design:'Match hash tables, B+ trees and probabilistic filters to query shape.',
+ scene:['A customer lookup scans 100 million rows even though the predicate identifies one account.','Indexes turn physical organization into predictable lookup work.'],
+ idea:['A <b>hash index</b> targets equality lookups.','A <b>B+ tree</b> keeps sorted keys for point and range access.','A <b>Bloom filter</b> cheaply rejects definite misses while allowing false positives.'],
+ layout:'custom',pg:'indexes'},
+
+{ask:'How can a query return 100 rows without materializing gigabytes of intermediate data?',
+ why:'A physical plan can stream tuples through operators and push work toward the data source.',
+ principle:'Move and materialize only the rows and columns the result needs.',
+ design:'Compose operators into pipelines and isolate unavoidable pipeline breakers.',
+ scene:['A dashboard query returns 100 rows but the engine constructs a multi-gigabyte intermediate result first.','Execution strategy turns a logical query into concrete CPU, memory and I/O work.'],
+ idea:['An <b>operator</b> transforms a stream of tuples.','A <b>pipeline</b> passes data between operators without a full intermediate result.','<b>Predicate and projection pushdown</b> discard unnecessary rows and columns early.'],
+ layout:'custom',pg:'execution'},
+
+{ask:'Which physical algorithm keeps a large join or aggregation within its memory and I/O budget?',
+ why:'Sorting, hashing and joining have different costs under different sizes, orderings and distributions.',
+ principle:'Select physical algorithms from input properties and available memory.',
+ design:'Partition or spill deliberately when working state cannot remain in memory.',
+ scene:['A join that finishes instantly for 10,000 rows takes hours for 100 million and repeatedly fills temporary storage.','Blocking relational operators need explicit algorithms and resource budgets.'],
+ idea:['<b>External sort</b> creates ordered runs that fit in memory, then merges them.','A <b>hash join</b> builds a lookup structure for one input and probes it with the other.','<b>Spilling</b> moves excess working state to temporary storage.'],
+ layout:'custom',pg:'algorithms'},
+
+{ask:'When does moving application logic into a UDF make a query slower instead of faster?',
+ why:'Database logic performs well only when the optimizer can inspect, inline and batch it.',
+ principle:'Keep computation visible and set-oriented so the engine can optimize it.',
+ design:'Prefer relational expressions or batchable functions over opaque row-at-a-time calls.',
+ scene:['A scalar function called once per row turns a two-second report into a multi-minute query.','Server-side logic changes both optimization freedom and execution granularity.'],
+ idea:['A <b>UDF</b> packages computation that a query can call.','<b>Inlining</b> exposes function logic to normal query optimization.','<b>Batch execution</b> amortizes call overhead across many values.'],
+ layout:'custom',pg:'udfs'},
+
+{ask:'Why can returning query results take longer than computing them?',
+ why:'Round trips, serialization, copies and client materialization often dominate data transfer.',
+ principle:'Move results in bounded, efficient batches with minimal conversion.',
+ design:'Tune fetch size and choose formats that both producer and consumer understand.',
+ scene:['The server finishes a query in 200 ms, but transferring and converting the result takes 12 seconds.','The client protocol is part of end-to-end query performance.'],
+ idea:['A <b>wire protocol</b> frames requests, results and errors between client and server.','<b>Fetch size</b> controls how many rows arrive per network round trip.','<b>Columnar interchange</b> can avoid rebuilding every value into row objects.'],
+ layout:'custom',pg:'networking'},
+
+{ask:'How can two equivalent query plans differ in runtime by a factor of 1,000?',
+ why:'The optimizer searches equivalent plans and estimates their resource cost.',
+ principle:'Plan quality depends on both search strategy and cardinality estimates.',
+ design:'Maintain useful statistics and retain enough search budget for important joins.',
+ scene:['One join order filters early while another creates a massive intermediate relation before applying the same predicate.','Optimization decides which legal physical plan the execution engine will run.'],
+ idea:['A <b>rewrite rule</b> creates an equivalent logical expression.','<b>Cardinality estimation</b> predicts how many rows each operator produces.','A <b>cost model</b> ranks candidate physical plans.'],
+ layout:'custom',pg:'optimizer'},
+
+{ask:'How do modern engines use all CPU cores without losing performance to overhead?',
+ why:'Batching, compiled loops and small schedulable morsels reduce per-row overhead and balance cores.',
+ principle:'Feed CPUs regular batches while keeping scheduling and data movement bounded.',
+ design:'Choose vector size, compilation scope and work placement from query duration and hardware.',
+ scene:['All data is in memory, yet function calls, unpredictable branches and scheduler overhead dominate runtime.','CPU-efficient execution becomes critical after storage latency is removed.'],
+ idea:['<b>Vectorized execution</b> processes a batch of values in a tight loop.','<b>Compilation</b> specializes work for one query.','<b>Morsel-driven scheduling</b> distributes small pieces of input across workers.'],
+ layout:'custom',pg:'cpu'},
+
+{ask:'Which interleavings may transactions observe without violating business invariants?',
+ why:'Isolation levels define which intermediate states concurrent transactions may see.',
+ principle:'Choose the weakest isolation level that still preserves explicit invariants.',
+ design:'Express correctness as schedules and anomalies before selecting a database setting.',
+ scene:['Two on-call scheduling transactions both observe another doctor and both leave, violating the requirement that one remains.','A transaction can be locally correct while its interleaving is not.'],
+ idea:['A <b>transaction</b> groups operations into one logical unit.','A <b>schedule</b> is the interleaving of operations from concurrent transactions.','<b>Serializable isolation</b> makes the outcome equivalent to some serial order.'],
+ layout:'custom',pg:'isolation'},
+
+{ask:'Should conflicting transactions wait, abort, or read a different version?',
+ why:'Concurrency-control protocols enforce isolation through locks, ordering, validation or versions.',
+ principle:'Match the conflict policy to contention, read duration and retry behavior.',
+ design:'Observe waits, aborts and retained versions instead of treating concurrency control as invisible.',
+ scene:['Thousands of transactions compete for the same records while long reports need stable snapshots.','The enforcement protocol determines throughput and failure modes.'],
+ idea:['<b>Two-phase locking</b> orders access with shared and exclusive locks.','<b>Optimistic control</b> validates work before commit and aborts conflicts.','<b>MVCC</b> keeps multiple row versions so readers can use a snapshot.'],
+ layout:'custom',pg:'mvcc'},
+
+{ask:'How does a database recover after power fails halfway through a transaction?',
+ why:'Write-ahead logging records durable intent before changed data pages reach storage.',
+ principle:'Make the log durable first, then use redo and undo to restore a valid state.',
+ design:'Coordinate log sequence numbers, page writes, commit records and checkpoints.',
+ scene:['Power fails after one account is debited but before the corresponding credit reaches its data page.','Recovery must preserve committed work and remove incomplete work.'],
+ idea:['A <b>write-ahead log</b> records changes before their data pages are written.','A <b>checkpoint</b> bounds how far recovery must scan.','<b>Redo and undo</b> repeat durable work and reverse incomplete transactions.'],
+ layout:'custom',pg:'recovery'},
+
+{ask:'How can one atomic transaction update data owned by multiple shards?',
+ why:'Distributed OLTP coordinates partitioned state across independent failures.',
+ principle:'Make ownership explicit and coordinate only the transactions that cross boundaries.',
+ design:'Combine routing, replication, idempotency and a commit protocol with recovery rules.',
+ scene:['A transfer spans two shards and the coordinator crashes after one participant commits.','Partitioning adds capacity but also creates cross-node atomicity problems.'],
+ idea:['<b>Sharding</b> assigns subsets of data to different nodes.','<b>Replication</b> keeps redundant copies for availability and durability.','<b>Two-phase commit</b> asks participants to prepare before the global commit decision.'],
+ layout:'custom',pg:'distributed'},
+
+{ask:'How can thousands of users query petabytes without every team operating its own cluster?',
+ why:'Cloud warehouses separate durable storage, elastic compute and query coordination.',
+ principle:'Scale storage and compute independently while controlling distributed data movement.',
+ design:'Schedule scans, shuffles and caches within explicit concurrency and cost budgets.',
+ scene:['Many teams need bursty analytical capacity over petabytes, but fixed clusters sit idle or queue work.','Warehouse architecture decides elasticity, isolation and operating cost.'],
+ idea:['<b>Disaggregation</b> separates durable storage from compute workers.','A <b>shuffle</b> redistributes data between workers for joins and aggregation.','<b>Workload management</b> shares finite execution capacity across queries.'],
+ layout:'custom',pg:'warehouse'},
+
+{ask:'When should analytics run as a lakehouse service, a distributed engine, or an embedded process?',
+ why:'The engine and transaction boundary should live where the data and users need them.',
+ principle:'Choose deployment architecture from data size, update pattern, concurrency and ownership.',
+ design:'Separate object-file management from execution, or embed execution when one machine is enough.',
+ scene:['One team analyzes an object-store lake while another needs fast OLAP inside a laptop application.','The same columnar ideas lead to different coordination and operational models.'],
+ idea:['A <b>lakehouse</b> adds table metadata and transactional commits over object files.','An <b>embedded engine</b> runs in the application process without a database server.','A <b>snapshot commit</b> publishes a consistent set of data files and metadata.'],
+ common:previewProblems(['Small files overwhelm planning and I/O','Table metadata grows without maintenance','An embedded workload exceeds local memory']),pg:'lakehouse'}
+];
+
+</script>
+<script>
+const SQL_LOGICAL_ORDER=[
+ 'FROM','JOIN','WHERE','GROUP BY','HAVING','WINDOW','SELECT','DISTINCT','ORDER BY','LIMIT'
+];
+const SQL_KEYWORDS=new Set(('SELECT FROM WHERE JOIN INNER LEFT RIGHT FULL CROSS ON AS GROUP BY HAVING OVER PARTITION ORDER ROWS BETWEEN UNBOUNDED PRECEDING CURRENT ROW LIMIT OFFSET DISTINCT WITH RECURSIVE UNION ALL INSERT INTO UPDATE DELETE CREATE TABLE PRIMARY KEY FOREIGN REFERENCES UNIQUE NOT NULL IS AND OR DESC ASC CASE WHEN THEN ELSE END').split(' '));
+const SQL_FUNCTIONS=new Set(['AVG','COUNT','SUM','MIN','MAX','ROW_NUMBER','RANK','DENSE_RANK','LAG','LEAD']);
+
+function sqlEscape(text){
+ return String(text).replace(/[&<>]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[char]));
+}
+
+function sqlHighlightSql(code){
+ const tokens=String(code).match(/--[^\n]*|'(?:''|[^'])*'|\b\d+(?:\.\d+)?\b|<>|!=|<=|>=|::|[-+*/=<>]|\b[A-Za-z_][A-Za-z0-9_]*\b|\s+|./gs)||[];
+ return tokens.map(token=>{
+  if(/^\s+$/.test(token)) return token;
+  let kind='';
+  const upper=token.toUpperCase();
+  if(token.startsWith('--')) kind='comment';
+  else if(token.startsWith("'")) kind='str';
+  else if(/^\d/.test(token)) kind='num';
+  else if(SQL_FUNCTIONS.has(upper)) kind='fn';
+  else if(SQL_KEYWORDS.has(upper)) kind='kw';
+  else if(/^(<>|!=|<=|>=|::|[-+*/=<>])$/.test(token)) kind='op';
+  else if(/^[A-Za-z_]/.test(token)) kind='id';
+  return kind?'<span class="sqlcs-tok '+kind+'">'+sqlEscape(token)+'</span>':sqlEscape(token);
+ }).join('');
+}
+
+function sqlLogicalOrder(clauses){
+ const present=new Set(clauses);
+ return SQL_LOGICAL_ORDER.filter(clause=>present.has(clause));
+}
+
+function sqlLogicalPipeline(courses,enrollments,options){
+ const settings={minScore:75,minCount:2,limit:2,...(options||{})};
+ const fromRows=courses.map(row=>({cid:row.cid,name:row.name}));
+ const joined=[];
+ courses.forEach(course=>enrollments.forEach(enrollment=>{
+  if(course.cid===enrollment.cid) joined.push({
+   cid:course.cid,name:course.name,sid:enrollment.sid,score:enrollment.score
+  });
+ }));
+ const filtered=joined.filter(row=>row.score>=settings.minScore);
+ const grouped=[];
+ const groups=new Map();
+ filtered.forEach(row=>{
+  const group=groups.get(row.cid)||{cid:row.cid,name:row.name,count:0,sum:0,avgScore:0};
+  group.count+=1;
+  group.sum+=row.score;
+  group.avgScore=group.sum/group.count;
+  groups.set(row.cid,group);
+ });
+ groups.forEach(group=>grouped.push({...group}));
+ const having=grouped.filter(row=>row.count>=settings.minCount);
+ const selected=having.map(row=>({name:row.name,avgScore:row.avgScore}));
+ const ordered=[...selected].sort((a,b)=>b.avgScore-a.avgScore||a.name.localeCompare(b.name));
+ const limited=ordered.slice(0,settings.limit);
+ return [
+  {clause:'FROM',columns:['cid','name'],rows:fromRows},
+  {clause:'JOIN / ON',columns:['cid','name','sid','score'],rows:joined},
+  {clause:'WHERE',columns:['cid','name','sid','score'],rows:filtered},
+  {clause:'GROUP BY',columns:['cid','name','count','avgScore'],rows:grouped},
+  {clause:'HAVING',columns:['cid','name','count','avgScore'],rows:having},
+  {clause:'SELECT',columns:['name','avgScore'],rows:selected},
+  {clause:'ORDER BY',columns:['name','avgScore'],rows:ordered},
+  {clause:'LIMIT',columns:['name','avgScore'],rows:limited}
+ ];
+}
+
+function sqlGroupBy(rows,keyField,valueField){
+ const groups=new Map();
+ rows.forEach(row=>{
+  const key=row[keyField];
+  const group=groups.get(key)||{key:key,count:0,sum:0,average:0};
+  group.count+=1;
+  group.sum+=Number(row[valueField]);
+  group.average=group.sum/group.count;
+  groups.set(key,group);
+ });
+ return [...groups.values()];
+}
+
+function sqlWindowRows(rows,partitionField,orderField){
+ const partitions=new Map();
+ rows.forEach(row=>{
+  const key=row[partitionField];
+  if(!partitions.has(key)) partitions.set(key,[]);
+  partitions.get(key).push(row);
+ });
+ const result=[];
+ partitions.forEach(partition=>{
+  partition.sort((a,b)=>Number(b[orderField])-Number(a[orderField])||Number(a.sid)-Number(b.sid));
+  let runningTotal=0,previousValue,rank=0;
+  partition.forEach((row,index)=>{
+   const value=Number(row[orderField]);
+   runningTotal+=value;
+   if(value!==previousValue) rank=index+1;
+   result.push({...row,rowNumber:index+1,rank:rank,runningTotal:runningTotal});
+   previousValue=value;
+  });
+ });
+ return result;
+}
+
+function sqlCorrelatedExists(outerRows,innerRows,outerKey,innerKey){
+ return outerRows.map(outer=>{
+  const matches=innerRows.filter(inner=>inner[innerKey]===outer[outerKey]).length;
+  return {...outer,matches:matches,exists:matches>0};
+ });
+}
+
+function sqlRecursiveLevels(edges,start){
+ const visited=new Set([start]);
+ const levels=[[start]];
+ let frontier=[start];
+ while(frontier.length){
+  const next=[];
+  frontier.forEach(parent=>{
+   edges.forEach(([from,to])=>{
+    if(from===parent&&!visited.has(to)){
+     visited.add(to);
+     next.push(to);
+    }
+   });
+  });
+  if(!next.length) break;
+  levels.push(next);
+  frontier=next;
+ }
+ return levels;
+}
+
+PG.relational=function(root,A){
+ const {h,bar,btn,badge,note,seg,stat}=A;
+ root.setAttribute('data-sql-cheatsheet','');
+ const enrolled=[
+  {sid:53666,name:'RZA',cid:'15-445',score:80},
+  {sid:53655,name:'Tupac',cid:'15-445',score:90},
+  {sid:53688,name:'Taylor',cid:'15-721',score:95},
+  {sid:53666,name:'RZA',cid:'15-721',score:70},
+  {sid:53655,name:'Tupac',cid:'15-826',score:88}
+ ];
+
+ function query(code){
+  const codeElement=h('code',{class:'sqlcs-code'});
+  const lines=String(code).split('\n').map((line,index)=>{
+   const lineElement=h('span',{
+    class:'sqlcs-code-line',
+    'data-line':index,
+    html:sqlHighlightSql(line)||'&nbsp;'
+   });
+   codeElement.append(lineElement);
+   return lineElement;
+  });
+  const box=h('div',{class:'sqlcs-query'},
+   h('div',{class:'sqlcs-querylabel'},'SQL'),
+   h('pre',{},codeElement));
+  box.setActive=activeLines=>{
+   const active=new Set(activeLines||[]);
+   lines.forEach((line,index)=>line.classList.toggle('active',active.has(index)));
+  };
+  return box;
+ }
+
+ function table(headers,rows,active,classes){
+  return h('div',{class:'sqlcs-tablewrap'},h('table',{class:'sqlcs-table'},
+   h('thead',{},h('tr',{},headers.map(x=>h('th',{},x)))),
+   h('tbody',{},rows.map((row,index)=>h('tr',{
+    class:'sqlcs-row'+(index===active?' active':'')+(classes&&classes[index]?' '+classes[index]:'')
+   },row.map(cell=>h('td',{},cell)))))));
+ }
+
+ function controls(step,reset){
+  return bar(
+   h('button',{class:'primary','data-action':'step',onclick:step},'Step →'),
+   h('button',{'data-action':'reset',onclick:reset},'Reset'));
+ }
+
+ function lab(eyebrow,title,description,code,key,build){
+  const body=h('div',{class:'sqlcs-labbody'});
+  const queryBox=query(code);
+  const section=h('section',{class:'sqlcs-section sqlcs-lab','data-lab':key},
+   h('div',{class:'sqlcs-sectionhead'},
+    h('div',{},h('div',{class:'sqlcs-eyebrow'},eyebrow),h('h2',{},title),h('p',{},description))),
+   queryBox,body);
+  build(body,queryBox);
+  return section;
+ }
+
+ function miniRelation(stage){
+  const shown=stage.rows.slice(0,3);
+  const format=value=>typeof value==='number'&&!Number.isInteger(value)?value.toFixed(1):value;
+  return h('div',{class:'sqlcs-miniwrap'},
+   h('table',{class:'sqlcs-minitable'},
+    h('thead',{},h('tr',{},stage.columns.map(column=>h('th',{},column.replace('avgScore','avg_score'))))),
+    h('tbody',{},shown.map(row=>h('tr',{},stage.columns.map(column=>h('td',{},format(row[column]))))))),
+   stage.rows.length>shown.length?h('small',{class:'sqlcs-more'},'＋ '+(stage.rows.length-shown.length)+' more row'+(stage.rows.length-shown.length===1?'':'s')):null);
+ }
+
+ const intro=h('header',{class:'sqlcs-intro','data-sql-cheatsheet':''},
+  h('div',{class:'sqlcs-kicker'},'CMU 15-445 · Lectures 1–2 · visual reference'),
+  h('h1',{},'See what SQL does to rows'),
+  h('p',{},'Step through the animated sections to expose the intermediate relations that a declarative query normally hides.'),
+  h('div',{class:'sqlcs-rule'},
+   h('strong',{},'Mental model'),
+   h('span',{},'SQL says '),h('b',{},'what result you want'),h('span',{},'; the DBMS chooses '),h('b',{},'how to produce it'),h('span',{},'.')));
+
+ const logical=lab(
+  'Animation 1','Logical query processing',
+  'A query is written SELECT-first, but its result is formed as a pipeline of intermediate relations. Step through the clauses to see how rows are joined, filtered, grouped and shaped.',
+  'SELECT c.name, AVG(e.score) AS avg_score\nFROM course AS c\nJOIN enrolled AS e\n  ON e.cid = c.cid\nWHERE e.score >= 75\nGROUP BY c.cid, c.name\nHAVING COUNT(*) >= 2\nORDER BY avg_score DESC\nLIMIT 2;',
+  'logical',(body,queryBox)=>{
+   const courses=[
+    {cid:'15-445',name:'Database Systems'},
+    {cid:'15-721',name:'Advanced Databases'},
+    {cid:'15-826',name:'Data Mining'},
+    {cid:'15-799',name:'Special Topics'}
+   ];
+   const enrollments=[
+    {sid:1,cid:'15-445',score:90},{sid:2,cid:'15-445',score:80},
+    {sid:3,cid:'15-721',score:95},{sid:4,cid:'15-721',score:82},
+    {sid:5,cid:'15-721',score:70},{sid:6,cid:'15-826',score:88},
+    {sid:7,cid:'15-799',score:78},{sid:8,cid:'15-799',score:76}
+   ];
+   const stages=sqlLogicalPipeline(courses,enrollments,{minScore:75,minCount:2,limit:2});
+   const descriptions={
+    'FROM':'Start with every course row.',
+    'JOIN / ON':'Match each course to its enrollment rows.',
+    'WHERE':'Keep enrollment scores of 75 or higher.',
+    'GROUP BY':'Collapse matching rows into one group per course.',
+    'HAVING':'Keep course groups with at least two students.',
+    'SELECT':'Project the course name and computed average.',
+    'ORDER BY':'Sort the averages from highest to lowest.',
+    'LIMIT':'Return only the first two rows.'
+   };
+   const expressions={
+    'FROM':'course AS c',
+    'JOIN / ON':'enrolled AS e  ·  e.cid = c.cid',
+    'WHERE':'e.score >= 75',
+    'GROUP BY':'c.cid, c.name',
+    'HAVING':'COUNT(*) >= 2',
+    'SELECT':'c.name, AVG(e.score)',
+    'ORDER BY':'avg_score DESC',
+    'LIMIT':'2 rows'
+   };
+   const queryLines={
+    'FROM':[1],'JOIN / ON':[2,3],'WHERE':[4],'GROUP BY':[5],
+    'HAVING':[6],'SELECT':[0],'ORDER BY':[7],'LIMIT':[8]
+   };
+   let stepIndex=-1;
+   const plan=h('div',{class:'sqlcs-plan'}),readout=h('div',{class:'out'}),tiles=stat([]);
+   function render(){
+    plan.replaceChildren(...stages.map((stage,index)=>{
+     const state=index===stepIndex?' active':index<stepIndex?' done':' future';
+     return h('div',{class:'sqlcs-planrow'+state},
+      h('div',{class:'sqlcs-resultcard'},
+       h('div',{class:'sqlcs-resulthead'},h('span',{},'Relation '+(index+1)),h('b',{},stage.rows.length+' row'+(stage.rows.length===1?'':'s'))),
+       miniRelation(stage)),
+      h('div',{class:'sqlcs-connector','aria-hidden':'true'},h('i',{})),
+      h('div',{class:'sqlcs-clausecard'},
+       h('span',{class:'sqlcs-stepnum'},String(index+1).padStart(2,'0')),
+       h('div',{},h('b',{},stage.clause),h('code',{html:sqlHighlightSql(expressions[stage.clause])}),h('small',{},descriptions[stage.clause]))));
+    }));
+    const stage=stages[stepIndex];
+    queryBox.setActive(stage?queryLines[stage.clause]:[]);
+    readout.replaceChildren(stage?badge(stage.clause,'info'):badge('Ready','warn'),' ',stage?descriptions[stage.clause]:'The pipeline starts at FROM—even though SELECT appears first in the query.');
+    tiles.update([
+     {l:'stage',v:stepIndex<0?'0 / '+stages.length:(stepIndex+1)+' / '+stages.length},
+     {l:'clause',v:stage?stage.clause:'—'},
+     {l:'output rows',v:stage?stage.rows.length:'—'}
+    ]);
+   }
+   function step(){stepIndex=Math.min(stages.length-1,stepIndex+1);render();}
+   function reset(){stepIndex=-1;render();}
+   render();
+   body.append(note('Try this: press Step. The active clause lights up in the SQL and its intermediate relation appears on the left.'),plan,controls(step,reset),tiles,readout);
+  });
+
+ const grouping=lab(
+  'Animation 2','GROUP BY + HAVING',
+  'GROUP BY collapses many input rows into one row per key. WHERE filters rows before grouping; HAVING filters the aggregate groups after grouping.',
+  'SELECT cid, COUNT(*) AS students, AVG(score) AS avg_score\nFROM enrolled\nGROUP BY cid\nHAVING AVG(score) >= 85;',
+  'group',body=>{
+   let stepIndex=-1;
+   const input=h('div',{}),output=h('div',{}),readout=h('div',{class:'out'}),tiles=stat([]);
+   function render(){
+    const processed=enrolled.slice(0,stepIndex+1);
+    const groups=sqlGroupBy(processed,'cid','score');
+    input.replaceChildren(h('h3',{},'Input bag'),table(['sid','cid','score'],enrolled.map(r=>[r.sid,r.cid,r.score]),stepIndex));
+    output.replaceChildren(h('h3',{},'One row per group'),table(['cid','count','avg','HAVING'],groups.map(g=>[
+     g.key,g.count,g.average.toFixed(1),g.average>=85?'keep':'remove'
+    ]),-1,groups.map(g=>g.average>=85?'keep':'drop')));
+    const active=enrolled[stepIndex];
+    readout.replaceChildren(active?badge(active.cid,'info'):badge('Ready','warn'),' ',active?'Add score '+active.score+' to partition '+active.cid+'.':'No rows have reached GROUP BY yet.');
+    tiles.update([{l:'rows consumed',v:Math.max(0,stepIndex+1)+' / '+enrolled.length},{l:'groups',v:groups.length},{l:'groups after HAVING',v:groups.filter(g=>g.average>=85).length}]);
+   }
+   function step(){stepIndex=Math.min(enrolled.length-1,stepIndex+1);render();}
+   function reset(){stepIndex=-1;render();}
+   render();
+   body.append(note('Try this: step through all five rows. Notice that output cardinality follows the number of course groups, not the number of students.'),h('div',{class:'cols two sqlcs-panes'},input,output),controls(step,reset),tiles,readout);
+  });
+
+ const windows=lab(
+  'Animation 3','Window functions',
+  'A window partitions and orders rows like GROUP BY, but it does not collapse them. Every input row survives with an additional value computed over its partition or frame.',
+  'SELECT sid, cid, score,\n  ROW_NUMBER() OVER (\n    PARTITION BY cid ORDER BY score DESC\n  ) AS row_num,\n  SUM(score) OVER (\n    PARTITION BY cid ORDER BY score DESC\n    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n  ) AS running_score\nFROM enrolled;',
+  'window',body=>{
+   const rows=sqlWindowRows(enrolled,'cid','score');
+   let stepIndex=-1,mode='row';
+   const view=h('div',{}),readout=h('div',{class:'out'}),tiles=stat([]);
+   const modeSeg=seg([
+    {v:'row',l:'ROW_NUMBER'},{v:'rank',l:'RANK'},{v:'sum',l:'Running SUM'}
+   ],'row',value=>{mode=value;stepIndex=-1;render();});
+   function value(row){return mode==='row'?row.rowNumber:mode==='rank'?row.rank:row.runningTotal;}
+   function render(){
+    const label=mode==='row'?'row_num':mode==='rank'?'rank':'running_score';
+    view.replaceChildren(table(['sid','cid','score',label],rows.map((row,index)=>[
+     row.sid,row.cid,row.score,index<=stepIndex?value(row):'—'
+    ]),stepIndex,rows.map(row=>'partition-'+row.cid.replace('-',''))));
+    const active=rows[stepIndex];
+    const copy=active?(mode==='sum'?'Frame starts at the first '+active.cid+' row and ends at the current row.':'Numbering restarts inside partition '+active.cid+'.'):'Choose a function, then step through rows already sorted inside each partition.';
+    readout.replaceChildren(active?badge(active.cid,'info'):badge('Ready','warn'),' ',copy);
+    tiles.update([{l:'partition',v:active?active.cid:'—'},{l:'row in partition',v:active?active.rowNumber:'—'},{l:label,v:active?value(active):'—'}]);
+   }
+   function step(){stepIndex=Math.min(rows.length-1,stepIndex+1);render();}
+   function reset(){stepIndex=-1;render();}
+   render();
+   body.append(note('Try this: compare ROW_NUMBER, RANK and Running SUM. Step past the partition boundary and watch numbering and the frame restart.'),bar(modeSeg),view,controls(step,reset),tiles,readout,
+    h('div',{class:'sqlcs-anatomy'},h('b',{},'OVER ('),h('span',{class:'part'},'PARTITION BY cid'),h('span',{class:'sort'},'ORDER BY score DESC'),h('span',{class:'frame'},'ROWS ... CURRENT ROW'),h('b',{},')')));
+  });
+
+ const existsLab=lab(
+  'Animation 4','Correlated EXISTS',
+  'The inner query can reference the current outer row. EXISTS only asks whether at least one matching inner row exists; it does not need the full match set.',
+  'SELECT c.cid, c.name\nFROM course AS c\nWHERE EXISTS (\n  SELECT 1 FROM enrolled AS e\n  WHERE e.cid = c.cid\n);',
+  'exists',body=>{
+   const courses=[
+    {cid:'15-445',name:'Database Systems'},
+    {cid:'15-721',name:'Advanced Databases'},
+    {cid:'15-799',name:'Special Topics'}
+   ];
+   const results=sqlCorrelatedExists(courses,enrolled,'cid','cid');
+   let stepIndex=-1;
+   const outer=h('div',{}),inner=h('div',{}),readout=h('div',{class:'out'}),tiles=stat([]);
+   function render(){
+    const active=results[stepIndex];
+    outer.replaceChildren(h('h3',{},'Outer relation: course'),table(['cid','name'],courses.map(r=>[r.cid,r.name]),stepIndex));
+    inner.replaceChildren(h('h3',{},'Inner relation: enrolled'),table(['sid','cid','score'],enrolled.map(r=>[r.sid,r.cid,r.score]),-1,enrolled.map(r=>active&&r.cid===active.cid?'match':'')));
+    readout.replaceChildren(active?badge(active.exists?'EXISTS = TRUE':'EXISTS = FALSE',active.exists?'ok':'bad'):badge('Ready','warn'),' ',active?(active.matches+' matching row'+(active.matches===1?'':'s')+' for '+active.cid+'.'):'The inner WHERE receives c.cid from the current outer row.');
+    tiles.update([{l:'outer row',v:active?active.cid:'—'},{l:'inner matches',v:active?active.matches:'—'},{l:'kept?',v:active?(active.exists?'yes':'no'):'—',cls:active?(active.exists?'ok':'bad'):''}]);
+   }
+   function step(){stepIndex=Math.min(results.length-1,stepIndex+1);render();}
+   function reset(){stepIndex=-1;render();}
+   render();
+   body.append(note('Try this: step once per course. The inner scan changes because c.cid changes.'),h('div',{class:'cols two sqlcs-panes'},outer,inner),controls(step,reset),tiles,readout);
+  });
+
+ const recursive=lab(
+  'Animation 5','Recursive CTE',
+  'A recursive CTE starts with an anchor result, feeds that result into a recursive term, and repeats until an iteration produces no new rows.',
+  'WITH RECURSIVE org(person, depth) AS (\n  SELECT \'CEO\', 0\n  UNION\n  SELECT e.child, org.depth + 1\n  FROM edges AS e JOIN org ON e.parent = org.person\n)\nSELECT * FROM org;',
+  'recursive',body=>{
+   const edges=[['CEO','Eng'],['CEO','Sales'],['Eng','Platform'],['Platform','Eng']];
+   const levels=sqlRecursiveLevels(edges,'CEO');
+   let stepIndex=-1;
+   const graph=h('div',{class:'sqlcs-tree'}),result=h('div',{}),readout=h('div',{class:'out'}),tiles=stat([]);
+   function render(){
+    graph.replaceChildren(...['CEO','Eng','Sales','Platform'].map(node=>{
+     const depth=levels.findIndex(level=>level.includes(node));
+     const state=depth<0||depth>stepIndex?'future':depth===stepIndex?'active':'done';
+     return h('div',{class:'sqlcs-node '+state},h('b',{},node),h('small',{},depth<0?'not reached':'depth '+depth));
+    }),h('div',{class:'sqlcs-edges'},'CEO → Eng · CEO → Sales · Eng → Platform · Platform → Eng (cycle)'));
+    const visible=levels.slice(0,stepIndex+1).flat();
+    result.replaceChildren(h('h3',{},'Working result'),table(['person','depth'],visible.map(node=>[node,levels.findIndex(level=>level.includes(node))]),-1));
+    const frontier=levels[stepIndex]||[];
+    readout.replaceChildren(frontier.length?badge('Iteration '+stepIndex,'info'):badge('Ready','warn'),' ',frontier.length?('Frontier: '+frontier.join(', ')+'. Already-seen rows are not added again.'):'The anchor query creates the first frontier.');
+    tiles.update([{l:'iteration',v:stepIndex<0?'—':stepIndex},{l:'frontier rows',v:frontier.length},{l:'result rows',v:visible.length}]);
+   }
+   function step(){stepIndex=Math.min(levels.length-1,stepIndex+1);render();}
+   function reset(){stepIndex=-1;render();}
+   render();
+   body.append(note('Try this: step until Platform points back to Eng. UNION-style de-duplication prevents the cycle from running forever.'),h('div',{class:'cols two sqlcs-panes'},graph,result),controls(step,reset),tiles,readout);
+  });
+
+ root.append(intro,logical,grouping,windows,existsLab,recursive,
+  h('aside',{class:'sqlcs-footnote'},h('b',{},'Reading rule: '),'These diagrams show logical SQL semantics. The optimizer may use a different physical execution plan and still produce the same result.'));
+};
+PG.relational.sim={
+ logicalOrder:sqlLogicalOrder,
+ logicalPipeline:sqlLogicalPipeline,
+ highlightSql:sqlHighlightSql,
+ groupBy:sqlGroupBy,
+ windowRows:sqlWindowRows,
+ correlatedExists:sqlCorrelatedExists,
+ recursiveLevels:sqlRecursiveLevels
+};
+
+/* insert and select on one slotted page: the page, its slots and its records, step by step */
+function walkAnim(w) {
+  const states = [w.intro, ...w.steps];
+  let k = 0;
+  const sql = h('code', { class: 'wk-sql' }), text = h('p', { class: 'ar-text' }), count = h('small', { class: 'ar-count' });
+  const page = h('div', { class: 'wk-page' });
+  function pageParts(p) {
+    const free = w.page - w.header - w.slot * p.slots - w.rec * p.recs;
+    const order = [...Array(p.recs).keys()].sort((a, b) => w.data[a].off - w.data[b].off);
+    const st = i => (p.scan === i ? (p.match ? ' match' : ' scan') : '');
+    return [
+      h('div', { class: 'wk-hdr' }, 'Page 17 · header: ' + p.slots + ' slots, free space ' + free + ' bytes'),
+      h('div', { class: 'wk-lbl' }, 'Slot array (grows down)'),
+      ...[...Array(p.slots).keys()].map(i => h('div', { class: 'wk-slot' + (p.hlSlot === i ? ' new' : '') + st(i) }, 'slot ' + i + ' → byte ' + w.data[i].off + ' · ' + w.rec + ' bytes')),
+      h('div', { class: 'wk-free' }, 'free space: ' + free + ' bytes'),
+      h('div', { class: 'wk-lbl' }, 'Records (grow up from the end of the page)'),
+      h('div', { class: 'wk-recs' }, order.map(i => h('div', { class: 'wk-rec' + (p.hlRec === i ? ' new' : '') + st(i) }, '(' + w.data[i].n + ', ' + w.data[i].a + ')', h('small', {}, 'byte ' + w.data[i].off))))
+    ];
+  }
+  function paint() {
+    const s = states[k];
+    sql.textContent = s.sql || '';
+    sql.style.display = s.sql ? 'block' : 'none';
+    text.textContent = s.t;
+    count.textContent = 'Step ' + k + ' of ' + w.steps.length;
+    page.replaceChildren(...pageParts(s.page));
+  }
+  const play = player({ speed: 1500, step() { if (k >= w.steps.length) return false; k++; paint(); return k < w.steps.length; }, reset() { k = 0; paint(); } });
+  paint();
+  return h('div', { class: 'wk' },
+    h('div', { class: 'split' },
+      h('div', { class: 'split-l' }, page),
+      h('div', { class: 'split-r' },
+        h('div', { class: 'arch-ctl' }, play),
+        h('div', { class: 'ar-step' }, count, text),
+        sql,
+        h('p', { class: 'note' }, w.note || ''))));
+}
+
+/* architecture: one request walks through the boxes; the strip shows the 4 buffer frames */
+function archAnim(sp, steps) {
+  const B = {};
+  sp.boxes.forEach(b => { B[b[0]] = b; });
+  const ctr = id => [B[id][1] + B[id][3] / 2, B[id][2] + B[id][4] / 2];
+  const edge = (f, t) => {
+    const a = B[f], b = B[t], cx = a[1] + a[3] / 2, cy = a[2] + a[4] / 2;
+    const dx = b[1] + b[3] / 2 - cx, dy = b[2] + b[4] / 2 - cy;
+    const k = Math.min(dx ? (a[3] / 2) / Math.abs(dx) : 1e9, dy ? (a[4] / 2) / Math.abs(dy) : 1e9);
+    return [cx + dx * k, cy + dy * k];
+  };
+  const arrowEls = sp.arrows.map(([f, t, lab, dash]) => {
+    const p1 = edge(f, t), p2 = edge(t, f), mx = (p1[0] + p2[0]) / 2, my = (p1[1] + p2[1]) / 2;
+    const horiz = Math.abs(p2[0] - p1[0]) > Math.abs(p2[1] - p1[1]);
+    return svg('g', { class: 'ar-arrow' },
+      svg('line', { x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1], 'marker-end': 'url(#arah)', 'stroke-dasharray': dash ? '6 5' : null }),
+      svg('text', { class: 'ar-lab', x: horiz ? mx : mx + 8, y: horiz ? my - 8 : my, 'text-anchor': horiz ? 'middle' : 'start' }, lab));
+  });
+  let picked = null;
+  const boxEls = sp.boxes.map(([id, x, y, w, hh, label]) => {
+    const lines = label.split('\n');
+    return svg('g', { class: 'ar-box', tabindex: 0, role: 'button', 'aria-label': sp.comp[id].n, onclick: () => pick(id), onkeydown: e => { if (e.key === 'Enter') pick(id); } },
+      svg('rect', { x, y, width: w, height: hh, rx: 10 }),
+      lines.map((ln, i) => svg('text', { class: i ? 'ar-sub' : 'ar-title', x: x + w / 2, y: y + hh / 2 + (i - (lines.length - 1) / 2) * 16 + 4, 'text-anchor': 'middle' }, ln)));
+  });
+  const dot = svg('circle', { class: 'ar-dot', r: 7, cx: 0, cy: 0, opacity: 0 });
+  const picture = svg('svg', { viewBox: `0 0 ${sp.w} ${sp.h}`, role: 'img', 'aria-label': sp.cap, style: 'width:100%;max-width:500px;margin:0 auto;height:auto;display:block' },
+    svg('defs', {}, svg('marker', { id: 'arah', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, svg('path', { d: 'M0 0L10 5L0 10z', fill: 'currentColor' }))),
+    arrowEls, boxEls, dot);
+  let mode = steps.modes[0].v, k = 0, tok = 0;
+  const text = h('p', { class: 'ar-text' }), count = h('small', { class: 'ar-count' });
+  const comp = h('div', { class: 'ar-comp' });
+  const S = () => steps[mode];
+  function paint() {
+    const cur = k ? S()[k - 1] : null;
+    boxEls.forEach((el, i) => { const on = !!cur && cur.box.includes(sp.boxes[i][0]); el.classList.toggle('on', on); el.classList.toggle('off', !!cur && !on); });
+    arrowEls.forEach((el, i) => el.classList.toggle('on', !!cur && cur.arrows.includes(i)));
+    text.textContent = cur ? cur.t : steps.intro[mode];
+    count.textContent = 'Step ' + k + ' of ' + S().length;
+    paintComp();
+  }
+  /* click a component: its definition appears under the diagram; click it again to close */
+  function pick(id) {
+    picked = picked === id ? null : id;
+    boxEls.forEach((el, i) => el.classList.toggle('picked', sp.boxes[i][0] === picked));
+    paintComp();
+  }
+  function paintComp() {
+    comp.replaceChildren(picked
+      ? h('div', { class: 'ar-card' }, h('b', {}, sp.comp[picked].n), h('p', { html: sp.comp[picked].d }))
+      : h('p', { class: 'ar-hint' }, 'Click a component in the diagram to see what it does.'));
+  }
+  function flyDot(pairs) {
+    const my = ++tok;
+    dot.setAttribute('opacity', 0);
+    if (!pairs) return;
+    let i = 0;
+    const next = () => {
+      if (my !== tok) return;
+      if (i >= pairs.length) { dot.setAttribute('opacity', 0); return; }
+      const [f, t] = pairs[i++], a = ctr(f), b = ctr(t), t0 = performance.now();
+      const frame = () => {
+        if (my !== tok) return;
+        const p = Math.min(1, (performance.now() - t0) / 500);
+        dot.setAttribute('cx', a[0] + (b[0] - a[0]) * p);
+        dot.setAttribute('cy', a[1] + (b[1] - a[1]) * p);
+        dot.setAttribute('opacity', 1);
+        if (p < 1) requestAnimationFrame(frame); else setTimeout(next, 150);
+      };
+      requestAnimationFrame(frame);
+    };
+    next();
+  }
+  const play = player({
+    speed: 1600,
+    step() { if (k >= S().length) return false; k++; paint(); flyDot(S()[k - 1].dot); return k < S().length; },
+    reset() { k = 0; tok++; dot.setAttribute('opacity', 0); paint(); } });
+  const modeSeg = seg(steps.modes, mode, v => { mode = v; k = 0; tok++; play.stop(); paint(); });
+  paint();
+  return h('figure', { class: 'arch arch-anim' },
+    h('div', { class: 'split' },
+      h('div', { class: 'split-l svgw' }, picture),
+      h('div', { class: 'split-r' }, h('div', { class: 'arch-ctl' }, play, modeSeg), h('div', { class: 'ar-step' }, count, text), comp)),
+    h('figcaption', { class: 'note' }, sp.cap));
+}
+
+/* one simulator for every common problem: frames, pins, dirty flags, reads and writes, step by step */
+function poolSim(o) {
+  const N = o.frames, ring = o.scanRing ? 1 : 0, main = N - ring;
+  const fr = Array.from({ length: N }, (_, i) => (o.init && o.init[i]) ? { p: o.init[i].p, pin: 0, dirty: o.init[i].dirty ? 1 : 0 } : null);
+  const use = Array.from({ length: N }, (_, i) => i - N);
+  let t = 0, hits = 0, reads = 0, fgW = 0, bgW = 0, hotMiss = 0, stalled = false;
+  const seen = new Set((o.init || []).map(x => x.p));
+  const snap = () => fr.map(f => (f ? { ...f } : null));
+  const out = [];
+  const state = (msg, extra) => out.push(Object.assign({ frames: snap(), msg, hits, reads, fgW, bgW, hotMiss, stalled }, extra || {}));
+  function clean() {   // background writer: flush the least recently used dirty, unpinned frame
+    const c = fr.map((f, i) => i).filter(i => fr[i] && fr[i].dirty && fr[i].pin === 0).sort((a, b) => use[a] - use[b])[0];
+    if (c === undefined) return '';
+    fr[c].dirty = 0; bgW++;
+    return 'The background writer flushes page ' + fr[c].p + ' (not on the request path)';
+  }
+  state(o.start || 'Start: the pool is empty.');
+  for (let i = 0; i < (o.idle || 0); i++) { const m = clean(); if (m) state(m + '.'); }
+  for (const op of o.ops) {
+    const msg = [];
+    let idx = fr.findIndex(f => f && f.p === op.page);
+    const hit = idx >= 0;
+    if (hit) {
+      hits++;
+      msg.push('Page ' + op.page + ' is in frame ' + (idx + 1) + ': HIT, no disk read');
+    } else {
+      const range = op.scan && ring ? [N - 1] : [...Array(main).keys()];
+      let target = range.find(i => !fr[i]);
+      msg.push('Page ' + op.page + ' is not in memory: MISS');
+      if (target === undefined) {
+        const cands = range.filter(i => fr[i].pin === 0);
+        if (!cands.length) {
+          stalled = true;
+          state('Page ' + op.page + ' needs a frame, but every frame is pinned. The request waits forever.', { hit: false, op: op.page });
+          break;
+        }
+        target = cands.reduce((a, b) => (use[b] < use[a] ? b : a));
+        const v = fr[target];
+        msg.push(v.dirty ? 'Victim page ' + v.p + ' is dirty: it must be written first (1 extra write)' : 'Victim page ' + v.p + ' is clean, so it is just dropped');
+        if (v.dirty) fgW++;
+      }
+      reads++;
+      if (op.page[0] === 'H' && seen.has(op.page)) hotMiss++;
+      fr[target] = { p: op.page, pin: 0, dirty: 0 };
+      msg.push('Read page ' + op.page + ' from disk into frame ' + (target + 1));
+      idx = target;
+    }
+    seen.add(op.page);
+    const f = fr[idx];
+    f.pin += 1; use[idx] = ++t;
+    if (op.write) { f.dirty = 1; msg.push('The row is written and the frame is marked dirty'); }
+    if (op.leak) msg.push('The error path returns without unpinning, so pin count stays ' + f.pin);
+    else { f.pin -= 1; msg.push('Request done: pin count back to ' + f.pin); }
+    if (o.cleaner) { const c = clean(); if (c) msg.push(c); }
+    state(msg.join('. ') + '.', { hit, op: op.page });
+  }
+  return out;
+}
+
+function simView(o) {
+  const st = poolSim(o);
+  let k = 0;
+  const strip = h('div', { class: 'sm-frames' }), chips = h('div', { class: 'sm-ops' }), msg = h('p', { class: 'sm-msg' }), cnt = h('div', { class: 'sm-cnt' });
+  function paint() {
+    const s = st[k];
+    strip.replaceChildren(...s.frames.map((f, i) => h('div', { class: 'sm-fr' + (f && f.pin > 0 ? ' pinned' : '') + (f && f.dirty ? ' dirty' : '') },
+      h('small', {}, 'frame ' + (i + 1)), h('b', {}, f ? 'page ' + f.p : 'free'), h('small', {}, f ? 'pin ' + f.pin + ' · ' + (f.dirty ? 'dirty' : 'clean') : ''))));
+    chips.replaceChildren(...o.ops.map((op, i) => {
+      const r = st[i + 1];
+      const cls = 'sm-op' + (r && i + 1 <= k ? ' done ' + (r.hit ? 'hit' : 'miss') : '') + (i + 1 === k ? ' now' : '') + (op.leak ? ' leak' : '');
+      return h('span', { class: cls }, op.page);
+    }));
+    msg.textContent = s.msg;
+    cnt.textContent = 'hits ' + s.hits + ' · disk reads ' + s.reads + ' · writes on the request ' + s.fgW + ' · background writes ' + s.bgW + (s.hotMiss ? ' · hot pages evicted ' + s.hotMiss : '') + (s.stalled ? ' · STALLED' : '');
+  }
+  const play = player({ speed: 1100, step() { if (k >= st.length - 1) return false; k++; paint(); return k < st.length - 1; }, reset() { k = 0; paint(); } });
+  paint();
+  return h('div', { class: 'sm' }, play, strip, chips, msg, cnt);
+}
+
+/* ---- chapter 3 · storage models, file formats and compression. Custom layout, following the plan ---- */
+PG.storage = function (root, A) {
+  const { h, seg, player } = A;
+  const ROWS = [[1, 'HN', 10, '03-01'], [2, 'HN', 20, '03-01'], [3, 'SG', 30, '03-02'], [4, 'HN', 40, '03-02'], [5, 'SG', 50, '03-03'], [6, 'SG', 60, '03-03'], [7, 'HN', 70, '03-04'], [8, 'HN', 80, '03-04']];
+  const COLS = ['id', 'city', 'amount', 'day'];
+  const sec = SX.sec;
+  const para = SX.para;
+  const chip = SX.chip;
+  const stat = SX.stat;
+
+  const stepper = SX.stepper;
+  /* the table as rows (row store), columns (column store) or PAX row groups, with optional lit and touched cells */
+  function table(mode, lit, touch) {
+    const chunks = mode === 'col' || mode === 'pax', grouped = mode === 'row' || mode === 'pax';
+    const body = [];
+    ROWS.forEach((row, r) => {
+      if (grouped && r % 4 === 0) body.push(h('tr', { class: 'sx-grp' }, h('td', { colspan: 4 }, (mode === 'pax' ? 'row group ' : 'page ') + (r / 4 + 1) + ' · 128 bytes')));
+      body.push(h('tr', { class: touch && touch(r, -1) ? 'touch' : '' }, row.map((x, c) => h('td', { class: lit && lit(r, c) ? 'on' : '' }, String(x)))));
+    });
+    return h('table', { class: 'sx-table' },
+      h('thead', {}, h('tr', {}, COLS.map((c, i) => h('th', { class: touch && touch(-1, i) ? 'touch' : '' }, chunks ? 'chunk: ' + c : c)))),
+      h('tbody', {}, body));
+  }
+
+  /* PLAYGROUND: one table, two workloads, three layouts. Bytes read, share of the table, values decoded, units touched */
+  function playground() {
+    let work = 'olap', mode = 'row';
+    const view = h('div', { class: 'sx-vis' }), out = h('div', { class: 'sx-stats' }), txt = h('p', { class: 'sx-txt' });
+    const paint = () => {
+      if (work === 'olap') {
+        const bytes = mode === 'row' ? 256 : 64, dec = mode === 'row' ? 32 : 8;
+        view.replaceChildren(table(mode, (r, c) => mode === 'row' || c === 2));
+        txt.textContent = mode === 'row' ? 'Row store: SUM(amount) reads both pages in full, 256 bytes. It decodes 32 values to use 8.'
+          : mode === 'col' ? 'Column store: only the amount chunk is read, 64 bytes. It decodes 8 values, and all of them are used.'
+          : 'PAX: inside each row group only the amount chunk is read, 64 bytes. Whole rows still sit together in each group.';
+        out.replaceChildren(stat('bytes read', bytes + ' B'), stat('share of table', Math.round(bytes / 256 * 100) + '%'), stat('values decoded', dec));
+      } else {
+        const touch = (r, c) => mode === 'col' ? r === -1 : r >= 4;
+        view.replaceChildren(table(mode, null, touch));
+        txt.textContent = mode === 'row' ? 'OLTP insert into a row store: the new row fits in page 2, so one page is rewritten.'
+          : mode === 'col' ? 'OLTP insert into a column store: the new row touches 4 chunks, one per column, so 4 separate writes.'
+          : 'OLTP insert into PAX: the new row goes into one row group, and its 4 column chunks sit together.';
+        out.replaceChildren(stat('units touched', mode === 'col' ? '4 chunks' : mode === 'row' ? '1 page' : '1 row group'), stat('good for', mode === 'row' ? 'OLTP' : mode === 'col' ? 'OLAP' : 'both'));
+      }
+    };
+    const workSeg = seg([{ v: 'olap', l: 'OLAP: SUM(amount)' }, { v: 'oltp', l: 'OLTP: insert one row' }], work, v => { work = v; paint(); });
+    const modeSeg = seg([{ v: 'row', l: 'Row (NSM)' }, { v: 'col', l: 'Column (DSM)' }, { v: 'pax', l: 'PAX' }], mode, v => { mode = v; paint(); });
+    paint();
+    return h('div', { class: 'sx-play' }, h('div', { class: 'sx-controls' }, workSeg, modeSeg), view, out, txt);
+  }
+
+  /* ---- two case studies: one row-based file (Avro) and one column-based file (Parquet). Each has an architecture and a write and a read path ---- */
+  const rowLines = (idx, clsFn) => idx.map(i => h('div', { class: 'sx-rowl ' + clsFn(i) }, '(' + ROWS[i].join(', ') + ')'));
+  const blk = (n, idx, clsFn) => ({ n, rows: idx, clsFn, closed: true });
+
+  function caseStudy(sp) {
+    let mode = 'write', k = 0, picked = null;
+    const archBox = h('div', { class: 'sx-arch' }), def = h('div', { class: 'sx-def' }), vis = h('div', { class: 'sx-vis' }), txt = h('p', { class: 'sx-txt' }), cnt = h('small', { class: 'sx-cnt' });
+    const steps = () => sp.steps[mode];
+    const cur = () => (k ? steps()[k - 1] : null);
+    function paint() {
+      const s = cur(), on = s ? s.on : [];
+      archBox.replaceChildren(...sp.boxes.map(b => h('button', { class: 'sx-box' + (on.includes(b.id) ? ' on' : '') + (picked === b.id ? ' picked' : ''), onclick: () => { picked = picked === b.id ? null : b.id; paint(); } }, b.n)));
+      const pb = sp.boxes.find(b => b.id === picked);
+      def.replaceChildren(...(pb ? [h('b', {}, pb.n), h('p', { class: 'sx-p', html: pb.d })] : [h('span', { class: 'sx-hint' }, 'Click a component above to see what it does.')]));
+      vis.replaceChildren(...sp.draw(s ? s.file : sp.start[mode].file));
+      txt.textContent = s ? s.t : sp.start[mode].t;
+      cnt.textContent = 'Step ' + k + ' of ' + steps().length;
+    }
+    const play = player({ speed: 1500, step() { if (k >= steps().length) return false; k++; paint(); return k < steps().length; }, reset() { k = 0; paint(); } });
+    const modeSeg = seg([{ v: 'write', l: 'Write' }, { v: 'read', l: 'Read' }], 'write', v => { mode = v; k = 0; play.stop(); paint(); });
+    paint();
+    return h('div', { class: 'sx-cs' }, h('div', { class: 'sx-controls' }, modeSeg), archBox, def,
+      h('div', { class: 'sx-step' }, play, h('div', { class: 'sx-line' }, cnt, txt), vis));
+  }
+
+  /* CASE STUDY 1 · Avro: a row-based container file */
+  const AVRO = {
+    boxes: [
+      { id: 'writer', n: 'Writer', d: 'Receives one row at a time and appends it to the open block.' },
+      { id: 'header', n: 'Header', d: 'Magic bytes, the schema as JSON, the codec name and a random sync marker. Written once, at the start of the file.' },
+      { id: 'buffer', n: 'Block buffer', d: 'Whole rows waiting to be written. When the block is full, it is flushed as one block.' },
+      { id: 'block', n: 'Data block', d: 'Row count, byte size, the encoded rows and a sync marker. A reader can skip a block using its size, but has no column statistics to decide.' },
+      { id: 'file', n: 'File on disk', d: 'The header, then the blocks one after another. There is no footer: the file is complete as soon as the last block is written.' },
+      { id: 'reader', n: 'Reader', d: 'Reads the header first, then reads the blocks in order from start to end.' },
+      { id: 'decoder', n: 'Row decoder', d: 'Uses the schema to decode each row. Avro decodes every field of a row, because the data is stored row by row.' }],
+    start: {
+      write: { t: 'Start: a writer opens a new Avro file. Nothing has been written yet.', file: { header: false, buffer: null, blocks: [] } },
+      read: { t: 'Start: query SUM(amount) WHERE day >= 03-03 on an Avro file. The header has no column statistics.', file: { header: true, buffer: null, blocks: [blk(1, [0, 1, 2, 3], () => 'dim'), blk(2, [4, 5, 6, 7], () => 'dim')] } } },
+    steps: {
+      write: [
+        { t: 'The header is written first: magic bytes, the schema as JSON, the codec and a random sync marker. The schema travels with the file.', on: ['writer', 'header'], file: { header: true, buffer: null, blocks: [] } },
+        { t: 'Rows 1 to 4 are appended to the open block, one whole row after another. Every field of a row is written together.', on: ['writer', 'buffer'], file: { header: true, buffer: [0, 1, 2, 3], blocks: [] } },
+        { t: 'The block is full. Write its row count, its byte size, the encoded rows and a sync marker.', on: ['buffer', 'block'], file: { header: true, buffer: null, blocks: [blk(1, [0, 1, 2, 3], () => 'new')] } },
+        { t: 'Rows 5 to 8 go into the next block the same way.', on: ['writer', 'buffer'], file: { header: true, buffer: [4, 5, 6, 7], blocks: [blk(1, [0, 1, 2, 3], () => '')] } },
+        { t: 'Close the file. It ends after the last block, with no footer. Appending a row later only adds one more block.', on: ['block', 'file'], file: { header: true, buffer: null, blocks: [blk(1, [0, 1, 2, 3], () => ''), blk(2, [4, 5, 6, 7], () => 'new')] } }],
+      read: [
+        { t: 'Read the header first: the schema tells the reader how to decode each row.', on: ['reader', 'header'], file: { header: true, buffer: null, blocks: [blk(1, [0, 1, 2, 3], () => 'dim'), blk(2, [4, 5, 6, 7], () => 'dim')] } },
+        { t: 'Read block 1. Its size is known, so it could be skipped, but there are no min and max values to show that it cannot match. It must be read.', on: ['reader', 'block'], file: { header: true, buffer: null, blocks: [blk(1, [0, 1, 2, 3], () => 'raw'), blk(2, [4, 5, 6, 7], () => 'dim')] } },
+        { t: 'Decode every row of block 1 completely: id, city, amount and day. The query uses only amount and day, but the rows are stored whole.', on: ['decoder', 'block'], file: { header: true, buffer: null, blocks: [blk(1, [0, 1, 2, 3], () => 'decoded'), blk(2, [4, 5, 6, 7], () => 'dim')] } },
+        { t: 'Read block 2 the same way.', on: ['reader', 'block'], file: { header: true, buffer: null, blocks: [blk(1, [0, 1, 2, 3], () => 'decoded'), blk(2, [4, 5, 6, 7], () => 'raw')] } },
+        { t: 'Decode block 2. Rows 5 to 8 match day >= 03-03, and their amounts 50, 60, 70 and 80 sum to 260.', on: ['decoder', 'block'], file: { header: true, buffer: null, blocks: [blk(1, [0, 1, 2, 3], () => 'decoded'), blk(2, [4, 5, 6, 7], i => 'hit')] } },
+        { t: 'Summary: every byte of both blocks was read, and all 4 fields of all 8 rows were decoded. Good for writing and for whole-row reads; costly for a query that needs one column.', on: ['decoder'], file: { header: true, buffer: null, blocks: [blk(1, [0, 1, 2, 3], () => 'decoded'), blk(2, [4, 5, 6, 7], i => 'hit')] } }]
+    },
+    draw: f => [
+      f.header ? h('div', { class: 'sx-hdr' }, h('b', {}, 'header'), h('small', {}, 'magic · schema as JSON · codec · sync marker')) : null,
+      f.buffer ? h('div', { class: 'sx-blk open' }, h('b', {}, 'block buffer (open)'), ...rowLines(f.buffer, () => 'new')) : null,
+      ...f.blocks.map((b, i) => h('div', { class: 'sx-blk' }, h('b', {}, 'block ' + (i + 1) + ' · ' + b.rows.length + ' rows'), ...rowLines(b.rows, b.clsFn), h('small', {}, 'ends with a sync marker')))
+    ].filter(Boolean)
+  };
+
+  /* CASE STUDY 2 · Parquet: a column-based file with row groups, chunks and a footer written last */
+  const PARQUET = {
+    boxes: [
+      { id: 'writer', n: 'Writer', d: 'Receives rows and collects them in a buffer, one list per column.' },
+      { id: 'buffer', n: 'Row buffer', d: 'Holds a batch of rows in memory until the row group is full. Nothing reaches the file before this.' },
+      { id: 'encoder', n: 'Encoders', d: 'Encode each column chunk on its own: dictionary, RLE, bit packing or delta, chosen per column.' },
+      { id: 'rowgroup', n: 'Row groups and chunks', d: 'Each row group stores one chunk per column. Chunks of the same column sit together, so a reader can read one column only.' },
+      { id: 'footer', n: 'Footer', d: 'The schema, the offset of every chunk, and the min and max of each chunk. It is written last, so the file is complete only when it exists.' },
+      { id: 'reader', n: 'Reader', d: 'Reads the last 8 bytes, then the footer. The footer tells it where every chunk is.' },
+      { id: 'pruning', n: 'Pruning', d: 'Uses the min and max of each row group to skip row groups that cannot match, before any data is read.' },
+      { id: 'chunks', n: 'Chunk reader', d: 'Reads only the byte ranges of the chunks the query needs.' },
+      { id: 'decoder', n: 'Decoder', d: 'Expands the needed values into vectors. Values that are not needed are not expanded.' }],
+    start: {
+      write: { t: 'Start: the writer receives rows. Parquet stores columns, so nothing can be written until a row group is complete.', file: { buffer: null, rgs: [], footer: false } },
+      read: { t: 'Start: query SUM(amount) WHERE day >= 03-03 on a complete Parquet file.', file: { buffer: null, footer: true, tail: true, rgs: [rgOf(0, 'idle', {}), rgOf(1, 'idle', {})] } } },
+    steps: {
+      write: [
+        { t: 'Rows 1 to 4 are collected in a buffer. The buffer keeps each column apart in memory. Nothing is on disk yet.', on: ['writer', 'buffer'], file: { buffer: [0, 1, 2, 3], rgs: [], footer: false } },
+        { t: 'The row group is full. Each column is encoded on its own: city becomes a dictionary with bit-packed ids, day becomes delta values. Then the chunks are written.', on: ['encoder', 'rowgroup'], file: { buffer: null, rgs: [rgOf(0, 'written', {})], footer: false } },
+        { t: 'Rows 5 to 8 fill the next buffer.', on: ['writer', 'buffer'], file: { buffer: [4, 5, 6, 7], rgs: [rgOf(0, 'written', {})], footer: false } },
+        { t: 'The second row group is encoded and written the same way.', on: ['encoder', 'rowgroup'], file: { buffer: null, rgs: [rgOf(0, 'written', {}), rgOf(1, 'written', {})], footer: false } },
+        { t: 'Write the footer last: the schema, the offset of every chunk, and the min and max day of each row group. Then PAR1 closes the file. Only now is the file complete.', on: ['footer'], file: { buffer: null, rgs: [rgOf(0, 'idle', {}), rgOf(1, 'idle', {})], footer: true, tail: true } }],
+      read: [
+        { t: 'Read the last 8 bytes, then the footer. The footer gives the offset of every chunk and the min and max day of each row group.', on: ['reader', 'footer'], file: { buffer: null, footer: true, tail: true, rgs: [rgOf(0, 'idle', {}), rgOf(1, 'idle', {})] } },
+        { t: 'Row group 1 has max day 03-02, so pruning skips it. None of its bytes are read.', on: ['pruning', 'rowgroup'], file: { buffer: null, footer: true, tail: true, rgs: [rgOf(0, 'skipped', {}), rgOf(1, 'idle', {})] } },
+        { t: 'Row group 2 may match. The chunk reader reads only its day and amount chunks. The id and city chunks stay on disk.', on: ['chunks', 'rowgroup'], file: { buffer: null, footer: true, tail: true, rgs: [rgOf(0, 'skipped', {}), rgOf(1, 'read', { amount: 'read', day: 'read' })] } },
+        { t: 'The decoder expands only the needed values. The result is SUM(amount) = 260. The footer and 2 chunks were read; 6 chunks were not.', on: ['decoder'], file: { buffer: null, footer: true, tail: true, rgs: [rgOf(0, 'skipped', {}), rgOf(1, 'read', { amount: 'read', day: 'read' })] } }]
+    },
+    draw: f => [
+      f.buffer ? h('div', { class: 'sx-blk open' }, h('b', {}, 'row buffer (in memory)'), ...rowLines(f.buffer, () => 'new')) : null,
+      ...f.rgs.map(rg => h('div', { class: 'sx-rgb ' + rg.st }, h('b', {}, rg.label + (rg.st === 'skipped' ? ' · skipped' : '')),
+        h('div', { class: 'sx-chunks' }, COLS.map(c => h('span', { class: 'sx-chip ' + (rg.cols[c] || '') }, c))))),
+      h('div', { class: 'sx-footer' + (f.footer ? ' on' : '') }, f.footer ? 'Footer: schema, chunk offsets, min and max per chunk' + (f.tail ? ' · ends with PAR1' : '') : 'Footer: not written yet')
+    ].filter(Boolean)
+  };
+  function rgOf(i, st, cols) {
+    const all = {}; COLS.forEach(c => { all[c] = st === 'written' ? 'new' : (cols[c] || ''); });
+    return { label: 'row group ' + (i + 1) + ' · rows ' + (i * 4 + 1) + ' to ' + (i * 4 + 4), st, cols: all };
+  }
+
+  /* the Avro and Parquet sections; each one is a case study with its own steps */
+  const caseAvro = () => caseStudy(AVRO);
+  const caseParquet = () => caseStudy(PARQUET);
+
+  /* COMMON PROBLEMS: each one is a short timeline with a Failure and an After-fix version */
+  function layoutDemo(mode) {
+    return stepper([
+      { t: 'Start: the same 8 rows, laid out on disk in the chosen way. The query needs only amount.', read: false },
+      { t: mode === 'row' ? 'Row layout: every page is read in full, so all 4 columns are read to use 1. Bytes read: 256, which is 100% of the table.' : 'Column layout: only the amount chunk is read. Bytes read: 64, which is 25% of the table.', read: true }],
+      s => [table(mode, s.read ? (r, c) => mode === 'row' || c === 2 : null), h('div', { class: 'sx-stats' }, stat('bytes read', s.read ? (mode === 'row' ? '256 B' : '64 B') : '0 B'))]);
+  }
+  function dictDemo(fix) {
+    const W = 8, n = 8, plain = n * W, dict = u => u * W + Math.ceil(n * Math.ceil(Math.log2(u)) / 8);
+    const bars = cols => h('div', { class: 'sx-bars' }, cols.map(c => h('div', { class: 'sx-bar' }, h('div', {}, h('b', {}, c[0]), h('small', {}, c[1])),
+      h('div', { class: 'sx-track' }, h('i', { style: 'width:' + Math.min(100, c[2] / 2) + '%' })), h('small', {}, c[2] + ' B'))));
+    const states = fix
+      ? [{ t: 'Start: user_id is unique in every row. City has only 2 values. Plain: 64 bytes per column.', cols: [['user_id', 'plain', 64], ['city', 'plain', 64]], total: 128 },
+         { t: 'user_id stays plain, because its values never repeat. No dictionary is built.', cols: [['user_id', 'plain', 64], ['city', 'plain', 64]], total: 128 },
+         { t: 'city has 2 values: a dictionary of 17 bytes instead of 64. Total: 81 bytes.', cols: [['user_id', 'plain', 64], ['city', 'dictionary', dict(2)]], total: plain + dict(2) }]
+      : [{ t: 'Start: user_id is unique in every row. City has only 2 values. Plain: 64 bytes per column.', cols: [['user_id', 'plain', 64], ['city', 'plain', 64]], total: 128 },
+         { t: 'A dictionary of 8 entries for user_id costs 67 bytes, more than 64 bytes plain. The writer must fall back to plain.', cols: [['user_id', 'dictionary', dict(8)], ['city', 'plain', 64]], total: dict(8) + 64 },
+         { t: 'The 67-byte dictionary is already written, so user_id is written plain as well: 131 bytes for user_id.', cols: [['user_id', 'dictionary, then plain', dict(8) + plain], ['city', 'plain', 64]], total: dict(8) + plain + plain },
+         { t: 'city has 2 values: a dictionary of 17 bytes instead of 64. Total: 148 bytes.', cols: [['user_id', 'dictionary, then plain', dict(8) + plain], ['city', 'dictionary', dict(2)]], total: dict(8) + plain + dict(2) }];
+    return stepper(states, s => [bars(s.cols), h('div', { class: 'sx-stats' }, stat('total bytes', s.total))]);
+  }
+  function schemaDemo(fix) {
+    const files = [{ n: 'file 1', t: 'INT32', v: '10, 20' }, { n: 'file 2', t: 'DOUBLE', v: '30.5, 40.5' }];
+    const reader = fix ? 'DOUBLE (table schema)' : 'INT32 (from file 1)';
+    const states = [
+      { t: fix ? 'Start: the table schema says amount is DOUBLE, and every file is read against it.' : 'Start: the reader takes its schema from file 1. File 1 has INT32 and file 2 has DOUBLE.', st: ['idle', 'idle'], res: 'running' },
+      { t: fix ? 'File 1 is INT32, so its values are widened to DOUBLE on read: 10 and 20 become 10.0 and 20.0.' : 'File 1 matches the reader schema: 2 values are read.', st: ['ok', 'idle'], res: 'running' },
+      fix ? { t: 'File 2 is DOUBLE and matches the table schema. SUM(amount) = 101.', st: ['ok', 'ok'], res: 'sum = 101' }
+        : { t: 'File 2 stores amount as DOUBLE, but the reader expects INT32, so the query fails. Representative message: "Parquet column cannot be converted: expected INT32, found DOUBLE".', st: ['ok', 'error'], res: 'failed' }];
+    return stepper(states, s => [h('div', { class: 'sx-files' }, files.map((f, i) => h('div', { class: 'sx-file2 ' + (s.st[i] === 'ok' ? 'read' : s.st[i] === 'error' ? 'error' : '') },
+      h('b', {}, f.n), h('small', {}, 'amount: ' + f.t), h('small', {}, f.v)))), h('div', { class: 'sx-reader' }, h('b', {}, 'Reader'), h('small', {}, 'expects amount: ' + reader)),
+      h('div', { class: 'sx-stats' }, stat('query', s.res))]);
+  }
+  function skipDemo(sorted) {
+    const days = sorted ? ['03-01', '03-01', '03-02', '03-02', '03-03', '03-03', '03-04', '03-04'] : ['03-01', '03-04', '03-02', '03-04', '03-03', '03-04', '03-01', '03-04'];
+    const rgs = [0, 1, 2, 3].map(i => { const a = days[2 * i], b = days[2 * i + 1]; return { min: a < b ? a : b, max: a < b ? b : a }; });
+    const status = [0, 1, 2, 3].map(() => 'idle'), states = [{ t: 'Start: 4 row groups of 2 rows each, with the min and max day of each. Query: WHERE day >= 03-04.', st: status.slice() }];
+    rgs.forEach((g, i) => { status[i] = g.max < '03-04' ? 'skip' : 'read'; states.push({ t: 'Row group ' + (i + 1) + ': max ' + g.max + (g.max < '03-04' ? ' is below 03-04, so it is skipped without reading its data.' : ' can match, so it must be read.'), st: status.slice() }); });
+    const skipped = status.filter(x => x === 'skip').length;
+    states.push({ t: (sorted ? 'Sorted by day: ' : 'Unsorted: ') + skipped + ' of 4 row groups skipped. ' + (sorted ? '' : 'Every row group covers 03-01 to 03-04, so the statistics cannot help.'), st: status.slice() });
+    return stepper(states, s => [h('div', { class: 'sx-rgs' }, rgs.map((g, i) => h('div', { class: 'sx-rg2 ' + s.st[i] }, h('b', {}, 'Row group ' + (i + 1)), h('small', {}, 'day ' + g.min + ' to ' + g.max),
+      h('small', {}, s.st[i] === 'skip' ? 'skipped' : s.st[i] === 'read' ? 'read' : 'not checked yet'))))]);
+  }
+
+  const PROBLEMS = [
+    { tab: 'Row layout wastes I/O', sym: 'bytes read stay near 100% of the table, even though the query uses one column.', why: 'A row page keeps whole rows together. The reader must read the page to reach any column, so a scan costs the size of the table, not the size of the columns it uses.', log: 'representative, illustrative\nquery: SUM(amount) FROM orders WHERE day >= 2026-03-01\nbytes read: 1.0 TB (columns used: 1 of 100)', demo: v => layoutDemo(v === 'bad' ? 'row' : 'col'),
+      fix: ['Store analytical tables in a columnar format such as Parquet or ORC.', 'Select only the columns you need. SELECT * forces every chunk to be read.', 'Keep transactional tables in row storage, and copy them to a columnar table for reporting.', 'Verify: compare bytes read in the engine profile before and after the change.'] },
+    { tab: 'High-cardinality dictionary', sym: 'encoded size grows above the plain size, and the writer has to fall back.', why: 'A dictionary stores each distinct value once, plus an id per row. When almost every value is distinct, the dictionary is as large as the data, so it saves nothing and costs work.', log: 'representative writer warning; wording varies by version\nWARN: dictionary for column user_id exceeded its size limit; falling back to plain encoding', demo: v => dictDemo(v === 'good'),
+      fix: ['Dictionary-encode only columns with few distinct values, such as city or status.', 'Let the writer fall back to plain or delta encoding for unique columns, such as ids and timestamps.', 'Check the encoded size of each column in the file metadata, and compare it with the plain size.', 'Verify: user_id should stay close to its plain size, and city should shrink.'] },
+    { tab: 'Schema evolution', sym: 'the query fails after amount changes from INT32 to DOUBLE, even though the table still looks fine.', why: 'A Parquet file records its own column types. The reader must convert each file to one agreed type. Without a table-level schema, the first file decides, and the next file that differs breaks the read.', log: 'representative, wording varies by engine and version\nParquet column cannot be converted: expected INT32, found DOUBLE (column: amount)', demo: v => schemaDemo(v === 'good'),
+      fix: ['Keep one table-level schema, and check every new file against it before it is committed.', 'Widen types explicitly (INT32 to DOUBLE) in the table definition. Do not change a column type in place.', 'Use a table format with schema evolution rules, such as Delta or Iceberg, where the schema is kept in the table log (chapter 16).', 'Verify: read the table from an old file and from a new file, and check the row count and the sum.'] },
+    { tab: 'Poor sort order or oversized row groups', sym: 'row groups read stay at 4 of 4, even with a narrow date filter.', why: 'Row-group statistics only help when a row group covers a narrow range. Unsorted data gives every row group the same wide min and max. Oversized row groups have the same effect: one group covers the whole file, so nothing can be skipped.', log: 'representative scan summary, counts illustrative\nrow groups: 4 total, 0 skipped by statistics\nbytes read: 1.2 GB', demo: v => skipDemo(v === 'good'),
+      fix: ['Sort or cluster the data by the column that queries filter, such as day, before writing it.', 'Keep row groups small enough that each covers a narrow range, but not so small that the metadata grows.', 'Run a periodic rewrite (compaction) that re-sorts recent small files.', 'Verify: count the row groups skipped by statistics before and after the change.'] }
+  ];
+
+  const problems = () => SX.problems(PROBLEMS);
+  root.append(
+    sec('1 · The problem',
+      para('An orders table has 100 columns. Checkout writes one order at a time, so it wants whole rows.'),
+      para('An analytical query needs only three columns, but a row layout reads the entire dataset to get them. (Illustrative: about 1 TB read to use about 30 GB.)'),
+      para('Columns stored together read less and compress better. But one new row then touches many column files.'),
+      h('p', { class: 'sx-q', html: 'Why should the same table be stored differently for transactions and for analytics?' })),
+    sec('2 · Core idea and mechanisms',
+      para('<b>Core idea:</b> arrange and encode data according to how the workload reads it.'),
+      h('ul', { class: 'sx-list', html: [
+        '<b>Storage models:</b> row store (NSM), column store (DSM) and PAX, a hybrid with row groups.',
+        '<b>File format:</b> row groups, column chunks and pages, with a footer that holds the schema and zone maps (min and max).',
+        '<b>Encodings:</b> dictionary, RLE, bit packing and delta, chosen per column chunk.',
+        '<b>Late materialization:</b> keep values encoded as long as possible, and decode only what the query returns.'].map(x => '<li>' + x + '</li>').join('') })),
+    sec('3 · Playground: one table, two workloads, three layouts', playground()),
+    sec('4 · Case study 1 · Avro: a row-based file',
+      para('Avro is a row-based file format, common for event streams and message logs. The file is a header with the schema, followed by blocks of whole rows. Writing is simple, but a reader decodes whole rows.'),
+      caseAvro()),
+    sec('5 · Case study 2 · Parquet: a column-based file',
+      para('Parquet is a column-based file format, common for analytics on data lakes. Rows are collected into row groups, each column is stored as a chunk, and a footer at the end lets a reader pick only what it needs.'),
+      caseParquet()),
+    sec('6 · Row-based or column-based?',
+      h('table', { class: 'sx-table sx-cmp' },
+        h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'Avro (row)'), h('th', {}, 'Parquet (column)'))),
+        h('tbody', {}, [
+          ['Written as', 'whole rows in blocks', 'column chunks in row groups, footer last'],
+          ['Append one row', 'cheap: add to the open block', 'buffered until the row group is full'],
+          ['Read unit', 'a block, with every field', 'a column chunk inside a row group'],
+          ['Skipping data', 'by block size only', 'by footer min and max, and by column'],
+          ['Best for', 'event logs and whole-row reads', 'scans over a few columns']
+        ].map(r => h('tr', {}, r.map((c, i) => h('td', { class: i === 0 ? 'sx-cmp-k' : '' }, c)))))),
+      para('Both are self-describing: the schema lives in the file, so a reader does not need anything else to decode it.')),
+    sec('7 · Common problems · what breaks in production?', problems())
+  );
+};
+
+for (const k of ["relational", "storage", "indexes", "execution", "algorithms", "udfs", "networking", "optimizer", "cpu", "isolation", "mvcc", "recovery", "distributed", "warehouse", "lakehouse"]) if (!PG[k]) PG[k] = (root, A) => root.append(A.h('div', { class: 'pgbox' }, 'Playground for ' + k + ' is coming.'));
+</script>
+<script src="chapters/sx.js"></script>
+<script src="chapters/ch04-indexes.js"></script>
+<script src="chapters/ch05-execution.js"></script>
+<script src="chapters/ch06-algorithms.js"></script>
+<script src="chapters/ch07-udfs.js"></script>
+<script src="chapters/ch08-networking.js"></script>
+<script src="chapters/ch09-optimizer.js"></script>
+<script src="chapters/ch10-cpu.js"></script>
+<script src="chapters/ch11-isolation.js"></script>
+<script src="chapters/ch12-mvcc.js"></script>
+<script src="chapters/ch13-recovery.js"></script>
+<script src="chapters/ch14-distributed.js"></script>
+<script src="chapters/ch15-warehouse.js"></script>
+<script src="chapters/ch16-lakehouse.js"></script>
+<script>
+/* ---- router + chapter renderer (page content comes from COURSE and CHAPTERS) ---- */
+const pc = i => 'var(--p' + (i % 8) + ')';
+const app = $('#app');
+const partOf = i => COURSE.parts.find(P => i >= P.from && i < P.to);
+function topbar(inChapter) {
+  return h('div', { class: 'topbar' }, h('div', { class: 'wrap' },
+    h('a', { class: 'home', href: '../../tech.html' }, '← Tech Stack'),
+    h('b', {}, COURSE.title),
+    h('div', { class: 'sw' }, inChapter ? h('a', { href: '#' }, 'All chapters') : null,
+      COURSE.other ? h('a', { href: COURSE.other.href }, COURSE.other.label + ' →') : null)));
+}
+function overview() {
+  document.title = COURSE.title + ' · course';
+  const tiles = (a, b) => h('div', { class: 'map' }, PHASES.slice(a, b).map((p, k) => { const i = a + k;
+    return h('button', { class: 'tile', style: '--pc:' + pc(i), onclick: () => { location.hash = 'ch' + i; } },
+      h('span', { class: 'n' }, i + 1), h('span', {}, h('b', {}, p.t), h('small', {}, p.s))); }));
+  app.replaceChildren(topbar(false), h('div', { class: 'wrap' },
+    h('header', { class: 'hero' }, h('div', { class: 'kick' }, COURSE.kick),
+      h('h1', { html: COURSE.h1 }), h('p', { class: 'lead' }, COURSE.lead)),
+    COURSE.flat ? h('section', { class: 'part' }, tiles(0, PHASES.length)) : COURSE.parts.map(P => h('section', { class: 'part' }, h('h2', {}, P.name), h('p', {}, P.blurb), tiles(P.from, P.to))),
+    h('footer', { class: 'foot' }, 'Part of engineer-lab. Every playground is a small simulation running in your browser: simplified on purpose, deterministic, no network needed.')));
+  scrollTo(0, 0);
+}
+
+function vizPane(v) {
+  return h('div', {},
+    (v.rows || []).map(r => h('div', { class: 'vrow' }, h('span', { class: 'vl' }, r.l), h('div', { class: 'vcells' }, r.cells.map(c => h('div', { class: 'vc ' + (c[1] || ''), style: 'flex:' + (c[2] || 1) }, c[0]))))),
+    (v.bars || []).map(b => h('div', { class: 'vrow' }, h('span', { class: 'vl' }, b[0]), h('div', { class: 'vbar' }, h('div', { class: 'vtrack' }, h('i', { class: b[2] || '', style: 'width:' + Math.max(1.5, b[1]) + '%' })), h('span', { class: 'vt' }, b[3])))),
+    v.cap ? h('p', { class: 'note' }, v.cap) : null);
+}
+function commonSection(c, numEl) {
+  const L = c.common;
+  if (!L[0].viz && !L[0].sim) return h('section', { class: 'blk' }, h('h3', {}, numEl, 'Common problems'),
+    h('div', { class: 'common' }, L.map((x, k) => h('div', {}, h('h4', {}, h('i', {}, k + 1), h('span', { html: x.t })),
+      h('p', { class: 'e', html: '<b>Seen in</b>' + x.ex }), h('p', { class: 'c', html: '<b>Why</b>' + x.why }), h('p', { class: 'f', html: '<b>Fix</b>' + x.fix })))));
+  let cur = 0;
+  const tabs = h('div', { class: 'ctabs', role: 'tablist' }), body = h('div', { class: 'cbody' });
+  const paint = () => {
+    [...tabs.children].forEach((b, i) => { b.classList.toggle('on', i === cur); b.setAttribute('aria-selected', i === cur); });
+    const x = L[cur]; let st = 'bad';
+    const vt = h('div', { class: 'vbody' }), vh = h('b', {}, 'Failure state');
+    const show = k => { st = k; vh.textContent = k === 'bad' ? 'Failure state' : 'After the fix'; sw.set(k); vt.replaceChildren(x.sim ? simView(x.sim[k]) : vizPane(x.viz[k])); };
+    const sw = seg([{ v: 'bad', l: 'Failure' }, { v: 'good', l: 'After fix' }], 'bad', show);
+    body.replaceChildren(
+      h('h4', { class: 'ctitle', html: x.t }), h('p', { class: 'csym', html: x.sym }),
+      h('div', { class: 'cols two' },
+        h('div', { class: 'ccard' }, h('h5', {}, 'Scenario context'), h('p', { html: x.ctx }), x.seen ? h('p', { class: 'seen', html: '<b>Seen in</b> ' + x.seen }) : null, h('h5', {}, 'Why it happens'), h('p', { html: x.why })),
+        h('div', { class: 'ccard' }, h('h5', {}, 'Error log / signal'), h('pre', {}, h('code', {}, x.log.text)), h('p', { class: 'note', html: x.log.note }))),
+      h('div', { class: 'ccard vizc' }, h('div', { class: 'vhead' }, vh, sw), vt),
+      h('div', { class: 'ccard' }, h('h5', {}, 'How to fix'), h('ol', { class: 'fixes', html: x.fix.map(f => '<li>' + f + '</li>').join('') })));
+    show('bad');
+  };
+  L.forEach((x, i) => tabs.append(h('button', { class: 'ctab', role: 'tab', onclick: () => { cur = i; paint(); } }, x.tab || x.t)));
+  paint();
+  return h('section', { class: 'blk' }, h('h3', {}, numEl, 'Common problems · what breaks in production?'),
+    h('p', { class: 'note', style: 'margin:0 0 10px' }, 'Pick a production scenario. The diagrams and sample signals illustrate the failure; verify against your own version, runtime and workload.'), tabs, body);
+}
+function chapter(i) {
+  const c = CHAPTERS[i], p = PHASES[i], P = partOf(i); let n = 0; const num = () => h('i', {}, ++n);
+  document.title = (i + 1) + '. ' + p.t + ' · ' + COURSE.title;
+  const ideaBlock = () => h('section', { class: 'blk' }, h('h3', {}, num(), 'The idea'), h('ul', { class: 'idea', html: c.idea.map(x => '<li>' + x + '</li>').join('') }));
+  const pgbox = h('div', { class: 'pg' });
+  const nav = h('div', { class: 'pn' },
+    i > 0 ? h('button', { onclick: () => { location.hash = 'ch' + (i - 1); } }, '← ' + i + '. ' + PHASES[i - 1].t) : h('button', { onclick: () => { location.hash = ''; } }, '← All chapters'),
+    i < CHAPTERS.length - 1 ? h('button', { class: 'primary', onclick: () => { location.hash = 'ch' + (i + 1); } }, (i + 2) + '. ' + PHASES[i + 1].t + ' →') : (COURSE.other ? h('a', { class: 'btn primary', href: COURSE.other.href, style: 'text-decoration:none;display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:10px;background:var(--acc);color:var(--on-brand,#fff);font-weight:600;font-size:14px' }, COURSE.other.label + ' →') : h('button', { onclick: () => { location.hash = ''; } }, 'All chapters')));
+  if (c.layout === 'custom') {
+    const customRoot = h('main', { class: 'course-custom' });
+    app.replaceChildren(topbar(true), h('div', { class: 'wrap' },
+      h('div', { class: 'chhead', style: '--pc:' + pc(i) }, h('div', { class: 'n' }, i + 1), h('div', {}, h('small', {}, (COURSE.flat ? COURSE.title : P.name) + ' · chapter ' + (i + 1) + ' of ' + CHAPTERS.length), h('h1', {}, p.t))),
+      customRoot, nav));
+    try { PG[c.pg](customRoot, API); } catch (e) { console.error(e); customRoot.append(h('div', { class: 'callout warn' }, 'Custom chapter failed to load: ' + e.message)); }
+    scrollTo(0, 0);
+    return;
+  }
+  app.replaceChildren(topbar(true), h('div', { class: 'wrap' },
+    h('div', { class: 'chhead', style: '--pc:' + pc(i) }, h('div', { class: 'n' }, i + 1), h('div', {}, h('small', {}, (COURSE.flat ? COURSE.title : P.name) + ' · chapter ' + (i + 1) + ' of ' + CHAPTERS.length), h('h1', {}, p.t))),
+    h('section', { class: 'blk' }, h('h3', {}, num(), 'The problem'), h('div', { class: 'prob' }, h('div', { html: c.scene.map(x => '<p>' + x + '</p>').join('') }), h('p', { class: 'q' }, c.ask))),
+    c.archSteps ? null : ideaBlock(),
+    ...(c.walks || (c.walk ? [c.walk] : [])).map(w => h('section', { class: 'blk' }, h('h3', {}, num(), w.title), walkAnim(w))),
+    h('section', { class: 'blk' }, h('h3', {}, num(), c.archSteps ? c.archTitle : c.arch ? (c.pg ? 'Overall architecture and playground' : 'Overall architecture') : 'Playground'), c.arch ? (c.archSteps ? archAnim(c.arch, c.archSteps) : diagram(c.arch)) : null, c.archNote ? h('p', { class: 'archnote', html: c.archNote }) : null, c.pg ? pgbox : null),
+    commonSection(c, num()),
+    nav));
+  if (c.pg) try { PG[c.pg](pgbox, API); } catch (e) { console.error(e); pgbox.append(h('div', { class: 'callout warn' }, 'Playground failed to load: ' + e.message)); }
+  scrollTo(0, 0);
+}
+function route() {
+  stopTimers();
+  const m = /^#ch(\d+)$/.exec(location.hash);
+  if (m && +m[1] < CHAPTERS.length) chapter(+m[1]); else overview();
+}
+addEventListener('hashchange', route);
+route();
+
+</script>
+</body>
+</html>

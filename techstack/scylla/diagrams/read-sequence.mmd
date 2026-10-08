@@ -1,0 +1,18 @@
+sequenceDiagram
+    autonumber
+    participant W as Worker
+    participant CO as Coordinator
+    participant R as Replica
+    participant M as Memtable
+    participant SST as SSTables
+    W->>CO: Query partition
+    CO->>R: Read partition from the front
+    R->>M: Read current mutations
+    M-->>R: Memtable cells
+    R->>SST: Merge persisted cells
+    SST-->>R: Ordered cells
+    loop Visit cells
+      R->>R: Skip tombstone
+    end
+    R-->>CO: First live row after 6 skips
+    CO-->>W: task 7

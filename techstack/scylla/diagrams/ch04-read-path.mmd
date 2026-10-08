@@ -1,0 +1,17 @@
+sequenceDiagram
+    autonumber
+    participant CO as Coordinator
+    participant R as Replica
+    participant BF as Bloom filters
+    participant PI as Partition indexes
+    participant SST as SSTables
+    CO->>R: Point read
+    R->>BF: Check each SSTable
+    BF-->>R: 7 maybe, 5 absent (illustrative)
+    loop Maybe files only
+      R->>PI: Locate partition
+      PI->>SST: Read candidate cells
+      SST-->>R: Cells and timestamps
+    end
+    R->>R: Merge by timestamp (newest wins)
+    R-->>CO: One row

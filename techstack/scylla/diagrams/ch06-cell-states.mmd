@@ -1,0 +1,14 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+stateDiagram-v2
+  direction TB
+  state "Live cell" as Live
+  state "Tombstoned / expired" as Deleted
+  state "Purged" as Purged
+  [*] --> Live: INSERT
+  Live --> Deleted: DELETE or TTL expiry
+  Deleted --> Purged: compaction, safe purge conditions
+  Purged --> [*]
+  note right of Deleted
+    Repair and GC rules in section 5.
+    Expiry hides a value before physical removal.
+  end note

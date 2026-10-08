@@ -1,0 +1,10 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+stateDiagram-v2
+  direction TB
+  state "Live SSTable" as Live
+  state "Merged, awaiting removal" as Merged
+  state "Gone" as Gone
+  [*] --> Live: memtable flush
+  Live --> Merged: selected as merge input
+  Merged --> Gone: output complete, delete inputs
+  Gone --> [*]: disk space released

@@ -1,0 +1,19 @@
+sequenceDiagram
+  participant M as Tablet map (Raft)
+  participant C as Coordinator
+  participant O as N1 (leaving replica)
+  participant N as N4 (destination)
+  M->>C: transition: write both, read old
+  par protect incoming writes
+    C->>O: new mutation
+    C->>N: same mutation
+  and transfer existing data
+    O->>N: stream tablet data
+  end
+  Note over C,N: destination ready, transition barriers complete
+  M->>C: transition: write both, read new
+  C->>N: read tablet 17
+  M->>C: transition: use new replica set
+  C->>N: reads and writes
+  M->>O: cleanup leaving tablet copy
+  Note over M,N: Simplified - other RF replicas and barriers hidden

@@ -1,0 +1,19 @@
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant CO as Coordinator
+    participant A as Replica A
+    participant B as Replica B
+    participant R as Replica C (down)
+    C->>CO: UPDATE at QUORUM
+    CO->>A: Mutation v2
+    CO->>B: Mutation v2
+    CO-xR: Mutation (unavailable)
+    A-->>CO: ACK
+    B-->>CO: ACK
+    Note over CO: Two of three replicas acknowledge
+    CO->>CO: Store hint for C
+    CO-->>C: OK
+    Note over C,R: Later, a read at ONE reaches stale C
+    C->>R: Read
+    R-->>C: v1 (stale)

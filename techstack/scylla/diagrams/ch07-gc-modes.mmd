@@ -1,0 +1,8 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Mode{"tombstone_gc mode?"} -->|timeout| Grace{"Grace period elapsed?"}
+  Grace -->|Yes| Timeout["Compaction can purge;<br/>repair is not checked"]
+  Grace -->|No| Wait["Keep until grace period elapses"]
+  Mode -->|repair| Repaired{"Repair completed<br/>after deletion?"}
+  Repaired -->|No| Keep["Keep tombstone"]
+  Repaired -->|Yes| Purge["Purge at eligible compaction"]

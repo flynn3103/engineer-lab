@@ -1,0 +1,12 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+stateDiagram-v2
+  direction TB
+  state "Appended to commitlog" as Appended
+  state "Acknowledged" as Ack
+  state "In memtable" as Memtable
+  state "On SSTable" as SSTable
+  [*] --> Appended: mutation received
+  Appended --> Ack: ACK before or after sync
+  Ack --> Memtable: apply mutation
+  Memtable --> SSTable: flush memtable
+  SSTable --> [*]: commitlog segment releasable
