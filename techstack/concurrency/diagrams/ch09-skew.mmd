@@ -1,0 +1,3 @@
+flowchart LR
+  A["T1 reads Bob ON<br/>writes Alice OFF"] -->|"read before T2 write"| B["T2 reads Alice ON<br/>writes Bob OFF"]
+  B -->|"read before T1 write"| A

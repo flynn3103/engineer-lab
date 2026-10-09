@@ -1,0 +1,6 @@
+%%{init: {"flowchart": {"nodeSpacing": 25, "rankSpacing": 28}}}%%
+flowchart LR
+  A["Lock a"] -- held by --> T1(("T1"))
+  T1 -- waits for --> B["Lock b"]
+  B -- held by --> T2(("T2"))
+  T2 -- waits for --> A

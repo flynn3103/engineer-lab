@@ -1,0 +1,7 @@
+%%{init: {"flowchart": {"nodeSpacing": 16, "rankSpacing": 23}}}%%
+flowchart LR
+  L["Lock"] --> Q{"Ready?"}
+  Q -- Yes --> T["Take → unlock"]
+  Q -- No --> W["Wait / release"]
+  W --> R["Wake → reacquire"]
+  R --> Q

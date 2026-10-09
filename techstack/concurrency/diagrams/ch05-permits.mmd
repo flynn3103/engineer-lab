@@ -1,0 +1,6 @@
+%%{init: {"flowchart": {"nodeSpacing": 18, "rankSpacing": 26}}}%%
+flowchart LR
+  E["Empty slot"] --> P["Reserve → push"]
+  P --> F["Full item"]
+  F --> C["Reserve → pop"]
+  C --> E

@@ -1,0 +1,7 @@
+flowchart TD
+  A[Read next value address] --> B{Line resident?}
+  B -->|Yes| C[Read from cache]
+  B -->|No| D[Fetch whole line]
+  D --> C
+  C --> E[Nearby values may reuse line]
+  E --> F[Accumulate result]

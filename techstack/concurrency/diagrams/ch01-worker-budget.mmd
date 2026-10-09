@@ -1,0 +1,7 @@
+flowchart TD
+  A[Classify the work] --> B{Main dependency?}
+  B -->|CPU computation| C[Measure effective CPU capacity]
+  B -->|Blocking wait| D[Measure downstream and memory limits]
+  C --> E[Bound active workers and queued work]
+  D --> E
+  E --> F[Validate throughput and tail latency]

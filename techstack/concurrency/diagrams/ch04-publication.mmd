@@ -1,0 +1,4 @@
+flowchart LR
+  D[data = 42] --> R[Release ready]
+  R -->|reads release| A[Acquire ready]
+  A --> U[Read data]

@@ -1,0 +1,4 @@
+flowchart LR
+  A["Persist debit<br/>+ pending T7"] -->|"retry T7"| B["Persist credit<br/>+ receipt T7"]
+  B -->|"business ACK"| C["Clear pending"]
+  B -->|"duplicate T7"| B
