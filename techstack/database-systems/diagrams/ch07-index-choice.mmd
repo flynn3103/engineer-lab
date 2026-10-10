@@ -1,0 +1,7 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart LR
+  Q{"What does the query ask?"} -->|"Is this key in the set?"| BF["Bloom filter<br/>no false negatives"]
+  Q -->|"Ordered keys in memory,<br/>no rebalancing"| SL["Skip list"]
+  Q -->|"Prefix or string keys"| TR["Trie or radix tree"]
+  Q -->|"Which rows contain this word?"| IV["Inverted index<br/>term to posting list"]
+  Q -->|"Which rows mean something similar?"| VX["Vector index<br/>IVF or graph, approximate"]

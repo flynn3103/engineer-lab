@@ -1,0 +1,10 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  P["Parallelism"] --> IQ["Inter-query<br/>different queries at once"]
+  P --> IA["Intra-query<br/>one query on many workers"]
+  IA --> IO["Inter-operator, vertical<br/>pipeline stages run together"]
+  IA --> OP["Intra-operator, horizontal<br/>same operator on slices of data"]
+  OP --> EX["Exchange operator"]
+  EX --> G["Gather: N to 1"]
+  EX --> D["Distribute: 1 to N"]
+  EX --> RP["Repartition: N to M by hash"]

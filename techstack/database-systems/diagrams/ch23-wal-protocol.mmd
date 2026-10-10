@@ -1,0 +1,13 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+sequenceDiagram
+  participant T as Transaction
+  participant B as Buffer pool
+  participant L as Log on disk
+  participant D as Data file
+  T->>B: UPDATE page in memory
+  T->>B: log record LSN 41
+  T->>B: COMMIT record LSN 42
+  B->>L: flush log to LSN 42
+  L-->>T: durable, ack the client
+  B->>D: later: write the page
+  Note over B,D: only after the log up to its LSN is flushed

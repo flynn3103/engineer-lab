@@ -1,0 +1,12 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Col["Column chunk"] --> Few{"Few distinct values?"}
+  Few -->|Yes| Dict["Dictionary: id per value"]
+  Dict --> Runs{"Sorted, long runs?"}
+  Runs -->|Yes| RLE["RLE on the ids"]
+  Runs -->|No| BP["Bit-pack the ids"]
+  Few -->|No| Seq{"Numbers close together<br/>or increasing?"}
+  Seq -->|Yes| Delta["Delta or frame of reference,<br/>then bit-pack"]
+  Seq -->|No| Str{"Strings with<br/>shared prefixes?"}
+  Str -->|Yes| Front["Front coding"]
+  Str -->|No| Plain["Plain, then block compression"]

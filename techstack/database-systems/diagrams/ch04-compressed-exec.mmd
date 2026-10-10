@@ -1,0 +1,9 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Chunk["Compressed chunk on disk"] --> Q{"Does the engine<br/>understand the encoding?"}
+  Q -->|"No: opaque block codec"| Dec["Decompress the whole block"]
+  Dec --> Val["Decode every value"]
+  Val --> Cmp1["Compare strings, row by row"]
+  Q -->|"Yes: dictionary, RLE, bit-packing"| Lookup["Translate the constant once<br/>into a code"]
+  Lookup --> Cmp2["Compare small integers"]
+  Cmp2 --> Mat["Decode only the rows that match"]

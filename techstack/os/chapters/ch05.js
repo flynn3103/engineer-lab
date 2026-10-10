@@ -15,7 +15,7 @@
     id: 'lookup', label: 'Path lookup', desc: 'open() turns a path into an inode one component at a time. The dentry cache answers from memory; a miss reads the directory block from disk (illustrative).',
     codeLabel: 'C', code: { bug: ['int fd = open("/var/log/app.log", O_RDONLY);', '// walk: "/" → "var" → "log" → "app.log"', '// each step: dentry cache hit, or read the directory from disk', 'int fd2 = open("/var/log/app.log", O_RDONLY);   // again'] },
     stage: {
-      w: 640, h: 420, footer: 'Simplified: one mount, one directory tree. Real paths also cross mount points and symlinks.',
+      w: 640, h: 420, footer: 'Simplified: one mount; real paths also cross mounts and symlinks.',
       header: s => ({ left: 'open("/var/log/app.log")', right: s.r || '' }),
       setup(kit) { return { L: D.init(kit, 'vfs') }; },
       frame(s, kit, R) {
@@ -51,7 +51,7 @@
     id: 'readahead', label: 'Cache fill and readahead', desc: 'A file is cached in 4 KB pages. A sequential read triggers readahead, so most reads find their page already in memory (window sizes scaled down for the picture).',
     codeLabel: 'Shell', code: { bug: ['$ time cat /var/log/app.log > /dev/null     # cold: pages come from disk', '$ time cat /var/log/app.log > /dev/null     # warm: pages come from the page cache', '$ cat /sys/block/sda/queue/read_ahead_kb   # default 128', '$ vmtouch /var/log/app.log                 # shows how much is cached'] },
     stage: {
-      w: 640, h: 420, footer: 'Simplified: 16 pages, readahead window 4 then 8 (real default 128 KB, grows up to the device limit).',
+      w: 640, h: 420, footer: 'Simplified: 16 pages, window 4 then 8 (real default 128 KB).',
       header: s => ({ left: 'file pages (4 KB each)', right: s.r || '' }),
       setup(kit) { return { L: D.init(kit, 'pc') }; },
       frame(s, kit, R) {

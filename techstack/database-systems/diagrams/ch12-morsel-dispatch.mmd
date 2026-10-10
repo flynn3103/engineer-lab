@@ -1,0 +1,10 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Q["Pipeline of a query"] --> Cut["Cut the input into morsels<br/>about 100,000 tuples each"]
+  Cut --> Disp["Dispatcher keeps morsel lists<br/>per NUMA socket"]
+  Disp --> W1["Worker on socket 0<br/>takes a local morsel"]
+  Disp --> W2["Worker on socket 1<br/>takes a local morsel"]
+  W1 --> Idle{"Local morsels<br/>left?"}
+  W2 --> Idle
+  Idle -->|Yes| Take["Take the next local morsel"]
+  Idle -->|No| Steal["Steal a morsel from<br/>the other socket"]

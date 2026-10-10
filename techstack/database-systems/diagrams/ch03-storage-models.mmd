@@ -1,0 +1,7 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  W{"Workload"} -->|"OLTP: one whole row"| NSM["Row store, NSM<br/>one page holds whole rows"]
+  W -->|"OLAP: few columns, many rows"| DSM["Column store, DSM<br/>one file or chunk per column"]
+  DSM --> PAX["PAX hybrid<br/>row groups, columns inside each"]
+  NSM --> Cost1["Cheap insert and point read<br/>expensive scan of one column"]
+  PAX --> Cost2["Cheap column scan, good compression<br/>insert touches many chunks"]

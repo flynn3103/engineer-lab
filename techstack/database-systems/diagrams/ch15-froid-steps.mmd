@@ -1,0 +1,7 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  U["UDF body: IF, SET, SELECT statements"] --> T["1. Turn each statement<br/>into a SQL expression"]
+  T --> R["2. Break the body into regions<br/>by control flow"]
+  R --> M["3. Merge regions with<br/>lateral joins"]
+  M --> I["4. Inline the result as a<br/>subquery in the calling query"]
+  I --> O["5. The optimizer plans the whole query,<br/>parallel and set-based"]

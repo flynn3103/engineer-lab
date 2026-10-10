@@ -1,0 +1,7 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Slow["A UDF called per row is slow"] --> C["Compile it<br/>native code per call"]
+  Slow --> Par["Parallelize it<br/>annotations mark safe parts"]
+  Slow --> In["Inline it (Froid)<br/>straight-line logic becomes a subquery"]
+  Slow --> Cte["Convert to CTEs (APFEL)<br/>loops become recursive CTEs"]
+  Slow --> B["Batch it<br/>one call handles many rows"]

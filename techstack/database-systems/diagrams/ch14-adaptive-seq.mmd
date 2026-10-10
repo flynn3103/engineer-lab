@@ -1,0 +1,12 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+sequenceDiagram
+  participant W as Workers
+  participant I as Interpreter
+  participant C as Background compiler
+  participant N as Native code
+  W->>I: start morsel 1 on bytecode, no wait
+  W->>C: compile this pipeline in the background
+  W->>I: morsels 2, 3, 4 on bytecode
+  C-->>W: native code is ready
+  W->>N: morsel 5 onward on native code
+  Note over W,N: each morsel checks if native code exists

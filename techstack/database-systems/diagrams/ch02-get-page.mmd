@@ -1,0 +1,12 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Req["Executor asks for page 9"] --> PT{"In the page table?"}
+  PT -->|Yes: hit| Pin["Pin the frame, return it"]
+  PT -->|No: miss| Free{"Free frame?"}
+  Free -->|Yes| Read["Read page 9 into the frame"]
+  Free -->|No| Vic["Replacer picks an unpinned victim"]
+  Vic --> Dirty{"Victim dirty?"}
+  Dirty -->|No| Read
+  Dirty -->|Yes| Wal["Flush log up to its LSN, then write the page"]
+  Wal --> Read
+  Read --> Pin

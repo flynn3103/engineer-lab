@@ -1,0 +1,7 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  B["BEGIN"] --> R["Read phase:<br/>copy what is read into a private workspace,<br/>write only to the workspace"]
+  R --> V{"Validation phase at COMMIT:<br/>does it conflict with<br/>other transactions?"}
+  V -->|No| W["Write phase:<br/>install the workspace into the database"]
+  V -->|Yes| A["Abort and restart"]
+  W --> C["Committed"]

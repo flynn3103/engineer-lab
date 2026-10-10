@@ -1,0 +1,9 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  R["Next update or CLR record, LSN n,<br/>on page p"] --> D{"p in the dirty page table?"}
+  D -->|No| S1["Skip: p was written before the crash"]
+  D -->|Yes| Q{"recLSN of p greater than n?"}
+  Q -->|Yes| S2["Skip: the change was already flushed"]
+  Q -->|No| P{"pageLSN on disk at least n?"}
+  P -->|Yes| S3["Skip: the page already has it"]
+  P -->|No| Do["Redo the change, set pageLSN to n"]

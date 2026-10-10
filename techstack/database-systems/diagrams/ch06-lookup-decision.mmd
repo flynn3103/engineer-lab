@@ -1,0 +1,9 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Q["WHERE customer_id = 4242"] --> Lead{"Is the leading column<br/>of the index in the predicate?"}
+  Lead -->|No| Scan["Cannot binary search:<br/>scan the whole index or table"]
+  Lead -->|Yes| Desc["Descend: one page per level"]
+  Desc --> Rng["Follow leaf sibling pointers<br/>for a range"]
+  Rng --> Cov{"Index holds every<br/>column the query needs?"}
+  Cov -->|"Yes: covering"| IO["Index-only scan:<br/>no table page read"]
+  Cov -->|No| Fetch["Fetch each row:<br/>heap page by record ID,<br/>or primary key lookup"]

@@ -1,0 +1,8 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Q["GROUP BY country"] --> Srt{"Input already sorted<br/>on the group key?"}
+  Srt -->|Yes| SA["Streaming aggregate:<br/>one pass, no memory"]
+  Srt -->|No| Fit{"All groups fit<br/>in memory?"}
+  Fit -->|Yes| HA["One in-memory hash table:<br/>key to running value"]
+  Fit -->|No| Part["Phase 1: partition rows to disk<br/>with hash h1"]
+  Part --> Reh["Phase 2: per partition, build a hash table<br/>with hash h2 and aggregate"]

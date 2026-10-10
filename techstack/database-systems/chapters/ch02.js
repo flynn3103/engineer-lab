@@ -1,217 +1,287 @@
-/* Chapter 3 "Storage Models, File Formats, and Compression": three bespoke scenes plus the Explain text (index 2, zero-based).
+/* Chapter 3 "The Buffer Pool" (index 2, zero-based): scenes, Explain text and course fields.
+   Lectures: CMU 15-445 L06 Buffer Pools. The page layout half of the old chapter now lives in chapter 2.
    Loads after course.js and scene-tools.js; course.html merges CHAPTER_OVERRIDES into the course.
-   Scenes: the same 36 cells re-laid on disk pages (row, column, PAX), one column squeezed by encodings, and zone-map ranges on a date axis.
-   Sizes and dates are illustrative. */
+   Scenes: a clock sweep around the frames, a scan flooding the pool, and a miss that has to write a dirty victim first. Sizes and timings illustrative. */
 (function () {
   const DB = window.DB;
 
-  /* ---- 1. Layout: the same cells, three ways of placing them on pages ---- */
-  const COLS = ['id', 'cu', 'st', 'am', 'sh', 'nt'], CT = ['t0', 't1', 't2', 't3', 't4', 't5'];
-  const CNAME = ['order_id', 'customer', 'status', 'amount', 'ship_date', 'notes'];
-  const place = (lay, r, c) => {
-    if (lay === 'dsm') return { p: c, k: r };
-    if (lay === 'pax') return { p: Math.floor(r / 3) * 3 + Math.floor(c / 2), k: (c % 2) * 3 + (r % 3) };
-    return { p: r, k: c };
-  };
-  const PGX = 90, PGY = p => 92 + p * 40, CWID = 50;
-  const layout = {
-    id: 'row-column', label: 'Row, column, PAX', desc: 'Six rows by six columns drawn as cells, placed on six pages. One query needs only the amount column (sizes illustrative).',
-    codeLabel: 'SQL',
+  /* ---- 1. Clock sweep: a hand circles the frames, clears reference bits, and evicts the first unpinned frame at zero ---- */
+  const CX = 214, CY = 208, CR = 98;
+  const fpos = i => ({ x: CX + CR * Math.sin(i * Math.PI / 3) - 42, y: CY - CR * Math.cos(i * Math.PI / 3) - 20 });
+  const hpos = i => ({ x: CX + 50 * Math.sin(i * Math.PI / 3) - 28, y: CY - 50 * Math.cos(i * Math.PI / 3) - 13 });
+  const F0 = [['A', 1, 'dirty'], ['B', 1, ''], ['C', 1, 'pin'], ['D', 1, ''], ['E', 1, ''], ['F', 1, '']];
+  const frames = (over) => F0.map((f, i) => (over && over[i]) ? over[i] : f);
+  const clock = {
+    id: 'clock-sweep', label: 'Clock sweep', desc: 'Six frames on a clock face. A miss with no free frame starts the hand: it clears reference bits and evicts the first unpinned frame at 0 (illustrative).',
+    codeLabel: 'Policy',
     code: { bug: [
-      'SELECT SUM(amount) FROM orders;   -- 100 columns in the real table',
-      'row store (NSM): each page holds whole rows',
-      'column store (DSM): each page holds one column',
-      'INSERT INTO orders VALUES (...);  -- one new row',
-      'PAX / Parquet: row groups, and inside each group one chunk per column',
+      'miss on page G, no free frame: run the clock',
+      'hand sees ref = 1: clear it to 0, move on (second chance)',
+      'hand sees a pinned frame: skip it, never evict',
+      'hand sees ref = 0, unpinned: victim',
+      'victim dirty: write it to disk first, then read G into the frame',
     ] },
     stage: DB.stage({
-      footer: 'Simplified: 6 rows, 6 columns, 6 cells per page. Illustrative.',
-      header: s => ({ left: 'layout: ' + ({ nsm: 'row store (NSM)', dsm: 'column store (DSM)', pax: 'PAX row groups' })[s.lay], right: s.pages == null ? '' : 'pages touched ' + s.pages + ' of 6' }),
+      footer: 'Simplified: 6 frames, r = reference bit, pin = in use by a query. Illustrative.',
+      header: s => ({ left: 'disk reads ' + (s.rd || 0) + ' · writes ' + (s.wr || 0), right: s.req ? 'request ' + s.req : 'buffer pool' }),
+      decor(kit) { kit.el('circle', { cx: CX, cy: CY, r: CR, class: 'kring-track' }, kit.layer); },
       draw(P, s) {
-        const touched = new Set();
-        for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++) {
-          const { p } = place(s.lay, r, c);
-          if ((s.query && c === 3) || (s.newrow && r === 5)) touched.add(p);
-        }
-        for (let p = 0; p < 6; p++) {
-          P.text('pl' + p, { x: 30, y: PGY(p) + 22, t: 'page ' + p, cls: 'mut xs' });
-          P.box('pg' + p, { x: PGX - 6, y: PGY(p) - 4, w: 6 * CWID + 8, h: 36, tone: touched.has(p) ? 'warn' : 'mut', label: '', sw: touched.has(p) ? 2.4 : 1, stroke: touched.has(p) ? 'warn' : null });
-        }
-        for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++) {
-          const { p, k } = place(s.lay, r, c);
-          const hot = (s.query && c === 3) || (s.newrow && r === 5);
-          P.box('c' + r + '_' + c, { x: PGX + k * CWID, y: PGY(p), w: CWID - 4, h: 28, tone: CT[c], label: COLS[c] + (r + 1), cls: 'xs', op: (s.query || s.newrow) && !hot ? 0.38 : 1, sw: hot ? 3 : 1.4, stroke: hot ? 'var(--ink)' : null });
-        }
-        P.text('lg', { x: 430, y: 84, t: 'columns', cls: 'mut sm' });
-        CNAME.forEach((n, c) => P.chip('lg' + c, { x: 430, y: 94 + c * 36, w: 130, h: 30, label: n, tone: CT[c], small: true }));
-        if (s.read != null) P.chip('read', { x: 430, y: 316, w: 180, h: 26, label: s.read, tone: s.readTone || 'warn', small: true });
-      }
-    }),
-    bug: [
-      { log: 'Six rows by six columns on six pages. In a row store each page holds one whole row, so the colours run across every page.', callout: 'Row store: a page holds whole rows', code: 1,
-        state: { lay: 'nsm' }, stats: [{ l: 'layout', v: 'row (NSM)' }, { l: 'cells per page', v: '6' }] },
-      { log: 'The report runs SUM(amount). Only the amount column is needed, which is one cell in every row.', callout: 'The query needs one column', code: 0,
-        state: { lay: 'nsm', query: 1 }, stats: [{ l: 'columns needed', v: '1 of 6', cls: 'ok' }] },
-      { log: 'A disk read moves a whole page, and every page holds one amount cell. All six pages must be read to use six cells.', callout: 'All 6 pages read for 1 column in 6', moment: true, code: 0,
-        state: { lay: 'nsm', query: 1, pages: 6, read: 'read 6 of 6 pages', readTone: 'bad' }, stats: [{ l: 'bytes read', v: '100%', cls: 'bad' }, { l: 'bytes used', v: '17%', cls: 'ok' }] },
-      { log: 'Now store the table by column. The cells move: each page holds one column for all rows, so amount sits on a single page.', callout: 'Column store: a page holds one column', code: 2,
-        state: { lay: 'dsm' }, stats: [{ l: 'layout', v: 'column (DSM)' }] },
-      { log: 'The same SUM(amount) reads only the page that holds the amount column. The other five pages are never touched.', callout: '1 of 6 pages read', code: 0,
-        state: { lay: 'dsm', query: 1, pages: 1, read: 'read 1 of 6 pages', readTone: 'ok' }, stats: [{ l: 'bytes read', v: '17%', cls: 'ok' }, { l: 'bytes used', v: '100%', cls: 'ok' }] },
-      { log: 'The cost moves to writes. One new order must put one value on each of six pages, one page per column.', callout: 'One new row touches 6 pages', code: 3,
-        state: { lay: 'dsm', newrow: 1, pages: 6, read: 'write 6 pages', readTone: 'bad' }, stats: [{ l: 'pages written per row', v: '6', cls: 'bad' }, { l: 'in a row store', v: '1', cls: 'ok' }] },
-      { log: 'PAX groups rows first: three rows per row group, then one chunk per column pair inside the group. Parquet works this way.', callout: 'PAX: row groups, then column chunks', code: 4,
-        state: { lay: 'pax' }, stats: [{ l: 'row groups', v: '2' }, { l: 'column chunks', v: '3 per group' }] },
-      { log: 'SUM(amount) reads one chunk in each row group, 2 pages. A new row touches only the 3 chunks of its own group.', callout: 'PAX reads 2 pages and writes 3', code: 4,
-        state: { lay: 'pax', query: 1, pages: 2, read: 'read 2 of 6 pages', readTone: 'ok' }, stats: [{ l: 'scan reads', v: '33%', cls: 'ok' }, { l: 'row writes', v: '3 pages', cls: 'warn' }],
-        takeaway: 'Rows suit transactions, columns suit scans. Row groups with column chunks keep most of both.' },
-    ],
-  };
-
-  /* ---- 2. Encodings: one column shrinks through dictionary, bit packing and runs, and a unique column does not ---- */
-  const STAT = 'SSSSSSOOOORRSSSS'.split('');
-  const SORTED = 'OOOORRSSSSSSSSSS'.split('');
-  const SW = 36;
-  const enc = {
-    id: 'encodings', label: 'Encodings', desc: 'One status column of 1,000,000 values, drawn as 16 sample cells. Dictionary, bit packing and runs each shrink it. A unique column does not shrink (sizes illustrative).',
-    codeLabel: 'Parquet',
-    code: { bug: [
-      'column status: 1,000,000 values, 3 distinct, 8 bytes each = 8 MB',
-      'dictionary: store each distinct value once, then a small id per row',
-      'bit packing: 3 ids need only 2 bits each',
-      'sort by status, then run-length encode: (O,4) (R,2) (S,10)',
-      'column order_id: 1,000,000 distinct values: the dictionary is as big as the data',
-    ] },
-    stage: DB.stage({
-      footer: 'Simplified: 16 sample values stand for 1,000,000. Sizes illustrative.',
-      header: s => ({ left: 'size on disk ' + s.size, right: s.name }),
-      draw(P, s) {
-        const vals = s.vals || STAT;
-        P.text('h1', { x: 30, y: 84, t: s.uniq ? 'order_id (all distinct)' : 'status values', cls: 'mut sm' });
-        vals.forEach((v, i) => P.box('v' + i, { x: 30 + i * SW, y: 92, w: SW - 3, h: 30, tone: s.uniq ? 't' + (i % 6) : (v === 'S' ? 't0' : v === 'O' ? 't2' : 't4'), label: s.uniq ? '#' + (i + 1) : v, cls: 'xs', op: s.mode === 'runs' || s.mode === 'dict' || s.mode === 'pack' ? 0.4 : 1 }));
-        if (s.mode === 'dict' || s.mode === 'pack' || s.mode === 'runs') {
-          P.text('h2', { x: 30, y: 150, t: 'dictionary', cls: 'mut sm' });
-          [['S', 0, 't0'], ['O', 1, 't2'], ['R', 2, 't4']].forEach(([v, id, tone], i) => P.chip('d' + i, { x: 30 + i * 100, y: 158, w: 92, h: 40, label: v + ' = ' + id, sub: '8 bytes once', tone }));
-        }
-        if (s.mode === 'dict' || s.mode === 'pack') {
-          P.text('h3', { x: 30, y: 226, t: s.mode === 'pack' ? 'ids packed in 2 bits each' : 'one id per row', cls: 'mut sm' });
-          vals.forEach((v, i) => P.box('i' + i, { x: 30 + i * SW, y: 234, w: s.mode === 'pack' ? SW - 3 : SW - 3, h: s.mode === 'pack' ? 16 : 30, tone: v === 'S' ? 't0' : v === 'O' ? 't2' : 't4', label: s.mode === 'pack' ? '' : String(v === 'S' ? 0 : v === 'O' ? 1 : 2), cls: 'xs' }));
-        }
-        if (s.mode === 'runs') {
-          P.text('h3', { x: 30, y: 226, t: 'sorted by status, then runs', cls: 'mut sm' });
-          [['O', 4, 't2', 0], ['R', 2, 't4', 4], ['S', 10, 't0', 6]].forEach(([v, n, tone, at], i) => P.box('r' + i, { x: 30 + at * SW, y: 234, w: n * SW - 3, h: 30, tone, label: '(' + v + ', ' + n + ')', cls: 'sm' }));
-        }
-        if (s.uniq && s.mode === 'dict') {
-          P.text('h2', { x: 30, y: 150, t: 'dictionary would hold every value', cls: 'mut sm' });
-        }
-        if (s.fall) P.chip('fall', { x: 30, y: 262, w: 330, h: 44, label: 'writer falls back to plain encoding', sub: 'dictionary page too large', tone: 'warn' });
-        P.text('sz', { x: 30, y: 330, t: s.sizeText || '', cls: 'sm' });
-      }
-    }),
-    bug: [
-      { log: 'The status column has 1,000,000 values and only 3 distinct ones. Stored plain at 8 bytes each it takes 8 MB (illustrative).', callout: 'Plain: 1,000,000 values × 8 bytes = 8 MB', code: 0,
-        state: { vals: STAT, size: '8 MB', name: 'plain', sizeText: 'plain: 8 MB for 3 distinct values' }, stats: [{ l: 'size', v: '8 MB', cls: 'bad' }, { l: 'distinct values', v: '3' }] },
-      { log: 'Dictionary encoding stores each distinct value once and replaces every row by an id. The values fade, the ids replace them.', callout: 'Dictionary: values once, ids per row', code: 1,
-        state: { vals: STAT, mode: 'dict', size: '1 MB', name: 'dictionary', sizeText: 'dictionary 24 B + one byte id per row = 1 MB' }, stats: [{ l: 'size', v: '1 MB', cls: 'warn' }] },
-      { log: 'Only three ids exist, so each needs 2 bits, not a byte. Bit packing shrinks the ids to a quarter of a byte per row.', callout: 'Bit packing: 2 bits per id', moment: true, code: 2,
-        state: { vals: STAT, mode: 'pack', size: '0.25 MB', name: 'dictionary + bit packing', sizeText: '1,000,000 ids × 2 bits = 0.25 MB (32× smaller)' }, stats: [{ l: 'size', v: '0.25 MB', cls: 'ok' }, { l: 'smaller by', v: '32×', cls: 'ok' }] },
-      { log: 'Sort by status and the equal values meet. Run-length encoding then stores three runs instead of a million ids.', callout: 'Sorted data collapses into runs', code: 3,
-        state: { vals: SORTED, mode: 'runs', size: '~50 B', name: 'sorted + run-length', sizeText: 'three runs, a few dozen bytes' }, stats: [{ l: 'runs', v: '3', cls: 'ok' }, { l: 'size', v: '~50 B', cls: 'ok' }] },
-      { log: 'The order_id column is different: every value is distinct. A dictionary would list all 1,000,000 values, so it is as big as the data.', callout: 'A unique column has nothing to share', code: 4,
-        state: { vals: STAT, uniq: 1, mode: 'dict', size: '8 MB + ids', name: 'dictionary on a unique column', sizeText: 'dictionary 8 MB + 1,000,000 ids = larger than plain' }, stats: [{ l: 'plain', v: '8 MB' }, { l: 'dictionary', v: '10.5 MB', cls: 'bad' }] },
-      { log: 'The writer sees the dictionary growing past its limit and falls back to plain encoding for that column chunk.', callout: 'The writer falls back to plain', code: 4,
-        state: { vals: STAT, uniq: 1, mode: 'dict', fall: 1, size: '8 MB', name: 'fallback to plain', sizeText: 'plain 8 MB: the encoding was not worth it' }, stats: [{ l: 'size', v: '8 MB', cls: 'warn' }],
-        takeaway: 'An encoding pays only when values repeat or are narrow. Sort order and cardinality decide the size, not the format.' },
-    ],
-  };
-
-  /* ---- 3. Zone maps: row groups carry a min and max, and a filter skips every group whose range misses it ---- */
-  const AX0 = 100, DAY = 15, AY = 100;
-  const dx = d => AX0 + (d - 1) * DAY;
-  const UNS = [[1, 29], [2, 30], [1, 28], [3, 30]];
-  const SRT = [[1, 8], [8, 15], [16, 23], [24, 30]];
-  const zones = {
-    id: 'zone-maps', label: 'Zone maps', desc: 'Four row groups store the min and max of ship_date in the footer. A narrow date filter reads only the groups whose range overlaps it (dates illustrative).',
-    codeLabel: 'SQL',
-    code: { bug: [
-      "SELECT SUM(amount) FROM orders WHERE ship_date BETWEEN '2026-06-10' AND '2026-06-12';",
-      'footer: row group 1..4, each with min(ship_date) and max(ship_date)',
-      'a group whose range misses the filter is skipped without reading a byte',
-      'rows arrived in order of creation, so every group spans the whole month',
-      'rewrite sorted by ship_date: each group covers a narrow range',
-    ] },
-    stage: DB.stage({
-      footer: 'Simplified: 4 row groups, one month of dates. Illustrative.',
-      header: s => ({ left: 'row groups read ' + (s.read == null ? '-' : s.read + ' of 4'), right: s.sorted ? 'sorted by ship_date' : 'arrival order' }),
-      draw(P, s) {
-        const rg = s.sorted ? SRT : UNS;
-        P.text('ax', { x: AX0, y: 84, t: 'ship_date: Jun 1', cls: 'mut xs' });
-        P.text('ax2', { x: dx(30), y: 84, t: 'Jun 30', cls: 'mut xs', anchor: 'end' });
-        P.line('axis', AX0, AY, dx(31), AY, { tone: 'mut' });
-        if (s.query) {
-          P.box('qb', { x: dx(10), y: AY + 4, w: 3 * DAY, h: 214, tone: 'cursor', label: '', op: 0.35, stroke: 'cursor', dash: true });
-          P.text('qt', { x: dx(10) + 1.5 * DAY, y: AY + 232, t: 'filter Jun 10-12', cls: 'xs', anchor: 'middle' });
-        }
-        rg.forEach(([a, b], i) => {
-          const hit = s.query && a <= 12 && b >= 10;
-          P.text('gl' + i, { x: 30, y: AY + 36 + i * 52, t: 'group ' + (i + 1), cls: 'mut sm' });
-          P.box('g' + i, { x: dx(a), y: AY + 14 + i * 52, w: (b - a + 1) * DAY, h: 34, tone: !s.query ? 'acc' : hit ? 'warn' : 'ok', label: 'Jun ' + a + ' - ' + b, cls: 'xs', op: s.query && !hit ? 0.5 : 1, dash: s.query && !hit });
-          if (s.query) P.text('gs' + i, { x: 622, y: AY + 36 + i * 52, t: hit ? 'read' : 'skip', cls: 'sm b tone-' + (hit ? 'warn' : 'ok'), anchor: 'end' });
+        s.fr.forEach((f, i) => {
+          const p = fpos(i), flags = f[2];
+          const tone = s.victim === i ? 'bad' : (flags === 'pin' ? 't3' : (f[1] ? 'warn' : 'info'));
+          P.chip('f' + i, { x: p.x, y: p.y, w: 84, h: 40, label: f[0], sub: 'r' + f[1] + (flags ? ' ' + flags : ''), tone, hl: s.hit === i });
         });
+        if (s.hand != null) { const h = hpos(s.hand); P.chip('hand', { x: h.x, y: h.y, w: 56, h: 26, label: 'hand', tone: 'cursor', small: true }); }
+        P.text('hc', { x: CX, y: CY + 4, t: 'clock', cls: 'mut sm', anchor: 'middle' });
+        if (s.req) P.chip('req', { x: 420, y: 100, w: 150, h: 44, label: 'request ' + s.req, sub: s.hit != null ? 'hit' : 'miss', tone: s.hit != null ? 'ok' : 'cursor' });
+        P.text('hd', { x: 420, y: 232, t: 'disk', cls: 'mut sm' });
+        P.box('disk', { x: 420, y: 240, w: 190, h: 70, tone: 'mut', label: '' });
+        if (s.io === 'write') P.chip('io', { x: 440, y: 254, w: 150, h: 40, label: 'write A', sub: 'dirty victim', tone: 'warn' });
+        if (s.io === 'read') P.chip('io', { x: 440, y: 254, w: 150, h: 40, label: 'read ' + s.req, sub: 'into the frame', tone: 'ok' });
       }
     }),
     bug: [
-      { log: 'Each row group stores the min and max of ship_date in the file footer. The bars show those ranges on a month-long axis.', callout: 'Each row group has a min and a max', code: 1,
-        state: {}, stats: [{ l: 'row groups', v: '4' }] },
-      { log: 'Rows were written in the order orders arrived, and shipping dates are spread across the month, so every group spans nearly the whole month.', callout: 'Arrival order: every range is wide', code: 3,
-        state: {}, stats: [{ l: 'widest range', v: '29 days', cls: 'warn' }] },
-      { log: 'The query asks for June 10 to 12. The reader compares the filter with each footer range before reading any data.', callout: 'The filter meets four footer ranges', code: 0,
-        state: { query: 1 }, stats: [{ l: 'filter', v: 'Jun 10-12' }] },
-      { log: 'All four ranges overlap the filter, so no group can be skipped. The scan reads 4 of 4 row groups for three days of data.', callout: 'Nothing pruned: 4 of 4 groups read', moment: true, code: 2,
-        state: { query: 1, read: 4 }, stats: [{ l: 'row groups read', v: '4 of 4', cls: 'bad' }, { l: 'pruned', v: '0', cls: 'bad' }] },
-      { log: 'Rewrite the file sorted by ship_date. The same rows are packed so that each group covers a narrow slice of the month.', callout: 'Sort by ship_date: narrow ranges', code: 4,
-        state: { sorted: 1 }, stats: [{ l: 'widest range', v: '8 days', cls: 'ok' }] },
-      { log: 'Only group 2, Jun 8 to 15, overlaps the filter. Groups 1, 3 and 4 are skipped from the footer alone.', callout: '1 of 4 read, 3 skipped from the footer', code: 2,
-        state: { sorted: 1, query: 1, read: 1 }, stats: [{ l: 'row groups read', v: '1 of 4', cls: 'ok' }, { l: 'pruned', v: '3', cls: 'ok' }],
-        takeaway: 'Zone maps only skip data when each group covers a narrow range, so write order and row-group size decide the benefit.' },
+      { log: 'Six frames hold pages A to F. Every reference bit is 1, A is dirty, and C is pinned by a running query.', callout: 'The pool is full, every bit is 1', code: 0,
+        state: { fr: frames(), hand: 0 }, stats: [{ l: 'free frames', v: '0', cls: 'warn' }] },
+      { log: 'A query asks for page G. It is not in the pool and no frame is free, so the replacer must pick a victim.', callout: 'Miss on G, no free frame', code: 0,
+        state: { fr: frames(), hand: 0, req: 'G' }, stats: [{ l: 'free frames', v: '0', cls: 'warn' }, { l: 'victims found', v: '0' }] },
+      { log: 'The hand sees A with bit 1 and clears it, then B with bit 1 and clears it. Both get a second chance. The hand reaches C.', callout: 'Bit 1: clear it, move on', code: 1,
+        state: { fr: frames({ 0: ['A', 0, 'dirty'], 1: ['B', 0, ''] }), hand: 2, req: 'G' }, stats: [{ l: 'bits cleared', v: '2', cls: 'warn' }] },
+      { log: 'C is pinned, so the hand skips it. D, E and F are cleared in turn, and the hand completes a full lap back to A.', callout: 'Pinned frames are skipped', code: 2,
+        state: { fr: frames({ 0: ['A', 0, 'dirty'], 1: ['B', 0, ''], 3: ['D', 0, ''], 4: ['E', 0, ''], 5: ['F', 0, ''] }), hand: 0, req: 'G' }, stats: [{ l: 'bits cleared', v: '5', cls: 'warn' }, { l: 'laps', v: '1' }] },
+      { log: 'A has bit 0 and no pin, so A is the victim. A is dirty, so its page must go to disk before the frame can be reused.', callout: 'Victim A is dirty: write it first', moment: true, code: 4,
+        state: { fr: frames({ 0: ['A', 0, 'dirty'], 1: ['B', 0, ''], 3: ['D', 0, ''], 4: ['E', 0, ''], 5: ['F', 0, ''] }), hand: 0, req: 'G', victim: 0, io: 'write', wr: 1 }, stats: [{ l: 'disk writes', v: '1', cls: 'bad' }, { l: 'the read waits', v: 'yes', cls: 'bad' }] },
+      { log: 'Page G is read into the frame with bit 1, and the hand moves to B. One miss cost a lap of the clock, one write and one read.', callout: 'G loaded, hand moves on', code: 4,
+        state: { fr: frames({ 0: ['G', 1, ''], 1: ['B', 0, ''], 3: ['D', 0, ''], 4: ['E', 0, ''], 5: ['F', 0, ''] }), hand: 1, req: 'G', io: 'read', rd: 1, wr: 1 }, stats: [{ l: 'disk reads', v: '1' }, { l: 'disk writes', v: '1' }] },
+      { log: 'A later request for E finds it in the pool. A hit only sets E\'s bit back to 1, which protects it from the next sweep.', callout: 'A hit sets the bit back to 1', code: 1,
+        state: { fr: frames({ 0: ['G', 1, ''], 1: ['B', 0, ''], 3: ['D', 0, ''], 4: ['E', 1, ''], 5: ['F', 0, ''] }), hand: 1, req: 'E', hit: 4, rd: 1, wr: 1 }, stats: [{ l: 'disk reads', v: '1' }, { l: 'hit', v: 'E', cls: 'ok' }] },
+      { log: 'The next miss, page H, finds B at the hand with bit 0 and clean. B is evicted at once with no write and no lap.', callout: 'A clean victim at bit 0 costs one read', code: 3,
+        state: { fr: frames({ 0: ['G', 1, ''], 1: ['H', 1, ''], 3: ['D', 0, ''], 4: ['E', 1, ''], 5: ['F', 0, ''] }), hand: 2, req: 'H', io: 'read', rd: 2, wr: 1 }, stats: [{ l: 'disk reads', v: '2' }, { l: 'disk writes', v: '1' }],
+        takeaway: 'Clock approximates LRU with one bit per frame. The expensive miss is the one whose victim is dirty.' },
+    ],
+  };
+
+  /* ---- 2. Scan flooding: a big scan pushes the hot pages out, unless it is held to a small ring ---- */
+  const GX = i => 30 + (i % 4) * 108, GY = i => 100 + Math.floor(i / 4) * 66;
+  const HOTC = ['h1', 'h2', 'h3', 'h4'];
+  const fl = (arr, ring) => arr;
+  const flood = {
+    id: 'scan-flood', label: 'Scan floods the pool', desc: 'Eight frames hold four hot pages. A nightly scan with no limit takes every frame. A small ring for the scan leaves the hot pages alone (illustrative).',
+    codeLabel: 'Config',
+    code: { bug: [
+      'SELECT * FROM orders;   -- nightly export, 200 GB sequential scan',
+      '-- every scanned page enters the pool as most recently used',
+      '-- hot pages become the oldest and are evicted first',
+      '-- point lookups now miss: shared read up, shared hit down',
+      '-- fix: scans of big tables use a small ring of buffers (PostgreSQL: 256 kB)',
+    ] },
+    stage: DB.stage({
+      footer: 'Simplified: 8 frames, LRU order, 4 hot pages. Illustrative.',
+      header: s => ({ left: 'lookup hit rate ' + (s.hit == null ? '100' : s.hit) + '%', right: s.ring ? 'scan limited to a ring' : 'scan uses the whole pool' }),
+      draw(P, s) {
+        P.text('hf', { x: 30, y: 82, t: 'buffer pool: 8 frames', cls: 'mut sm' });
+        for (let i = 0; i < 8; i++) P.box('fr' + i, { x: GX(i), y: GY(i), w: 100, h: 54, tone: 'mut', label: '', dash: true, stroke: (s.ring && (i === 6 || i === 7)) ? 'cursor' : null });
+        (s.pool || []).forEach(([id, slot, tone]) => P.chip('p' + id, { x: GX(slot) + 4, y: GY(slot) + 5, w: 92, h: 44, label: id, sub: id[0] === 'h' ? 'hot' : 'scan', tone: tone || (id[0] === 'h' ? 'live' : 'warn') }));
+        if (s.ring) P.text('rg', { x: GX(6), y: GY(6) + 72, t: 'ring: 2 frames reused by the scan', cls: 'xs', });
+        P.text('hd', { x: 490, y: 82, t: 'disk', cls: 'mut sm' });
+        P.box('disk', { x: 480, y: 92, w: 134, h: 200, tone: 'mut', label: '' });
+        (s.disk || []).forEach(([id, k]) => P.chip('d' + id, { x: 494, y: 104 + k * 50, w: 106, h: 40, label: id, sub: 'evicted', tone: 'bad' }));
+        if (s.scan) P.chip('scan', { x: 30, y: 262, w: 150, h: 40, label: 'scan ' + s.scan, sub: 'sequential', tone: 'cursor' });
+        if (s.look) P.chip('look', { x: 220, y: 262, w: 150, h: 40, label: 'lookup ' + s.look[0], sub: s.look[1], tone: s.look[1] === 'hit' ? 'ok' : 'bad' });
+      }
+    }),
+    bug: [
+      { log: 'Four hot pages (h1 to h4) sit in the 8-frame pool, and the other four frames are free. Point lookups on them are hits.', callout: 'Hot pages are cached', code: 0,
+        state: { pool: HOTC.map((id, i) => [id, i]) }, stats: [{ l: 'lookup hit rate', v: '100%', cls: 'ok' }, { l: 'free frames', v: '4' }] },
+      { log: 'The nightly export starts a sequential scan. Pages s1 and s2 are read into the free frames.', callout: 'The scan starts reading pages', code: 0,
+        state: { pool: [...HOTC.map((id, i) => [id, i]), ['s1', 4], ['s2', 5]], scan: 's1, s2' }, stats: [{ l: 'free frames', v: '2' }, { l: 'lookup hit rate', v: '100%', cls: 'ok' }] },
+      { log: 'Pages s3 and s4 fill the last frames. The pool is full, and the hot pages are now the oldest in LRU order.', callout: 'The pool is full, hot pages are oldest', code: 1,
+        state: { pool: [...HOTC.map((id, i) => [id, i]), ['s1', 4], ['s2', 5], ['s3', 6], ['s4', 7]], scan: 's3, s4' }, stats: [{ l: 'free frames', v: '0', cls: 'warn' }] },
+      { log: 'Scan pages s5 to s8 need frames. LRU evicts the oldest pages, which are the hot ones. The scan will never read those scan pages again.', callout: 'The scan evicts every hot page', moment: true, code: 2,
+        state: { pool: [['s5', 0], ['s6', 1], ['s7', 2], ['s8', 3], ['s1', 4], ['s2', 5], ['s3', 6], ['s4', 7]], disk: HOTC.map((id, i) => [id, i]), scan: 's5 to s8', hit: 0 }, stats: [{ l: 'hot pages cached', v: '0', cls: 'bad' }, { l: 'lookup hit rate', v: '0%', cls: 'bad' }] },
+      { log: 'A customer lookup for h2 now misses and reads from disk. This is the 3 second request in the incident (illustrative).', callout: 'The lookup misses and reads from disk', code: 3,
+        state: { pool: [['s5', 0], ['s6', 1], ['s7', 2], ['s8', 3], ['s1', 4], ['s2', 5], ['s3', 6], ['s4', 7]], disk: HOTC.map((id, i) => [id, i]), look: ['h2', 'miss'], hit: 0 }, stats: [{ l: 'lookup latency', v: '3 s (illustrative)', cls: 'bad' }, { l: 'shared read', v: 'high', cls: 'bad' }] },
+      { log: 'Now the fix. The scan is limited to a ring of two frames. It reuses those two frames for every page it reads and never touches the others.', callout: 'The scan gets a ring of 2 frames', code: 4,
+        state: { ring: 1, pool: [...HOTC.map((id, i) => [id, i]), ['s1', 6], ['s2', 7]], scan: 's1, s2' }, stats: [{ l: 'frames the scan may use', v: '2', cls: 'ok' }, { l: 'lookup hit rate', v: '100%', cls: 'ok' }] },
+      { log: 'The scan reads s3 and s4 into the same two frames and drops s1 and s2. The hot pages are never evicted.', callout: 'The ring recycles its own frames', code: 4,
+        state: { ring: 1, pool: [...HOTC.map((id, i) => [id, i]), ['s3', 6], ['s4', 7]], scan: 's3, s4', look: ['h2', 'hit'] }, stats: [{ l: 'hot pages cached', v: '4', cls: 'ok' }, { l: 'lookup hit rate', v: '100%', cls: 'ok' }],
+        takeaway: 'A page read once is not a hot page. Keep one-time scans in a small ring so they cannot push out the working set.' },
+    ],
+  };
+
+  const SOURCE = { label: 'CMU 15-445 L06 Buffer Pools (notes in output/pdf/cmu-15445-fall2024)', href: '../../output/pdf/cmu-15445-fall2024/notes/06-bufferpool.pdf' };
+
+  /* ---- 3. A miss with a dirty victim: the read waits for a log flush and a page write ---- */
+  const FR = i => ({ x: 236, y: 98 + i * 58 });
+  const frameChip = (P, i, f, hl) => P.chip('f' + i, { ...FR(i), w: 176, h: 46, label: (f.p || 'free') + (f.p ? ' · pin ' + f.pin : ''), sub: f.dirty ? 'dirty' : (f.p ? 'clean' : 'empty'), tone: f.tone || (f.dirty ? 'warn' : f.p ? 'info' : 'mut'), hl });
+  const dirtyVictim = {
+    id: 'dirty-victim', label: 'Dirty victim', desc: 'A request misses and every frame is taken. The replacer picks an unpinned frame, and when that page is dirty the read waits for a log flush and a page write (timings illustrative).',
+    codeLabel: 'Path',
+    code: { bug: [
+      'getPage(P9): page table has no entry for P9 -> miss',
+      'free list is empty -> ask the replacer for a victim',
+      'victim = frame 2, page P3, pin 0, dirty = true',
+      'flush WAL up to the page LSN, then write P3 to disk',
+      'read P9 into frame 2, pin = 1, return it',
+      'background writer cleans P3 earlier -> the victim is clean, one I/O',
+    ] },
+    stage: DB.stage({
+      footer: 'Simplified: four frames, one disk. Timings illustrative.',
+      header: s => ({ left: 'I/Os the request waited for: ' + (s.io || 0), right: s.bg ? 'background writer on' : 'no background writer' }),
+      draw(P, s) {
+        P.text('hx', { x: 30, y: 82, t: 'executor', cls: 'mut sm' });
+        P.text('hf', { x: 236, y: 82, t: 'frames in the buffer pool', cls: 'mut sm' });
+        P.text('hd', { x: 470, y: 82, t: 'disk', cls: 'mut sm' });
+        P.chip('req', { x: 30, y: 180, w: 150, h: 46, label: s.got ? 'P9 · got it' : 'need P9', sub: s.got ? 'pinned' : 'page table: miss', tone: s.got ? 'ok' : 'cursor' });
+        (s.fr || []).forEach((f, i) => frameChip(P, i, f, s.vic === i));
+        if (s.log) P.chip('log', { x: 462, y: 98, w: 150, h: 46, label: 'WAL flushed', sub: 'up to LSN of P3', tone: 'acc' });
+        if (s.w) P.chip('dw', { x: 462, y: 170, w: 150, h: 46, label: 'write P3', sub: 'page to disk', tone: 'warn' });
+        if (s.r) P.chip('dr', { x: 462, y: 242, w: 150, h: 46, label: 'read P9', sub: 'page from disk', tone: 'info' });
+        if (s.vic != null) P.line('v', 180, 203, 236, FR(s.vic).y + 23, { tone: 'cursor', arrow: true, label: 'victim', dy: -8 });
+        if (s.w || s.log) P.line('wl', 412, FR(2).y + 23, 462, 193, { tone: 'warn', arrow: true });
+        if (s.r) P.line('rl', 462, 265, 412, FR(2).y + 30, { tone: 'ok', arrow: true });
+      }
+    }),
+    bug: [
+      { log: 'The executor needs page P9. The page table has no entry for it, so this is a miss. All four frames hold pages.', callout: 'P9 is not in the pool', code: 0,
+        state: { fr: [{ p: 'P1', pin: 2 }, { p: 'P2', pin: 1 }, { p: 'P3', pin: 0, dirty: 1 }, { p: 'P4', pin: 1 }] }, stats: [{ l: 'free frames', v: '0', cls: 'warn' }] },
+      { log: 'The replacer looks for a frame with pin count 0. Frames 0, 1 and 3 are in use. Frame 2 holds P3 with no users, so it is the victim.', callout: 'Frame 2 is the only unpinned frame', code: 2,
+        state: { vic: 2, fr: [{ p: 'P1', pin: 2 }, { p: 'P2', pin: 1 }, { p: 'P3', pin: 0, dirty: 1 }, { p: 'P4', pin: 1 }] }, stats: [{ l: 'victim', v: 'P3', cls: 'warn' }, { l: 'dirty', v: 'yes', cls: 'bad' }] },
+      { log: 'P3 was changed in memory and not yet written. Before the page goes out, the log up to its LSN must be on disk: write-ahead logging.', callout: 'The log goes to disk first', moment: true, code: 3, io: 1,
+        state: { vic: 2, log: 1, io: 1, fr: [{ p: 'P1', pin: 2 }, { p: 'P2', pin: 1 }, { p: 'P3', pin: 0, dirty: 1 }, { p: 'P4', pin: 1 }] }, stats: [{ l: 'I/Os waited', v: '1', cls: 'warn' }] },
+      { log: 'Then the page itself is written. The request is still waiting, and the executor sees this as a slow read.', callout: 'Then the page is written', code: 3,
+        state: { vic: 2, log: 1, w: 1, io: 2, fr: [{ p: 'P1', pin: 2 }, { p: 'P2', pin: 1 }, { p: 'P3', pin: 0, dirty: 1, tone: 'bad' }, { p: 'P4', pin: 1 }] }, stats: [{ l: 'I/Os waited', v: '2', cls: 'bad' }] },
+      { log: 'Only now is the frame free. P9 is read into it with pin count 1.', callout: 'P9 is read into the freed frame', code: 4,
+        state: { vic: 2, r: 1, io: 3, fr: [{ p: 'P1', pin: 2 }, { p: 'P2', pin: 1 }, { p: 'P9', pin: 1 }, { p: 'P4', pin: 1 }] }, stats: [{ l: 'I/Os waited', v: '3', cls: 'bad' }] },
+      { log: 'The request waited for a log flush, a page write and a page read. A clean victim would have cost one read.', callout: 'Three waits instead of one', moment: true, code: 4,
+        state: { got: 1, io: 3, fr: [{ p: 'P1', pin: 2 }, { p: 'P2', pin: 1 }, { p: 'P9', pin: 1 }, { p: 'P4', pin: 1 }] }, stats: [{ l: 'I/Os waited', v: '3', cls: 'bad' }, { l: 'read latency', v: 'spike', cls: 'bad' }] },
+      { log: 'With a background writer, P3 was written during idle time and its dirty flag cleared. The replacer takes the same victim, and the read is one I/O.', callout: 'A clean victim costs one read', code: 5,
+        state: { got: 1, bg: 1, io: 1, fr: [{ p: 'P1', pin: 2 }, { p: 'P2', pin: 1 }, { p: 'P9', pin: 1 }, { p: 'P4', pin: 1 }] }, stats: [{ l: 'I/Os waited', v: '1', cls: 'ok' }, { l: 'read latency', v: 'normal', cls: 'ok' }],
+        takeaway: 'A dirty victim moves write work into the read path. Keep dirty pages flushed in the background so eviction finds clean frames.' },
     ],
   };
 
   const EXPLAIN = `
-<h3>1. Match the layout to the access pattern</h3>
-<p>Transactions insert and read whole rows: one order, all its fields. Analytics scans a few columns over many rows: the sum of one amount column over a year. One layout cannot be best for both, so storage engines choose a layout and an encoding for the workload they serve.</p>
+<h3>1. Why a pool</h3>
+<p>Disk is far slower than memory, and a query can only work on data that is in RAM. The database groups rows into fixed-size <b>pages</b> (chapter 2) and keeps a bounded set of them in memory, the <b>buffer pool</b>. The executor never reads the disk. It asks the <b>buffer pool manager</b> for a page ID. The manager looks in the <b>page table</b>, a map from page ID to <b>frame</b>, a fixed slot in RAM that holds one page. Found is a <b>hit</b>. Not found is a <b>miss</b>, and the page is read into a free frame.</p>
+<p>Why not leave this to the operating system? The OS page cache does not know which pages a query will need next, when a page is dirty and must not be flushed before its log record, or which pages to keep. The DBMS knows all three, so most systems bypass the OS cache with direct I/O (<code>O_DIRECT</code>) and manage their own pool. PostgreSQL is a notable exception: it keeps <code>shared_buffers</code> and still lets the OS cache pages beneath it.</p>
+<figure class="mm" aria-label="Flowchart of fetching a page: page table lookup, free frame or victim, flush a dirty victim, read, pin" style="--diagram-width:360px">
+  <img src="diagrams/ch02-get-page.svg" alt="Flowchart: the executor asks for page 9. If the page table has it, pin the frame and return it. Otherwise take a free frame, or ask the replacer for an unpinned victim. A clean victim is replaced directly. A dirty victim needs the log flushed up to its LSN and the page written first. Then page 9 is read in and pinned.">
+  <figcaption>Flowchart: the path of one page request. The right-hand branch, a dirty victim, is the slow one.</figcaption>
+</figure>
 
-<h3>2. Row store, column store and the hybrid</h3>
-<p>A <b>row store</b> (NSM, the N-ary storage model) keeps every column of a row together in a page, as in chapter 2. One insert writes one page, and a point lookup reads one page. But a report that needs one of 100 columns still reads every page, because a disk read moves a whole page.</p>
-<p>A <b>column store</b> (DSM) keeps each column apart. A scan reads only the columns it names, and each column compresses well because its values look alike. The cost moves to writes: one new row touches one page per column. <b>PAX</b> is the usual compromise. Rows are grouped into <b>row groups</b>, and inside each group every column is stored as its own <b>column chunk</b>. Parquet and ORC are files of this kind.</p>
+<h3>2. What a frame carries</h3>
+<p>Each frame has a <b>pin count</b>, the number of queries using the page right now, and a <b>dirty flag</b>, which says the page differs from the copy on disk. A pinned frame is never evicted. A dirty frame must be written before it is reused. The page is lost only if a pin is never released, a bug that slowly drains the free frames.</p>
+<figure class="mm" aria-label="State diagram of a frame: free, pinned, dirty, unpinned, evicted" style="--diagram-width:610px">
+  <img src="diagrams/ch02-frame-states.svg" alt="State diagram: a frame starts free, becomes pinned when a page is loaded, becomes dirty when updated, becomes unpinned when the last user releases it, goes through a write to clear the dirty flag, and returns to free when the replacer evicts it.">
+  <figcaption>State diagram of one frame. Only an unpinned, clean frame can be reused without a write.</figcaption>
+</figure>
 
-<h3>3. What is inside a Parquet file</h3>
-<p>The writer buffers rows until a row group is full, encodes each column chunk by itself, writes the chunks, and writes a <b>footer</b> last. The footer holds the schema, the offset of every chunk and the minimum and maximum of each chunk, called a <b>zone map</b>. A reader reads the last bytes of the file, then the footer, and then only the chunks it needs. Avro is the contrast: row-based, a header with the schema and then blocks of whole rows.</p>
+<h3>3. Choosing a victim</h3>
+<p>When no frame is free, the <b>replacer</b> picks a victim among the unpinned frames. <b>LRU</b> evicts the page used longest ago. <b>Clock</b> approximates it with one reference bit per frame: a hand sweeps the frames, clears set bits and evicts the first unpinned frame whose bit is already clear. <b>LRU-K</b> keeps the last K access times per page and evicts the page whose K-th most recent access is oldest, so a page touched once does not look as important as a page touched often.</p>
+<p>All of them have a weak spot. A loop over 5 pages in a pool of 4 frames evicts, each time, the page needed next, so every request misses. A one-time sequential scan looks to LRU like a long run of recent pages and pushes the real hot set out. This is <b>sequential flooding</b>.</p>
 
-<h3>4. Encodings</h3>
-<p>Each chunk picks its own encoding. <b>Dictionary</b> encoding stores each distinct value once and a small id per row. <b>Bit packing</b> uses only the bits a value needs: three distinct values need 2 bits. <b>Run-length encoding</b> (RLE) stores a value and how many times it repeats, which works best on sorted data. <b>Delta</b> encoding stores the difference between neighbours, which suits timestamps and counters. A query can often work on the encoded form and decode only the rows it returns, which is called <b>late materialization</b>.</p>
-<p>The encoding must fit the data. A dictionary on a column where every value is distinct is as large as the plain column, plus the ids. Writers detect this and fall back to plain encoding, but the chunk then gains nothing.</p>
+<h3>4. Defending the working set</h3>
+<p>The lecture lists the usual remedies. <b>Localization</b>: each query evicts from its own small set of frames, so it cannot flood the pool. PostgreSQL gives large sequential scans, VACUUM and COPY a ring of 256 kB. <b>Priority hints</b>: the executor tells the pool a page matters, for example an index root. <b>Prefetching</b>: for a scan the next pages are known, so the pool reads them ahead. <b>Scan sharing</b>: a query joins a scan already in progress and reads the pages once for both. <b>Buffer pool bypass</b>: a scan or a sort uses private memory and never touches the pool. InnoDB uses midpoint insertion instead of a ring: new pages enter the old end and are promoted only if used again after <code>innodb_old_blocks_time</code>.</p>
 
-<h3>5. Pruning with zone maps</h3>
-<p>Before reading a chunk, the reader compares the filter with the min and max in the footer. If the filter cannot match, the group is skipped without any I/O. This only works when each group covers a narrow range. Data written in arrival order often has every group spanning the whole range, so nothing is skipped. Sorting or clustering by the filter column, and choosing a row-group size that is not too large, make the ranges narrow.</p>
+<h3>5. Dirty pages and the background writer</h3>
+<p>A dirty victim turns a read into a write plus a read. <b>Background writing</b> walks the page table and writes dirty pages while the system is idle, so the replacer finds clean frames. The rule it must obey is write-ahead logging: a page may go to disk only after the log records that changed it are on disk (chapter 24).</p>
 
 <h3>6. The trade-off</h3>
-<p>Columns read less and compress better, but appends are buffered until a row group fills, and one row touches many chunks. Updates in place are awkward, so column stores prefer batch loads and rewrite files. Encodings pay only when values repeat. Zone maps pay only when data is clustered. Check bytes read against bytes returned before and after a change of layout.</p>
+<p>A larger pool means more hits, but it takes memory from the operating system cache and from per-query work. A smaller pool misses more. Writing dirty pages early keeps reads fast but writes pages that may be changed again. Read the numbers before you tune: the hit ratio, the dirty-page count and who writes the dirty pages.</p>
 
 <h3>7. Syntax</h3>
-<pre>-- Parquet: write sorted, with a sensible row-group size (DuckDB)
-COPY (SELECT * FROM orders ORDER BY ship_date)
-  TO 'orders.parquet' (FORMAT parquet, ROW_GROUP_SIZE 122880);
+<pre>-- how big is the pool, and how often do reads hit it
+SHOW shared_buffers;
+EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM orders WHERE id = 42;
+--   Buffers: shared hit=4 read=0     (all from memory)
 
--- inspect row groups, encodings and min/max in the footer
-SELECT row_group_id, path_in_schema, encodings, stats_min, stats_max
-FROM parquet_metadata('orders.parquet');
+-- which relations fill the pool (extension pg_buffercache)
+SELECT c.relname, count(*) AS buffers
+FROM pg_buffercache b JOIN pg_class c ON b.relfilenode = c.relfilenode
+GROUP BY c.relname ORDER BY buffers DESC LIMIT 5;
 
--- how many bytes did the scan read, and how many row groups did it skip
-EXPLAIN ANALYZE SELECT SUM(amount) FROM 'orders.parquet'
-WHERE ship_date BETWEEN '2026-06-10' AND '2026-06-12';</pre>
-<p>If bytes read stay near the size of the file while the filter is narrow, the row groups overlap. Sort the data by the filter column and write again.</p>`;
+-- how many dirty pages did backends have to write themselves
+SELECT buffers_clean, buffers_backend FROM pg_stat_bgwriter;
+
+-- MySQL InnoDB scan resistance
+SHOW VARIABLES LIKE 'innodb_old_blocks%';</pre>
+<p>A large <code>shared read</code> next to a small <code>shared hit</code> means the working set does not fit, or a scan has pushed it out.</p>`;
+  /* problem, predict and diagnose (kept from the first version of this course) */
+  const FIELDS = {
+    "problem": "An order service keeps a 200 GB <code>orders</code> table on a database server with 16 GB of RAM (illustrative). Most customer lookups return in 2 ms, but some take 3 seconds, and a nightly report makes the slow ones common. The on-call engineer sees <code>EXPLAIN (ANALYZE, BUFFERS)</code> report a large <code>shared read</code> count and a small <code>shared hit</code> count for the slow queries.",
+    "predict": {
+      "q": "The pool has 4 frames and evicts the least recently used page (LRU). A report reads pages P1, P2, P3, P4, P5 in a loop, three times. How many of the 15 page requests are served from memory?",
+      "opts": [
+        "0: each page is evicted just before the loop needs it again",
+        "11: only the first read of each page misses, the rest hit",
+        "About 8: LRU keeps roughly half of the pages",
+        "15: the database reads the whole table into RAM on the first pass"
+      ],
+      "ans": 0,
+      "why": "With 5 pages and 4 frames, the page LRU evicts is always the one the loop asks for next. Every request misses, so the cache never helps until the pool holds the whole loop."
+    },
+    "diagnose": [
+      {
+        "t": "Thrashing",
+        "sym": "<b>Hit rate</b> collapses once the working set stops fitting in the pool.",
+        "ctx": "A report reads five pages in a loop, again and again. The pool has 4 frames, so each page is evicted just before it is needed again.",
+        "why": "LRU evicts the page that was used longest ago, and in a loop that is exactly the page needed next. Every access misses, so the cache never helps.",
+        "log": "-- representative output, counts illustrative\nIndex Scan using orders_customer_idx on orders  (actual time=0.041..2871.337 rows=14 loops=1)\n  Buffers: shared hit=212 read=18427\nExecution Time: 2871.802 ms",
+        "note": "Run the same query twice. If <code>shared read</code> stays large and <code>shared hit</code> stays small, the working set is not staying cached.",
+        "fix": [
+          "Measure first: run <code>EXPLAIN (ANALYZE, BUFFERS)</code> twice on the same query, and read the per-table cache hit ratio from <code>pg_statio_user_tables</code> (<code>heap_blks_hit</code> against <code>heap_blks_read</code>).",
+          "Size the pool to the hot set. The PostgreSQL documentation suggests starting <code>shared_buffers</code> at about 25% of RAM on a dedicated server, and leaving the rest to the OS page cache.",
+          "Touch fewer pages per request: add an index that covers the predicate, or keep related rows together, so the hot set shrinks.",
+          "Verify: run the same query twice after the change. The second run should show almost no <code>read</code>."
+        ]
+      },
+      {
+        "t": "Leaked pin",
+        "sym": "<b>Free frames</b> run out after a few failed requests, and then the next request waits forever.",
+        "ctx": "An error path in a storage extension returns early without unpinning. Each failed request leaves its frame pinned for the life of the process.",
+        "why": "A pin is a reference count, and eviction needs the count at zero. Time never clears a missing unpin, so the unpinned frames drain until none are left.",
+        "log": "-- representative MySQL/InnoDB output, wording varies by version\n[Warning] InnoDB: Difficult to find free blocks in the buffer pool (search iterations ...)!\n\nSHOW ENGINE INNODB STATUS;  ->  BUFFER POOL AND MEMORY: Free buffers 0",
+        "note": "Free buffers at 0 with rising search iterations means no frame can be reused. Look for references that never went away.",
+        "fix": [
+          "Measure first: find the leaking path with diagnostics. In MySQL, <code>SHOW ENGINE INNODB STATUS</code> reports free buffers and pending reads; in PostgreSQL, the <code>pg_buffercache</code> extension shows what each buffer holds.",
+          "Pair every pin with an unpin on every exit path. Use a guard that releases on scope exit: RAII in C++ or Rust, try-with-resources in Java, defer in Go.",
+          "Add an assertion in debug and test builds: when a request ends, every frame it touched must have a pin count of zero.",
+          "Verify: run the failing path 10,000 times in a test, then check that the number of free frames matches the count before the test."
+        ]
+      },
+      {
+        "t": "Scan flooding",
+        "sym": "<b>Checkout</b> latency rises only while the nightly export runs.",
+        "ctx": "A nightly export reads a 180 GB sales table once, page by page. It passes through the same buffer pool that serves checkout, so the checkout hot set is replaced every night.",
+        "why": "LRU keeps the most recently used pages. A scan touches many pages exactly once, and each one is more recent than the hot pages, so the scan pushes them out. The export gains nothing from caching, yet it uses the cache that other queries need.",
+        "log": "-- representative pg_stat_io (PostgreSQL 16+), counts illustrative\nbackend_type   | context  |   reads     |    hits\nclient backend | normal   |   412,908   |  9,811,002\nclient backend | bulkread | 1,920,000   |          0",
+        "note": "A <code>bulkread</code> row with many reads and no hits is a scan. If <code>normal</code> reads rise in the same window, the hot set is being evicted.",
+        "fix": [
+          "Measure first: during the export, read <code>pg_stat_io</code> and compare reads in context <code>bulkread</code> with reads in context <code>normal</code>.",
+          "Give large scans a bounded ring. PostgreSQL does this for large sequential scans, VACUUM and COPY: they reuse a small 256 kB ring of buffers instead of the whole pool.",
+          "In MySQL/InnoDB, rely on midpoint insertion. Pages read by a scan enter the old sublist first; <code>innodb_old_blocks_time</code> (default 1000 ms) delays promotion, and <code>innodb_old_blocks_pct</code> sets the old-sublist share.",
+          "Move the export to a replica or to an off-peak window, so it does not compete with the hot set on the primary.",
+          "Verify: compare checkout p99 latency and <code>pg_stat_io</code> reads in context <code>normal</code> across two export runs, before and after the change."
+        ]
+      },
+      {
+        "t": "Dirty eviction",
+        "sym": "<b>Read latency</b> spikes during write bursts, while disk read throughput looks normal.",
+        "ctx": "An order-ingest service updates about 8,000 rows a second. The background writer cannot flush pages as fast as writers dirty them, so most frames a reader needs hold changes that are not on disk yet.",
+        "why": "A frame cannot be reused while it holds unsaved changes. A backend that needs a frame and finds a dirty victim must write it first, so the read waits on a write. That is background flushing work done inside the query path.",
+        "log": "-- representative pg_stat_bgwriter (PostgreSQL 16 and earlier), counts illustrative\n buffers_clean | buffers_alloc | buffers_backend\n   1,203,411   |  9,870,114   |   6,402,955   <- written by query backends",
+        "note": "A rising <code>buffers_backend</code> means query backends are doing the writer&rsquo;s job. PostgreSQL 17 moved these counts into <code>pg_stat_io</code>.",
+        "fix": [
+          "Measure first: track <code>buffers_backend</code> (or writes by backend in <code>pg_stat_io</code>) as a rate. It should stay small next to background writes.",
+          "Keep the background writer ahead of the workload: raise <code>bgwriter_lru_maxpages</code> and lower <code>bgwriter_delay</code>, so dirty pages are written before a backend needs their frames.",
+          "Spread the writes: commit in smaller batches so dirty pages reach disk steadily, instead of in one burst. Checkpoint I/O bursts are a separate mechanism, covered in chapter 24.",
+          "Verify: replay the same write burst and compare p99 read latency before and after the change."
+        ]
+      }
+    ]
+  };
 
   window.CHAPTER_OVERRIDES = window.CHAPTER_OVERRIDES || {};
-  window.CHAPTER_OVERRIDES[2] = { explain: EXPLAIN, scenarios: [layout, enc, zones] };
+  window.CHAPTER_OVERRIDES[2] = { ...FIELDS, source: SOURCE, explain: EXPLAIN, scenarios: [clock, flood, dirtyVictim] };
 })();

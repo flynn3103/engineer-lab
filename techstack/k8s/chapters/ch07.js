@@ -30,7 +30,7 @@
       w: W, h: H, footer: 'Simplified. One column = one second. Delays are illustrative.',
       header: s => ({ left: 'pod web-2 deleted at 0 s', right: s.r || '' }),
       setup(kit) {
-        const L = KH.lanes(kit, { defs: [{ label: 'pod process', y: 84 }, { label: 'EndpointSlice', y: 118 }, { label: 'rules node-1', y: 152 }, { label: 'rules node-2', y: 186 }, { label: 'requests', y: 220 }], axisY: 262, n: N });
+        const L = KH.lanes(kit, { defs: [{ label: 'pod process', y: 84 }, { label: 'endpoints', y: 118 }, { label: 'rules node-1', y: 152 }, { label: 'rules node-2', y: 186 }, { label: 'requests', y: 220 }], axisY: 262, n: N });
         kit.text(null, { x: 16, y: 284, t: 'green = serving / listed · amber = rule still points at the pod · grey = gone · red = 502', cls: 'kt xs mut' });
         const gap = kit.chip(null, { x: 16, y: 298, w: 300, h: 34, label: '', sub: '', tone: 'warn', show: false, small: true });
         return { L, gap };

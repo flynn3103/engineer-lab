@@ -1,0 +1,7 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Crash["Crash, restart"] --> MR["Read the MasterRecord:<br/>LSN of the last checkpoint"]
+  MR --> An["1. Analysis, forward from the checkpoint:<br/>rebuild the active transaction table<br/>and the dirty page table"]
+  An --> Re["2. Redo, forward from the smallest recLSN:<br/>repeat history, winners and losers"]
+  Re --> Un["3. Undo, backward:<br/>roll back the losers, writing CLRs"]
+  Un --> Open["Open for business"]

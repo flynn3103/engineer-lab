@@ -1,0 +1,12 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  SQL["SQL text"] --> AST["Parser: syntax tree"]
+  AST --> Bind["Binder: names to catalog types"]
+  Bind --> Plan["Optimizer: physical plan"]
+  Plan --> Gen["Code generator:<br/>one function per pipeline"]
+  Gen --> T["Transpile to C++,<br/>compile with gcc<br/>100 to 600 ms"]
+  Gen --> J["Emit LLVM IR,<br/>JIT to machine code<br/>tens of ms"]
+  Gen --> I["Emit a bytecode,<br/>run it in a small VM"]
+  T --> Run["Run the query"]
+  J --> Run
+  I --> Run

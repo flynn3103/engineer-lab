@@ -1,0 +1,7 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  L["Load 8 values into a SIMD register"] --> C["Compare with the constant:<br/>one instruction, 8 lanes"]
+  C --> M["Result is a bitmask,<br/>one bit per lane"]
+  M --> A{"Which lanes<br/>are still valid?"}
+  A --> Sel["Selection vector or compress:<br/>pack the valid lanes together"]
+  Sel --> Next["Next operator runs on<br/>full lanes only"]

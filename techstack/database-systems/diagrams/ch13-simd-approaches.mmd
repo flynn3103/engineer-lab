@@ -1,0 +1,6 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  G["Make a loop use SIMD"] --> Auto["Automatic: the compiler decides<br/>safe only for simple loops"]
+  G --> Hint["Compiler hints: restrict,<br/>no-dependency pragmas"]
+  G --> Exp["Explicit intrinsics<br/>fastest, tied to the CPU"]
+  Exp --> Lib["Portable layer such as Highway<br/>keeps one source for many CPUs"]

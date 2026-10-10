@@ -1,0 +1,9 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  SQL["SQL"] --> Par["Parse and bind"]
+  Par --> Log["Logical plan:<br/>relational algebra tree"]
+  Log --> Rw["Rewrite rules:<br/>pushdown, unnesting,<br/>expression simplification"]
+  Rw --> Search["Plan search:<br/>join order, access paths,<br/>algorithms"]
+  Search --> Cost["Cost model with<br/>cardinality estimates"]
+  Cost --> Phys["Cheapest physical plan"]
+  Phys -. "actual rows differ?" .-> Search

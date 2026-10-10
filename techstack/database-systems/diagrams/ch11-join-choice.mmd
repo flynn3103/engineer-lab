@@ -1,0 +1,9 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Q["Join R, S"] --> Eq{"Equality on the key?"}
+  Eq -->|No| NL["Nested loop<br/>(index on inner if any)"]
+  Eq -->|Yes| Srt{"Sorted input or<br/>sorted output wanted?"}
+  Srt -->|Yes| SM["Sort-merge join"]
+  Srt -->|No| Mem{"Build side fits<br/>in memory?"}
+  Mem -->|Yes| HJ["Hash join"]
+  Mem -->|No| GH["Grace hash join"]

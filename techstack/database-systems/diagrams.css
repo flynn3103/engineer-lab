@@ -6,3 +6,9 @@
 @media(max-width:820px){
   .lx-body.explain{grid-template-columns:minmax(0,1fr)}
 }
+.scene .tok[data-tone=t0] rect{fill:color-mix(in srgb,var(--t0) 30%,var(--card));stroke:var(--t0)}
+.scene .tok[data-tone=t1] rect{fill:color-mix(in srgb,var(--t1) 30%,var(--card));stroke:var(--t1)}
+.scene .tok[data-tone=t2] rect{fill:color-mix(in srgb,var(--t2) 30%,var(--card));stroke:var(--t2)}
+.scene .tok[data-tone=t3] rect{fill:color-mix(in srgb,var(--t3) 30%,var(--card));stroke:var(--t3)}
+.scene .tok[data-tone=t4] rect{fill:color-mix(in srgb,var(--t4) 30%,var(--card));stroke:var(--t4)}
+.scene .tok[data-tone=t5] rect{fill:color-mix(in srgb,var(--t5) 30%,var(--card));stroke:var(--t5)}

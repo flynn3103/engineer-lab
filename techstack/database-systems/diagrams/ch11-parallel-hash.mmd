@@ -1,0 +1,8 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  R["Relation R"] --> P1["Partition by hash<br/>optional, radix"]
+  S["Relation S"] --> P2["Partition by hash"]
+  P1 --> B["Build: each worker builds<br/>a table for its partition"]
+  B --> Pr["Probe: scan S partition,<br/>look up in R table"]
+  P2 --> Pr
+  Pr --> Out["Output matches"]

@@ -1,0 +1,8 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  In["N pages on disk"] --> P0["Pass 0: read B pages,<br/>sort in memory, write a run"]
+  P0 --> R["N / B sorted runs"]
+  R --> M{"One run left?"}
+  M -->|No| Mg["Merge pass: up to B - 1 runs<br/>into one longer run"]
+  Mg --> M
+  M -->|Yes| Out["Sorted output"]

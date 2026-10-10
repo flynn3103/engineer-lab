@@ -1,0 +1,14 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+sequenceDiagram
+  participant C as Coordinator
+  participant A as Shard A
+  participant B as Shard B
+  C->>A: Prepare
+  C->>B: Prepare
+  A-->>C: OK, logged as prepared
+  B-->>C: OK, logged as prepared
+  Note over C: decision logged: commit
+  C->>A: Commit
+  C->>B: Commit
+  A-->>C: OK
+  B-->>C: OK

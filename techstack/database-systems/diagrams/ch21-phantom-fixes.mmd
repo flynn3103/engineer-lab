@@ -1,0 +1,8 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Ph["Phantom: a new row enters a range<br/>that a transaction already read"] --> R1["Re-execute scans at commit<br/>compare results, abort if different"]
+  Ph --> R2["Predicate locking<br/>lock the WHERE condition itself"]
+  Ph --> R3["Index locking<br/>lock key ranges and gaps in an index"]
+  R3 --> K["Key-value lock on existing keys"]
+  R3 --> G["Gap lock on the space between keys"]
+  R3 --> N["Next-key lock: key plus gap before it"]

@@ -1,0 +1,9 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  F["Parquet file"] --> RG1["Row group 1<br/>about 100k rows"]
+  F --> RG2["Row group 2"]
+  F --> Ft["Footer<br/>schema, offsets, min and max per chunk"]
+  RG1 --> C1["Column chunk: ship_date"]
+  RG1 --> C2["Column chunk: amount"]
+  C2 --> P1["Data pages<br/>encoded and compressed"]
+  Ft -. "read first" .-> Plan["Reader plans:<br/>which groups, which chunks"]

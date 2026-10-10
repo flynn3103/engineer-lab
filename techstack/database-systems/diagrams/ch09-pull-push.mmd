@@ -1,0 +1,11 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart LR
+  subgraph Pull["Pull: top to bottom"]
+    direction TB
+    R1["Root"] -- "next()" --> M1["Filter"] -- "next()" --> L1["Scan"]
+    L1 -. "tuple" .-> M1 -. "tuple" .-> R1
+  end
+  subgraph Push["Push: bottom to top"]
+    direction TB
+    L2["Scan loop"] -- "tuple" --> M2["Filter"] -- "tuple" --> R2["Root"]
+  end

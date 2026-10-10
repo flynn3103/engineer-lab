@@ -1,0 +1,8 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  S["System architectures"] --> SE["Shared everything<br/>one machine, one memory, one disk"]
+  S --> SM["Shared memory<br/>nodes share memory over a fast fabric"]
+  S --> SD["Shared disk<br/>nodes have own memory,<br/>one storage layer"]
+  S --> SN["Shared nothing<br/>each node owns its data and disk"]
+  SD --> D1["Easy to add compute,<br/>storage is the shared resource"]
+  SN --> N1["Scales out, but moving data<br/>means moving ownership"]

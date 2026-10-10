@@ -1,0 +1,12 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Ins["Insert key"] --> Leaf["Descend to the leaf"]
+  Leaf --> Room{"Leaf has room?"}
+  Room -->|Yes| Done["Insert in sorted position"]
+  Room -->|No| Sp["Split leaf in two,<br/>copy the first key of the new leaf up"]
+  Sp --> Par{"Parent has room?"}
+  Par -->|Yes| Done
+  Par -->|No| Sp2["Split the parent,<br/>push the middle key up"]
+  Sp2 --> Root{"Was it the root?"}
+  Root -->|Yes| H["New root: tree grows one level"]
+  Root -->|No| Par

@@ -1,0 +1,7 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  V["Version with begin timestamp b<br/>and end timestamp e"] --> Q1{"b is committed and<br/>b is at or before my snapshot?"}
+  Q1 -->|No| N["Not visible: skip to the older version"]
+  Q1 -->|Yes| Q2{"e is empty, or not committed,<br/>or after my snapshot?"}
+  Q2 -->|No| N
+  Q2 -->|Yes| Y["Visible: this is the version I read"]

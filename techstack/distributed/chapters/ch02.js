@@ -1,199 +1,127 @@
-/* Chapter 2 "Leaders, followers and failover": three bespoke scenes, none of them a node graph with arrows only.
-   1. Log strips: one strip of numbered entries per machine. A red tail marks entries only the primary holds.
-   2. Position ruler: each replica is a flag on a ruler of log positions. The failover picks the flag furthest right.
-   3. Split network: a partition cuts the old primary off. Epoch numbers decide whose write storage accepts.
-   Entry numbers (#8808..#8812), positions (97, 100) and epochs are illustrative. */
+/* Chapter 3: visuals selected for the new learning journey. */
 (function () {
   const W = 640, H = 420;
+  const PX = 150, BX = 470;                 // lane x positions: payment service, bank
+  const Y = { m1: [116, 148], r1: [158, 190], m2: [238, 268], r2: [278, 310] };
+  const P = (x, y) => ({ x, y });
+  const FOOT_A = 'Illustrative: 3 s timeout, one 10-unit charge. Time runs downward.';
 
-  /* ---------- 1. log strips ---------- */
-  const CX = 150, CW = 38, CG = 5, ENT = [8808, 8809, 8810, 8811, 8812];
-  const ROW = { P: 108, R1: 160, R2: 212 };
-  const cx = i => CX + i * (CW + CG);
-  const strips = {
-    id: 'async', label: 'Async loses an order',
-    desc: 'The primary answers OK before any replica has the entry. It crashes, and the confirmed order is gone (illustrative).',
-    codeLabel: 'Log',
+  const seg = (ln, a, b, p, tone, ms) => ln.set({ x1: a.x, y1: a.y, x2: a.x + (b.x - a.x) * p, y2: a.y + (b.y - a.y) * p, op: p > 0 ? 1 : 0, tone: tone || 'acc2', w: 2.6, ms: ms == null ? 800 : ms });
+  const head = (d, a, b, p, tone) => d.set({ x: a.x + (b.x - a.x) * p, y: a.y + (b.y - a.y) * p, op: p > 0 ? 1 : 0, tone: tone || 'acc2' });
+
+  const ladder = {
+    id: 'lost-reply', label: 'Lost reply, then retry',
+    desc: 'The bank charges the card, but the reply is lost. The caller cannot tell "never ran" from "ran, reply lost", so it retries (illustrative).',
+    codeLabel: 'Call',
     code: {
-      bug: ['PUT order 8812', 'primary: append #8812 (local log only)', 'OK 8812', 'ship #8812 to replica (still in flight)', 'primary: CRASH, disk unreadable', 'promote replica: log ends at #8811', 'GET order 8812  ->  not found'],
-      fix: ['PUT order 8812', 'primary: append #8812, hold the reply', 'ship #8812 -> replica: ack', 'primary: OK 8812 (2 copies)', 'primary: CRASH', 'GET order 8812  ->  found']
+      bug: ['payment: charge(user, 10)    # timeout = 3 s', 'bank: charge applied, reply lost', 'payment: no reply after 3 s, treat as failed', 'payment: retry POST /charge', 'customer balance: charged twice'],
+      fix: ['POST /charge', 'Idempotency-Key: 8f2c-pay-8812', 'bank: store result under the key, then reply', 'retry with same key -> bank returns stored result']
     },
     stage: {
-      w: W, h: H, footer: 'Illustrative entries #8808 to #8812. Replica 2 is a lagging, asynchronous copy.',
-      header: s => ({ left: s.sync ? 'semi-synchronous: wait for one replica' : 'asynchronous: answer first', right: s.right || '' }),
+      w: W, h: H, footer: FOOT_A,
+      header: s => ({ left: s.key ? 'with Idempotency-Key 8f2c' : 'no idempotency key', right: s.right || '' }),
       setup(kit) {
-        const R = { lab: {}, cell: { P: [], R1: [], R2: [] } };
-        R.lab.P = DK.box(kit, { x: 20, y: ROW.P, w: 112, h: 32, label: 'primary', tone: 'acc' });
-        R.lab.R1 = DK.box(kit, { x: 20, y: ROW.R1, w: 112, h: 32, label: 'replica 1', tone: 'none' });
-        R.lab.R2 = DK.box(kit, { x: 20, y: ROW.R2, w: 112, h: 32, label: 'replica 2', tone: 'none' });
-        DK.cap(kit, CX, 96, 'replication log, one box per entry', 'xs mut');
-        for (const k of ['P', 'R1', 'R2']) ENT.forEach((e, i) => R.cell[k].push(DK.box(kit, { x: cx(i), y: ROW[k], w: CW, h: 32, r: 6, label: String(e).slice(2), tone: 'soft', op: 0.3, dash: '3 3' })));
-        R.tail = DK.line(kit, { x1: cx(4), y1: ROW.P + 40, x2: cx(4) + CW, y2: ROW.P + 40, tone: 'bad', w: 4, op: 0 });
-        R.tailL = DK.txt(kit, { x: cx(4) + CW + 8, y: ROW.P + 24, t: '', cls: 'xs', anchor: 'start' });
-        R.ship = DK.dot(kit, { r: 6, tone: 'acc2' });
-        R.rec = DK.box(kit, { x: 410, y: 262, w: 210, h: 36, tone: 'ok', label: 'client holds a receipt', sub: 'OK 8812', op: 0 });
-        R.get = DK.box(kit, { x: 410, y: 306, w: 210, h: 36, tone: 'bad', label: 'GET order 8812', sub: '', op: 0 });
-        R.x = DK.txt(kit, { x: 76, y: ROW.P + 52, t: '', cls: 'sm b', anchor: 'middle' });
-        R.crown = DK.box(kit, { x: 410, y: ROW.R1, w: 210, h: 32, tone: 'ok', label: 'promoted: new primary', op: 0 });
+        const R = {};
+        DK.box(kit, { x: PX - 80, y: 76, w: 160, h: 30, label: 'payment service', tone: 'acc' });
+        DK.box(kit, { x: BX - 80, y: 76, w: 160, h: 30, label: 'bank', tone: 'warn' });
+        DK.rule(kit, PX, 108, PX, 330, { dash: '4 4' }); DK.rule(kit, BX, 108, BX, 330, { dash: '4 4' });
+        R.m1 = DK.line(kit, { tone: 'acc2' }); R.r1 = DK.line(kit, { tone: 'ok' }); R.m2 = DK.line(kit, { tone: 'acc2' }); R.r2 = DK.line(kit, { tone: 'ok' });
+        R.h = ['m1', 'r1', 'm2', 'r2'].map(() => DK.dot(kit, { r: 5, op: 0 }));
+        R.lost = DK.txt(kit, { x: 310, y: 212, t: '', cls: 'lg b', anchor: 'middle' });
+        R.l1 = DK.txt(kit, { x: 310, y: 128, t: '', cls: 'sm', anchor: 'middle' });
+        R.l2 = DK.txt(kit, { x: 310, y: 250, t: '', cls: 'sm', anchor: 'middle' });
+        R.to = DK.line(kit, { x1: PX - 22, y1: Y.m1[0], x2: PX - 22, y2: Y.m1[0], tone: 'warn', w: 7 });
+        R.toL = DK.txt(kit, { x: PX - 32, y: 210, t: '', cls: 'sm', anchor: 'end' });
+        R.q = DK.box(kit, { x: PX - 150, y: 222, w: 112, h: 36, tone: 'warn', label: 'ran or not?', sub: 'unknown', op: 0 });
+        R.key = DK.box(kit, { x: 512, y: 96, w: 118, h: 36, tone: 'ok', label: 'key 8f2c', sub: 'result stored', op: 0 });
+        R.c1 = DK.box(kit, { x: 512, y: 140, w: 118, h: 36, tone: 'bad', label: '-10', sub: 'charged', op: 0 });
+        R.c2 = DK.box(kit, { x: 512, y: 244, w: 118, h: 36, tone: 'bad', label: '-10', sub: 'charged again', op: 0 });
         return R;
       },
       frame(s, kit, R) {
-        const n = { P: s.p || 0, R1: s.r1 || 0, R2: s.r2 || 0 };
-        for (const k of ['P', 'R1', 'R2']) R.cell[k].forEach((c, i) => {
-          const has = i < n[k], lone = i === 4 && n.P > 4 && n.R1 < 5 && n.R2 < 5;
-          c.set({ op: has ? 1 : 0.3, tone: has ? (lone ? 'warn' : 'ok') : 'soft', dash: has ? '' : '3 3' });
-        });
-        const dead = !!s.crash;
-        R.lab.P.set({ op: dead ? 0.45 : 1, tone: dead ? 'bad' : 'acc', label: dead ? 'primary ✕' : 'primary', sub: '' });
-        R.lab.R1.set({ tone: s.promoted ? 'ok' : 'none', label: s.promoted ? 'replica 1 → primary' : 'replica 1' });
-        R.cell.P.forEach(c => c.g.style.opacity = c.st.op * (dead ? 0.45 : 1));
-        const lone = n.P > 4 && n.R1 < 5 && n.R2 < 5;
-        R.tail.set({ op: lone && !dead ? 1 : 0 });
-        R.tailL.set(lone && !dead ? '← only on the primary' : '', { tone: 'bad' });
-        DK.glide(R.ship, { x: cx(4) + CW / 2, y: ROW.P + 16 }, { x: cx(4) + CW / 2, y: ROW.R1 + 16 }, s.ship || 0, 'acc2');
-        R.rec.set({ op: s.rec ? 1 : 0 });
-        R.get.set({ op: s.get ? 1 : 0, tone: s.get === 'found' ? 'ok' : 'bad', sub: s.get === 'found' ? 'found' : 'not found', label: 'GET order 8812' });
-        R.x.set(dead ? '✕ disk unreadable' : '', { tone: 'bad' });
+        const A = (y) => P(PX, y), B = (y) => P(BX, y);
+        seg(R.m1, A(Y.m1[0]), B(Y.m1[1]), s.m1 || 0); head(R.h[0], A(Y.m1[0]), B(Y.m1[1]), s.m1 || 0);
+        const rp = s.lost ? 0.5 : (s.r1 || 0);
+        seg(R.r1, B(Y.r1[0]), A(Y.r1[1]), rp, s.lost ? 'bad' : 'ok'); head(R.h[1], B(Y.r1[0]), A(Y.r1[1]), rp, s.lost ? 'bad' : 'ok');
+        R.h[1].set({ op: s.lost ? 0 : (rp > 0 ? 1 : 0) });
+        seg(R.m2, A(Y.m2[0]), B(Y.m2[1]), s.m2 || 0); head(R.h[2], A(Y.m2[0]), B(Y.m2[1]), s.m2 || 0);
+        seg(R.r2, B(Y.r2[0]), A(Y.r2[1]), s.r2 || 0, 'ok'); head(R.h[3], B(Y.r2[0]), A(Y.r2[1]), s.r2 || 0, 'ok');
+        R.lost.set(s.lost ? '✕ reply lost' : '', { tone: 'bad', op: s.lost ? 1 : 0 });
+        R.l1.set(s.m1 ? (s.key ? 'POST /charge + key' : 'POST /charge') : '', { op: s.m1 ? 1 : 0 });
+        R.l2.set(s.m2 ? (s.key ? 'retry, same key' : 'retry, no key') : '', { op: s.m2 ? 1 : 0 });
+        R.to.set({ y2: Y.m1[0] + (s.to || 0) * 100, op: s.to ? 1 : 0, tone: s.to >= 1 ? 'bad' : 'warn' });
+        R.toL.set(s.to ? '3 s timeout' : '', { op: s.to ? 1 : 0 });
+        R.q.set({ op: s.to >= 1 && !s.m2 ? 1 : 0 });
+        R.key.set({ op: s.keyBox ? 1 : 0 });
+        R.c1.set({ op: s.c1 ? 1 : 0 });
+        R.c2.set({ op: s.c2 ? 1 : 0, tone: s.c2 === 'hit' ? 'ok' : 'bad', label: s.c2 === 'hit' ? 'no charge' : '-10', sub: s.c2 === 'hit' ? 'stored result' : 'charged again' });
       }
     },
     bug: [
-      { log: 'The client sends PUT order 8812. The primary appends #8812 to its own log. No replica has it yet, so this entry is the unreplicated tail.', code: 1, callout: 'Appended on the primary only', state: { p: 5, r1: 4, r2: 3 }, stats: [{ l: 'copies of #8812', v: '1', cls: 'warn' }] },
-      { log: 'The primary answers OK at once, which is the asynchronous choice. The client now holds a receipt.', code: 2, callout: 'OK sent before any replica has it', state: { p: 5, r1: 4, r2: 3, rec: 1 }, stats: [{ l: 'copies of #8812', v: '1', cls: 'warn' }] },
-      { log: 'The shipment of #8812 is still in flight when the primary crashes. Its disk is unreadable, so #8812 exists nowhere else.', code: 4, callout: 'Crash while the entry is in flight', moment: true, state: { p: 5, r1: 4, r2: 3, rec: 1, ship: 0.45, crash: 1 }, stats: [{ l: 'copies of #8812', v: '0', cls: 'bad' }] },
-      { log: 'Failover promotes replica 1, the one with the newest log. Its log ends at #8811.', code: 5, callout: 'Promote replica 1: the log ends at #8811', state: { p: 5, r1: 4, r2: 3, rec: 1, crash: 1, promoted: 1 }, stats: [{ l: 'new primary log ends', v: '#8811', cls: 'bad' }] },
-      { log: 'The client asks for the order it was told about. The new primary returns not found.', code: 6, callout: 'The receipt and the database disagree', moment: true, state: { p: 5, r1: 4, r2: 3, rec: 1, crash: 1, promoted: 1, get: 'lost' }, stats: [{ l: 'customer sees', v: 'OK, then not found', cls: 'bad' }],
-        takeaway: 'The loss window is the unreplicated tail at the moment of the crash.' }
+      { log: 'The payment service sends charge(user, 10) and starts a 3 second timeout (illustrative). It has no way to know what happens next.', code: 0, callout: 'charge(user, 10), timeout 3 s', state: { m1: 1 }, stats: [{ l: 'timeout', v: '3 s', cls: 'warn' }] },
+      { log: 'The bank applies the charge and sends the reply. The reply is lost on the way back.', code: 1, callout: 'The charge ran. The reply did not arrive.', state: { m1: 1, c1: 1, lost: 1 }, stats: [{ l: 'customer charged', v: 'once', cls: 'warn' }] },
+      { log: 'After 3 seconds the payment service gives up. From its side, "never ran" and "ran, reply lost" look identical.', code: 2, callout: 'Timeout: it cannot tell the two cases apart', state: { m1: 1, c1: 1, lost: 1, to: 1 }, stats: [{ l: 'payment service knows', v: 'nothing', cls: 'warn' }] },
+      { log: 'The payment service retries. The request carries no key, so the bank has no way to see it is the same payment and charges again.', code: 4, callout: 'Retry without a key: charged twice', moment: true, state: { m1: 1, c1: 1, lost: 1, to: 1, m2: 1, c2: 1 }, stats: [{ l: 'customer charged', v: 'twice', cls: 'bad' }],
+        takeaway: 'A timeout says "no reply", not "did not run". A retry without a key repeats the side effect.' }
     ],
     fix: [
-      { log: 'Semi-synchronous: the primary appends #8812 but holds the reply until a replica confirms.', code: 1, callout: 'Append, then hold the reply', state: { sync: 1, p: 5, r1: 4, r2: 3 }, stats: [{ l: 'copies before OK', v: '1', cls: 'warn' }] },
-      { log: 'The entry is shipped to replica 1, which stores it and acknowledges. Two machines now have #8812.', code: 2, callout: 'Replica 1 stores #8812 and acknowledges', state: { sync: 1, p: 5, r1: 5, r2: 3, ship: 1 }, stats: [{ l: 'copies before OK', v: '2', cls: 'ok' }] },
-      { log: 'Only now does the primary send OK 8812. The receipt is backed by two machines.', code: 3, callout: 'OK 8812 backed by 2 copies', state: { sync: 1, p: 5, r1: 5, r2: 3, rec: 1 }, stats: [{ l: 'copies before OK', v: '2', cls: 'ok' }] },
-      { log: 'The primary crashes. Replica 1 holds #8812 and has the newest log, so it can safely become primary.', code: 4, callout: 'Crash: replica 1 already has #8812', state: { sync: 1, p: 5, r1: 5, r2: 3, rec: 1, crash: 1, promoted: 1 }, stats: [{ l: 'new primary log ends', v: '#8812', cls: 'ok' }] },
-      { log: 'GET order 8812 returns found. The receipt and the database agree.', code: 5, callout: 'The receipt and the database agree', state: { sync: 1, p: 5, r1: 5, r2: 3, rec: 1, crash: 1, promoted: 1, get: 'found' }, stats: [{ l: 'customer sees', v: 'OK, then found', cls: 'ok' }],
-        takeaway: 'Waiting for one replica before OK removes the tail, at the cost of one round trip per write.' }
+      { log: 'The client makes one Idempotency-Key per payment and sends it with every attempt of that payment.', code: 1, callout: 'One key per payment, sent on every attempt', state: { m1: 1, key: 1 }, stats: [{ l: 'key', v: '8f2c-pay-8812', cls: 'ok' }] },
+      { log: 'The bank stores the result under that key before it replies. The reply is lost, as before.', code: 2, callout: 'Result stored under the key, reply lost', state: { m1: 1, key: 1, keyBox: 1, c1: 1, lost: 1 }, stats: [{ l: 'charges applied', v: '1', cls: 'ok' }] },
+      { log: 'The client times out and retries with the same key.', code: 1, callout: 'Timeout, retry with the same key', state: { m1: 1, key: 1, keyBox: 1, c1: 1, lost: 1, to: 1, m2: 1 }, stats: [{ l: 'retry key', v: 'same', cls: 'ok' }] },
+      { log: 'The bank finds the key already has a result and returns it. The customer is charged once.', code: 3, callout: 'Key hit: the stored result comes back', state: { m1: 1, key: 1, keyBox: 1, c1: 1, lost: 1, to: 1, m2: 1, r2: 1, c2: 'hit' }, stats: [{ l: 'charges applied', v: '1', cls: 'ok' }],
+        takeaway: 'Retries look up the same payment when its identity and effect are coordinated.' }
     ]
   };
 
-  /* ---------- 2. position ruler ---------- */
-  const RX = p => 70 + (p - 94) * (500 / 6);
-  const ruler = {
-    id: 'highest', label: 'Pick the newest replica',
-    desc: 'The same crash, but now the question is which replica to promote. Compare log positions before you choose (illustrative positions).',
-    codeLabel: 'Script',
+  /* ---------- 2. retry fan-out tree ---------- */
+  const TX = (r, i) => { if (r === 3) return 98 + i * 19.4; const k = Math.pow(3, 3 - r); return (TX(3, i * k) + TX(3, i * k + k - 1)) / 2; };
+  const TY = [112, 158, 204, 252];
+  const LBL = ['user request', 'web', 'api', 'database'];
+  const NODES = [1, 3, 9, 27];
+  const fan = {
+    id: 'storm', label: 'Retries multiply load',
+    desc: 'Three layers each retry three times. One user request becomes 27 calls to a database that is already slow (illustrative).',
+    codeLabel: 'Retries',
     code: {
-      bug: ['script: first replica to answer wins', 'A: log 1..97 (answered first)', 'promote A -> primary', 'acked 98, 99, 100 are missing on A', 'B rejoins: its 98..100 are rolled back'],
-      fix: ['script: ask every replica for its position', 'A: position 97', 'B: position 100', 'promote B (highest position)', 'A replays 98..100 from B']
+      bug: ['web: retry 3 times on failure', 'api: retry 3 times on failure', 'database: slow, overloaded', 'calls per user request: 1 x 3 x 3 x 3 = 27', 'recovery: never, the retries keep it down'],
+      fix: ['web: retry at one layer only', 'budget: at most 10% extra calls', 'backoff: exponential, with jitter', 'circuit breaker: stop calls while the db is down']
     },
     stage: {
-      w: W, h: H, footer: 'Illustrative positions: the primary had acknowledged up to 100.',
-      header: s => ({ left: 'log position ruler', right: s.right || '' }),
+      w: W, h: H, footer: 'Illustrative: 3 retries per layer; the db can take about 9 calls.',
+      header: s => ({ left: 'one user request', right: s.db != null ? s.db + ' calls at the database' : '' }),
       setup(kit) {
-        const R = {};
-        DK.rule(kit, RX(94), 186, RX(100), 186, { tone: 'ink', w: 2.4 });
-        for (let p = 94; p <= 100; p++) { DK.rule(kit, RX(p), 180, RX(p), 192, { tone: 'ink' }); DK.cap(kit, RX(p), 208, String(p), 'sm mut', 'middle'); }
-        R.gap = DK.line(kit, { x1: RX(97), y1: 186, x2: RX(97), y2: 186, tone: 'bad', w: 11, op: 0 });
-        R.gapL = DK.txt(kit, { x: RX(98.5), y: 170, t: '', cls: 'sm b', anchor: 'middle' });
-        R.ack = DK.box(kit, { x: RX(100) - 66, y: 100, w: 132, h: 40, tone: 'acc', label: 'primary', sub: 'acked up to 100' });
-        R.ackLine = DK.rule(kit, RX(100), 140, RX(100), 180, { tone: 'acc', dash: '3 3' });
-        R.A = DK.box(kit, { x: RX(97) - 56, y: 240, w: 112, h: 40, tone: 'none', label: 'replica A', sub: 'position 97' });
-        R.B = DK.box(kit, { x: RX(100) - 56, y: 292, w: 112, h: 40, tone: 'none', label: 'replica B', sub: 'position 100' });
-        R.stemA = DK.line(kit, { x1: RX(97), y1: 240, x2: RX(97), y2: 192, tone: 'mut', w: 1.6 });
-        R.stemB = DK.line(kit, { x1: RX(100), y1: 292, x2: RX(100), y2: 192, tone: 'mut', w: 1.6 });
-        R.pick = DK.txt(kit, { x: 20, y: 330, t: '', cls: 'sm b', anchor: 'start' });
+        const R = { rows: [], link: [] };
+        LBL.forEach((l, r) => DK.cap(kit, 8, TY[r] + 4, l, 'sm mut'));
+        for (let r = 1; r < 4; r++) for (let i = 0; i < NODES[r]; i++) R.link.push({ r, i, ln: DK.line(kit, { x1: TX(r - 1, Math.floor(i / 3)), y1: TY[r - 1], x2: TX(r, i), y2: TY[r], tone: 'line', w: 1.2, op: 0 }) });
+        NODES.forEach((n, r) => { R.rows[r] = []; for (let i = 0; i < n; i++) R.rows[r].push(DK.dot(kit, { x: TX(r, i), y: TY[r], r: r === 3 ? 4.6 : r === 2 ? 6 : 8, op: 0 })); });
+        R.bar = DK.bar(kit, { x: 120, y: 292, w: 340, h: 12 }); DK.cap(kit, 8, 302, 'database load', 'sm');
+        R.cut = DK.line(kit, { x1: 120 + 340 / 3, y1: 286, x2: 120 + 340 / 3, y2: 310, tone: 'ink', w: 2 });
+        R.cutL = DK.txt(kit, { x: 120 + 340 / 3, y: 324, t: 'it can take 9', cls: 'xs', anchor: 'middle' });
         return R;
       },
       frame(s, kit, R) {
-        const a = s.a == null ? 97 : s.a, b = s.b == null ? 100 : s.b;
-        R.A.set({ x: RX(a) - 56, tone: s.crown === 'A' ? 'ok' : s.dim === 'A' ? 'warn' : 'none', label: s.crown === 'A' ? 'A → primary' : 'replica A', sub: 'position ' + a });
-        R.B.set({ x: RX(b) - 56, tone: s.crown === 'B' ? 'ok' : s.dim === 'B' ? 'warn' : 'none', label: s.crown === 'B' ? 'B → primary' : 'replica B', sub: 'position ' + b });
-        R.stemA.set({ x1: RX(a), x2: RX(a) });
-        R.stemB.set({ x1: RX(b), x2: RX(b) });
-        const top = s.crown === 'A' ? a : null;
-        R.gap.set({ x1: RX(a), x2: top != null ? RX(100) : RX(a), op: top != null ? 1 : 0 });
-        R.gapL.set(top != null ? '98, 99, 100 acked, now missing' : '', { tone: 'bad', op: top != null ? 1 : 0 });
-        R.pick.set(s.pick || '', { tone: s.pickTone || 'ink' });
+        const rows = s.rows || [];
+        NODES.forEach((n, r) => R.rows[r].forEach((d, i) => { const st = (rows[r] || {})[i]; d.set({ op: st ? (st === 'x' ? 0.3 : 1) : 0, tone: st === 'x' ? 'mut' : st === 'bad' ? 'bad' : st === 'warn' ? 'warn' : 'ok' }); }));
+        R.link.forEach(k => { const a = (rows[k.r] || {})[k.i], p = (rows[k.r - 1] || {})[Math.floor(k.i / 3)]; k.ln.set({ op: a && p ? 0.8 : 0, tone: a === 'x' ? 'mut' : 'line', dash: a === 'x' ? '3 3' : '' }); });
+        const calls = s.db || 0;
+        R.bar.set({ f: calls / 27, tone: calls > 9 ? 'bad' : calls > 6 ? 'warn' : 'ok', label: s.db != null ? calls + ' calls' : '' });
       }
     },
     bug: [
-      { log: 'The primary had acknowledged writes up to position 100 when it died. Replica A is at 97, replica B is at 100, and the failover script has not looked at either position.', code: 0, callout: 'Which replica to promote?', state: { pick: 'the script only waits for an answer' }, stats: [{ l: 'acked', v: 'up to 100', cls: 'warn' }] },
-      { log: 'Replica A answers first, so the script promotes it. Positions 98, 99 and 100 were acknowledged to clients but A does not hold them.', code: 2, callout: 'First to answer wins: A at 97', moment: true, state: { crown: 'A', pick: 'A answered first' }, stats: [{ l: 'new primary position', v: '97', cls: 'bad' }, { l: 'acked but missing', v: '3', cls: 'bad' }] },
-      { log: 'Replica B rejoins as a follower. Its entries 98 to 100 do not exist on the new primary, so they are rolled back to match.', code: 4, callout: 'B follows A: its 98 to 100 are discarded', state: { crown: 'A', a: 97, b: 97, pick: 'B truncates to 97', pickTone: 'bad' }, stats: [{ l: 'acked writes lost', v: '3', cls: 'bad' }],
-        takeaway: 'Failover that does not compare log positions silently discards acknowledged writes.' }
+      { log: 'One user request reaches the web tier once. The database is slow, but the first call is normal.', code: 0, callout: 'One request, one call', state: { db: 1, rows: [{ 0: 'ok' }] }, stats: [{ l: 'calls at database', v: '1', cls: 'ok' }] },
+      { log: 'The web tier retries three times on failure, so the api tier sees 3 calls.', code: 0, callout: 'Web retries 3×: the api sees 3 calls', state: { db: 3, rows: [{ 0: 'ok' }, { 0: 'warn', 1: 'warn', 2: 'warn' }] }, stats: [{ l: 'calls at api', v: '3', cls: 'warn' }] },
+      { log: 'The api tier retries too. Each of its 3 calls becomes 3, so the database gets 9 calls for one user request.', code: 1, callout: 'Api retries 3×: 9 calls reach the database', state: { db: 9, rows: [{ 0: 'ok' }, { 0: 'warn', 1: 'warn', 2: 'warn' }, [...Array(9)].map(() => 'warn')] }, stats: [{ l: 'calls at database', v: '9', cls: 'warn' }] },
+      { log: 'Every layer retries, so the database receives 27 calls for each user request (illustrative). The extra calls keep it overloaded, which is a metastable failure.', code: 3, callout: '3 × 3 × 3 = 27 calls, and it never recovers', moment: true, state: { db: 27, rows: [{ 0: 'ok' }, { 0: 'bad', 1: 'bad', 2: 'bad' }, [...Array(9)].map(() => 'bad'), [...Array(27)].map(() => 'bad')] }, stats: [{ l: 'calls at database', v: '27', cls: 'bad' }, { l: 'database recovers', v: 'no', cls: 'bad' }],
+        takeaway: 'Retries multiply per layer. A slow database receives more load exactly when it is already struggling.' }
     ],
     fix: [
-      { log: 'The script asks every surviving replica for its log position before it promotes anybody.', code: 0, callout: 'Ask every replica: what is your position?', state: { dim: 'A', pick: 'A: 97 · B: 100' }, stats: [{ l: 'A', v: '97', cls: 'warn' }, { l: 'B', v: '100', cls: 'ok' }] },
-      { log: 'B has the highest position, 100, so B is promoted. Every acknowledged entry up to 100 survives.', code: 3, callout: 'Promote the highest position: B', state: { crown: 'B', pick: 'B holds everything acked' }, stats: [{ l: 'new primary position', v: '100', cls: 'ok' }] },
-      { log: 'A follows B and replays entries 98 to 100 from B until it catches up.', code: 4, callout: 'A replays 98 to 100 from B', state: { crown: 'B', a: 100, pick: 'A caught up from B' }, stats: [{ l: 'A', v: '100', cls: 'ok' }, { l: 'acked writes lost', v: '0', cls: 'ok' }],
-        takeaway: 'Promote the replica with the highest log position, and have the others replay from it.' }
-    ]
-  };
-
-  /* ---------- 3. split network ---------- */
-  const K = { x: 24, y: 104, w: 124, h: 44 }, P1 = { x: 262, y: 104, w: 130, h: 44 }, P2 = { x: 262, y: 250, w: 130, h: 44 }, ST = { x: 474, y: 150, w: 146, h: 56 };
-  const mid = (b) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
-  const split = {
-    id: 'epochs', label: 'Two primaries after a partition',
-    desc: 'A partition cuts the old primary off from the controller. Without epochs both sides accept writes for position 100; with them, storage rejects the old one.',
-    codeLabel: 'Log',
-    code: {
-      bug: ['controller: no heartbeat, promote replica (epoch 2)', 'old primary (epoch 1): accepts write #100', 'new primary (epoch 2): accepts write #100', 'partition heals: histories conflict', 'one confirmed write is lost'],
-      fix: ['controller: promote P2 at epoch 2, tell storage', 'old primary: write #100 (epoch 1)', 'storage: rejected, stale epoch', 'new primary: write #100 (epoch 2)']
-    },
-    stage: {
-      w: W, h: H, footer: 'Illustrative epochs 1 and 2, write #100.',
-      header: s => ({ left: s.fenced ? 'storage accepts only the highest epoch' : 'storage accepts any writer', right: '' }),
-      setup(kit) {
-        const R = {};
-        R.k = DK.box(kit, { ...K, label: 'controller', sub: 'epoch 2', tone: 'acc' });
-        R.p1 = DK.box(kit, { ...P1, label: 'old primary', sub: 'epoch 1', tone: 'warn' });
-        R.p2 = DK.box(kit, { ...P2, label: 'new primary', sub: 'epoch 2', tone: 'ok', op: 0.3 });
-        R.st = DK.box(kit, { ...ST, label: 'storage', sub: '', tone: 'none' });
-        R.eK2 = DK.line(kit, { tone: 'mut', w: 1.8 }); R.eK1 = DK.line(kit, { tone: 'mut', w: 1.8 });
-        R.e1 = DK.line(kit, { tone: 'mut', w: 1.8 }); R.e2 = DK.line(kit, { tone: 'mut', w: 1.8 });
-        const a = (b, c) => ({ x: Math.min(Math.max(c.x, b.x), b.x + b.w), y: Math.min(Math.max(c.y, b.y), b.y + b.h) });
-        R.eK2.set({ x1: K.x + K.w, y1: K.y + K.h, x2: P2.x, y2: P2.y + 10, ms: 0 }); R.eK1.set({ x1: K.x + K.w, y1: K.y + 22, x2: P1.x, y2: P1.y + 22, dash: '6 5', ms: 0 });
-        R.e1.set({ x1: P1.x + P1.w, y1: P1.y + 22, x2: ST.x, y2: ST.y + 14, ms: 0 }); R.e2.set({ x1: P2.x + P2.w, y1: P2.y + 22, x2: ST.x, y2: ST.y + 44, ms: 0 });
-        R.cut = DK.txt(kit, { x: 205, y: 118, t: '', cls: 'lg b', anchor: 'middle' });
-        R.cutL = DK.txt(kit, { x: 205, y: 140, t: '', cls: 'xs', anchor: 'middle' });
-        R.lead = DK.dot(kit, { r: 6, tone: 'acc' });
-        R.w1 = DK.dot(kit, { r: 7, tone: 'warn', label: '1' });
-        R.w2 = DK.dot(kit, { r: 7, tone: 'ok', label: '2' });
-        R.stamp = DK.txt(kit, { x: 470, y: 100, t: '', cls: 'sm b', anchor: 'middle' });
-        R.l1 = DK.box(kit, { x: 474, y: 222, w: 146, h: 32, tone: 'bad', label: '#100 from epoch 1', op: 0 });
-        R.l2 = DK.box(kit, { x: 474, y: 262, w: 146, h: 32, tone: 'bad', label: '#100 from epoch 2', op: 0 });
-        R.conf = DK.box(kit, { x: 380, y: 306, w: 240, h: 34, tone: 'bad', label: 'two histories for #100', sub: 'one confirmed write is lost', op: 0 });
-        return R;
-      },
-      frame(s, kit, R) {
-        R.p2.set({ op: s.p2 ? 1 : 0.3 });
-        R.p1.set({ tone: s.p1tone || 'warn', sub: s.p1sub || 'epoch 1' });
-        R.st.set({ sub: s.fenced ? 'accepts epoch ≥ ' + (s.stEpoch || 1) : 'accepts any writer' });
-        R.cut.set(s.cut ? '✕' : '', { tone: 'bad' }); R.cutL.set(s.cut ? 'partition' : '', { tone: 'bad' });
-        R.eK1.set({ tone: s.cut ? 'bad' : 'mut' });
-        DK.glide(R.lead, { x: K.x + K.w, y: K.y + K.h }, { x: P2.x, y: P2.y + 10 }, s.lead || 0, 'acc');
-        DK.glide(R.w1, { x: P1.x + P1.w, y: P1.y + 22 }, { x: ST.x, y: ST.y + 14 }, s.w1 || 0, s.w1x ? 'bad' : 'warn', '1');
-        DK.glide(R.w2, { x: P2.x + P2.w, y: P2.y + 22 }, { x: ST.x, y: ST.y + 44 }, s.w2 || 0, 'ok', '2');
-        R.stamp.set(s.stamp || '', { tone: 'bad' });
-        R.l1.set({ op: s.l1 ? 1 : 0, tone: s.l1 === 'rej' ? 'soft' : 'bad', label: s.l1 === 'rej' ? 'rejected: stale' : '#100 from epoch 1', dash: s.l1 === 'rej' ? '4 3' : '' });
-        R.l2.set({ op: s.l2 ? 1 : 0, tone: s.l2 === 'ok' ? 'ok' : 'bad', label: s.l2 === 'ok' ? '#100 accepted' : '#100 from epoch 2' });
-        R.conf.set({ op: s.conflict ? 1 : 0 });
-      }
-    },
-    bug: [
-      { log: 'No heartbeat reaches the old primary, so the controller promotes a replica at epoch 2. The old primary still believes it leads at epoch 1.', code: 0, callout: 'Partition: controller promotes epoch 2', state: { cut: 1, lead: 1, p2: 1 }, stats: [{ l: 'primaries', v: '2', cls: 'warn' }] },
-      { log: 'Clients on the old primary side still write to it. Storage accepts any writer, so it takes write #100 from epoch 1.', code: 1, callout: 'Old primary writes #100', state: { cut: 1, lead: 1, p2: 1, w1: 1, l1: 'ok' }, stats: [{ l: '#100 accepted from', v: 'epoch 1', cls: 'warn' }] },
-      { log: 'The new primary also accepts write #100 from its own clients. Both histories now claim position 100.', code: 2, callout: 'New primary writes #100 too', moment: true, state: { cut: 1, lead: 1, p2: 1, w1: 1, w2: 1, l1: 'ok', l2: 'ok' }, stats: [{ l: 'writers accepted', v: 'both', cls: 'bad' }] },
-      { log: 'The partition heals. Two histories exist for position 100 and one confirmed write has to be discarded.', code: 4, callout: 'One confirmed write is lost', moment: true, state: { lead: 1, p2: 1, w1: 1, w2: 1, l1: 'ok', l2: 'ok', conflict: 1 }, stats: [{ l: 'confirmed writes lost', v: '1', cls: 'bad' }],
-        takeaway: 'Being primary is a belief held by one machine. Without epochs both sides keep writing.' }
-    ],
-    fix: [
-      { log: 'The controller promotes P2 at epoch 2 and tells storage the new epoch. Storage now accepts only epoch 2 or higher.', code: 0, callout: 'Promote at epoch 2, tell storage', state: { fenced: 1, stEpoch: 2, cut: 1, lead: 1, p2: 1 }, stats: [{ l: 'storage floor', v: 'epoch 2', cls: 'ok' }] },
-      { log: 'The old primary does not know it was replaced and sends write #100 at epoch 1. Storage compares the epochs and rejects it.', code: 2, callout: 'Storage: epoch 1 < 2, rejected', state: { fenced: 1, stEpoch: 2, cut: 1, lead: 1, p2: 1, w1: 0.6, w1x: 1, stamp: 'stale epoch 1', l1: 'rej' }, stats: [{ l: 'write from epoch 1', v: 'rejected', cls: 'ok' }] },
-      { log: 'The new primary writes #100 at epoch 2 and storage accepts it. There is one history.', code: 3, callout: 'Epoch 2 write accepted', state: { fenced: 1, stEpoch: 2, cut: 1, lead: 1, p2: 1, w1: 0.6, w1x: 1, l1: 'rej', w2: 1, l2: 'ok', p1tone: 'bad', p1sub: 'steps down' }, stats: [{ l: 'histories', v: '1', cls: 'ok' }],
-        takeaway: 'Storage that rejects an older epoch makes the old primary harmless, even if it never learns it was replaced.' }
+      { log: 'Retries happen at one layer only. The other layers pass the error up instead of retrying.', code: 0, callout: 'Retry at one layer only', state: { db: 3, rows: [{ 0: 'ok' }, { 0: 'ok', 1: 'ok', 2: 'ok' }, { 0: 'ok', 3: 'ok', 6: 'ok' }, { 0: 'ok', 9: 'ok', 18: 'ok' }] }, stats: [{ l: 'calls at database', v: '3', cls: 'warn' }] },
+      { log: 'A retry budget caps extra calls at about 10% of normal traffic. Beyond that, calls fail fast and are not sent (shown dim).', code: 1, callout: 'Budget: at most 10% extra calls', state: { db: 1, rows: [{ 0: 'ok' }, { 0: 'ok', 1: 'x', 2: 'x' }, { 0: 'ok', 3: 'x', 6: 'x' }, { 0: 'ok', 9: 'x', 18: 'x' }] }, stats: [{ l: 'extra calls', v: '≤ 10%', cls: 'ok' }] },
+      { log: 'Backoff with jitter spaces out the few retries that remain, and a circuit breaker stops calls while the database is down. It gets room to recover.', code: 3, callout: 'Backoff + breaker: the database recovers', state: { db: 1, rows: [{ 0: 'ok' }, { 0: 'ok' }, { 0: 'ok' }, { 0: 'ok' }] }, stats: [{ l: 'database', v: 'recovers', cls: 'ok' }],
+        takeaway: 'Cap retries to one layer, a budget and a breaker. Do not let every layer try on its own.' }
     ]
   };
 
   window.CHAPTER_OVERRIDES = window.CHAPTER_OVERRIDES || {};
-  window.CHAPTER_OVERRIDES[2] = { scenarios: [strips, ruler, split] };
+  window.CHAPTER_OVERRIDES[2] = { scenarios: [ladder, fan] };
 })();

@@ -1,0 +1,7 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  S["A schedule: operations of several<br/>transactions, interleaved"] --> C["Find conflicting pairs:<br/>same object, different transactions,<br/>at least one write"]
+  C --> E["Draw an edge Ti to Tj<br/>when Ti's operation came first"]
+  E --> Cy{"Is there a cycle?"}
+  Cy -->|No| OK["Conflict serializable:<br/>a topological order is the<br/>equivalent serial order"]
+  Cy -->|Yes| NO["Not serializable:<br/>no serial order gives the same result"]

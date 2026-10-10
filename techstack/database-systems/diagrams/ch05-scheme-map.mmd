@@ -1,0 +1,9 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Q{"Is the number of keys<br/>known in advance?"} -->|"Yes: static"| St["Fixed array, about 2 slots per key"]
+  St --> LP["Linear probing<br/>fast, cache friendly,<br/>needs tombstones"]
+  St --> CK["Cuckoo<br/>lookup checks 2 places,<br/>insert may move keys"]
+  Q -->|"No: dynamic"| Dy["Grows without a full rebuild"]
+  Dy --> CH["Chained buckets<br/>simple, long chains"]
+  Dy --> EX["Extendible<br/>split one bucket,<br/>sometimes double the directory"]
+  Dy --> LH["Linear<br/>split pointer moves one bucket at a time"]

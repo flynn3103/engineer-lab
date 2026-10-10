@@ -1,0 +1,9 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  D["Deadlock: a cycle of waits"] --> Det["Detection<br/>allow it, then find it"]
+  D --> Pre["Prevention<br/>never allow a cycle"]
+  Det --> WF["Build a waits-for graph,<br/>check for cycles periodically"]
+  WF --> Vic["Pick a victim: age, progress,<br/>locks held, restarts"]
+  Vic --> Ab["Abort the victim,<br/>roll back all or part"]
+  Pre --> WD["Wait-Die: old waits,<br/>young dies"]
+  Pre --> WW["Wound-Wait: old wounds young,<br/>young waits"]

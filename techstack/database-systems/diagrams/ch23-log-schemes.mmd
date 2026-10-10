@@ -1,0 +1,5 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  U["UPDATE orders SET status = 'paid' WHERE id = 42"] --> Ph["Physical logging<br/>byte changes at page 17 offset 310<br/>exact, large, no meaning"]
+  U --> Lg["Logical logging<br/>the SQL statement itself<br/>small, hard to replay exactly"]
+  U --> Py["Physiological logging<br/>page 17, slot 5, set column status<br/>the usual choice"]

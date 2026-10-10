@@ -1,0 +1,12 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  P["Predicate: country = 'VN' AND total > 900"] --> St{"What statistics exist?"}
+  St -->|"Most common values,<br/>histogram"| H["Selectivity from the<br/>histogram bucket"]
+  St -->|"Only distinct count"| U["Uniform: 1 / distinct values"]
+  St -->|"Nothing"| D["Default guess,<br/>for example 20%"]
+  H --> M["Combine predicates:<br/>multiply, assuming independence"]
+  U --> M
+  D --> M
+  M --> C["Cardinality =<br/>selectivity x input rows"]
+  C --> J["Join size ~ rows R x rows S / max distinct keys"]
+  J --> Cost["Cost model turns rows into a cost,<br/>the plan search compares costs"]

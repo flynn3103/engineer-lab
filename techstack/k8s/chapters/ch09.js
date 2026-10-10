@@ -1,219 +1,183 @@
-/* HPA: a moving recommendation window and a CPU instrument.
-   Overrides chapter 9; keeps the original problem, prediction and diagnosis.
-   Samples are illustrative. Only recommendation stabilization is simulated;
-   scaling rate limits, missing metrics and pod startup are discussed in Explain. */
+/* Chapter 9 "Horizontal Pod Autoscaler": utilisation and replica charts, a flapping comparison and a missing request (index 9).
+   Loads after course.js and scene-tools.js. One column is one 15 s HPA sync; loads and timings are illustrative. */
 (function () {
-  const W = 640, H = 420;
-  const footer = 'Illustrative samples. Ready lag and scaling policies omitted.';
-  const samples = [[0,4],[30,8],[60,4],[90,8],[120,4],[180,4],[330,4],[360,4],[390,4],[420,4]];
-  const X = t => 68 + t / 420 * 532;
-  const Y = v => 170 - (v - 4) * 15;
-  const held = (i, window) => Math.max(...samples.slice(0,i+1).filter(p => p[0] >= samples[i][0] - window).map(p => p[1]));
-  const trace = (values, y) => values.map((v,i) => (i ? 'H' + X(samples[i][0]) + 'V' : 'M' + X(samples[i][0]) + ' ') + y(v)).join(' ');
-  function tweenAttr(kit, e, attrs) {
-    for (const [k,v] of Object.entries(attrs)) {
-      const from = Number(e.getAttribute(k));
-      window.Kit.tween(e, k, Number.isFinite(from) ? from : v, v, 650, n => e.setAttribute(k,n));
-    }
-  }
-  const flap = {
-    id: 'flap', label: 'The moving window',
-    desc: 'Watch each recommendation enter and leave a five-minute window. Compare a 15-second downscale window with the 300-second default on exactly the same samples.',
-    codeLabel: 'autoscaling/v2 · behavior',
-    code: { bug: [
-      'scaleDown:', '  stabilizationWindowSeconds: 15   # short memory',
-      '# Compare the same recommendations with:',
-      'scaleDown:', '  stabilizationWindowSeconds: 300  # keep recent peak',
-      '# Downscale recommendation = highest one still in the window'
-    ] },
+  const KH = window.KH, W = 640, H = 420;
+  const FOOT = 'Simplified. One column = 15 s. Loads and timings are illustrative.';
+  const line = (kit, color, w, dash) => { const p = kit.el('path', { d: '' }, kit.layer); p.style.fill = 'none'; p.style.stroke = color; p.style.strokeWidth = w || 2.5; if (dash) p.style.strokeDasharray = dash; p.style.strokeLinejoin = 'round'; return p; };
+  const dpath = pts => pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+
+  /* ---------- 1. A 7x spike: utilisation, the formula and the scale-up limit ---------- */
+  const X0 = 60, DX = 52, NT = 10;
+  const UTIL = [70, 70, 490, 490, 245, 122.5, 70, 70, 70, 70];
+  const SPEC = [4, 4, 8, 16, 28, 28, 28, 28, 28, 28];
+  const READY = [4, 4, 4, 4, 8, 16, 28, 28, 28, 28];
+  const uy = u => 150 - Math.min(u, 500) / 500 * 70, ry = r => 262 - r / 30 * 80;
+  const spike = {
+    id: 'spike', label: 'A 7x spike', desc: 'Traffic rises about 7 times at 20:00. The HPA computes the replica count from utilisation, but scale-up is limited per step and new pods take time to become Ready.',
+    codeLabel: 'kubectl',
+    code: { bug: ['spec: {minReplicas: 4, maxReplicas: 30, metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}}]}', 'desired = ceil(current x metric / target) = ceil(4 x 490 / 70) = 28', 'behavior.scaleUp: no window, add max(100% of pods, 4 pods) per 15 s', '$ kubectl get hpa web -w'] },
     stage: {
-      w:W, h:H, footer,
-      header: s => ({left:'HPA · memory, not a moving average',right:'t = '+samples[s.i][0]+' s'}),
+      w: W, h: H, footer: FOOT,
+      header: s => ({ left: 'HPA web · target 70% of CPU requests', right: s.r || '' }),
       setup(kit) {
-        kit.text(null,{x:18,y:88,t:'Raw recommendation',cls:'kt b sm'});
-        const peak = kit.text(null,{x:600,y:88,t:'',cls:'kt sm tone-ok',anchor:'end'});
-        for(const v of [4,6,8]) {
-          const y=Y(v); kit.el('line',{x1:68,y1:y,x2:600,y2:y,class:'hpa-grid'},kit.layer);
-          kit.text(null,{x:50,y:y+4,t:String(v),cls:'kt xs mut',anchor:'end'});
-        }
-        const windowBand=kit.el('rect',{x:68,y:101,width:0,height:76,rx:5,class:'hpa-window'},kit.layer);
-        const line=kit.el('path',{class:'hpa-raw',d:'M68 170'},kit.layer);
-        const dots=samples.map(([t,v])=>kit.el('circle',{cx:X(t),cy:Y(v),r:4,class:'hpa-sample'},kit.layer));
-        const selected=kit.el('circle',{cx:68,cy:170,r:7,class:'hpa-selected'},kit.layer);
-        const cursor=kit.el('line',{x1:68,x2:68,y1:101,y2:275,class:'hpa-cursor'},kit.layer);
-        for(const t of [0,60,120,240,360,420]) kit.text(null,{x:X(t),y:191,t:t+'s',cls:'kt xs mut',anchor:'middle'});
-        kit.text(null,{x:18,y:214,t:'Chosen replica count',cls:'kt b sm'});
-        for(const v of [4,8]) {
-          const y=272-(v-4)*12; kit.el('line',{x1:68,y1:y,x2:600,y2:y,class:'hpa-grid'},kit.layer);
-          kit.text(null,{x:50,y:y+4,t:String(v),cls:'kt xs mut',anchor:'end'});
-        }
-        const short=kit.el('path',{class:'hpa-short',d:'M68 272'},kit.layer);
-        const long=kit.el('path',{class:'hpa-long',d:'M68 272'},kit.layer);
-        const podRows=[301,326].map((y,j)=>{
-          kit.text(null,{x:18,y:y+11,t:j?'300 s':'15 s',cls:'kt xs b'});
-          return Array.from({length:8},(_,i)=>kit.el('rect',{x:85+i*24,y,width:18,height:14,rx:3,class:j?'hpa-pod long':'hpa-pod short'},kit.layer));
+        kit.text(null, { x: X0, y: 74, t: 'CPU utilisation of requests (%)', cls: 'kt xs mut' });
+        kit.text(null, { x: X0, y: 168, t: 'replicas: Ready (solid) and requested but not Ready (light)', cls: 'kt xs mut' });
+        const tg = kit.el('line', { x1: X0, x2: X0 + NT * DX, y1: uy(70), y2: uy(70) }, kit.layer); tg.style.stroke = 'var(--ok)'; tg.style.strokeDasharray = '5 4'; tg.style.strokeWidth = 2;
+        kit.text(null, { x: X0 + NT * DX + 4, y: uy(70) + 4, t: '70%', cls: 'kt xs tone-ok' });
+        const ax = kit.el('path', { d: `M${X0} 80 V150 H${X0 + NT * DX} M${X0} 182 V262 H${X0 + NT * DX}` }, kit.layer); ax.style.stroke = 'var(--mut)'; ax.style.fill = 'none';
+        const ul = line(kit, 'var(--acc2)', 3);
+        const bars = Array.from({ length: NT }, (_, i) => {
+          const a = kit.el('rect', { x: X0 + i * DX + 8, y: 262, width: DX - 16, height: 0, rx: 3 }, kit.layer); a.style.fill = 'color-mix(in srgb, var(--acc) 22%, var(--card))'; a.style.stroke = 'var(--acc)'; a.style.strokeDasharray = '3 2'; a.style.transition = 'y .4s, height .4s';
+          const b = kit.el('rect', { x: X0 + i * DX + 8, y: 262, width: DX - 16, height: 0, rx: 3 }, kit.layer); b.style.fill = 'color-mix(in srgb, var(--ok) 55%, var(--card))'; b.style.stroke = 'var(--ink)'; b.style.transition = 'y .4s, height .4s';
+          return { a, b };
         });
-        const result=[kit.text(null,{x:303,y:312,t:'',cls:'kt sm'}),kit.text(null,{x:303,y:337,t:'',cls:'kt sm'})];
-        return {windowBand,line,dots,selected,cursor,short,long,podRows,result,peak};
+        for (let i = 0; i < NT; i += 2) kit.text(null, { x: X0 + i * DX + DX / 2, y: 278, t: (i * 15) + 's', cls: 'kt xs mut', anchor: 'middle' });
+        const f = kit.chip(null, { x: 60, y: 284, w: 520, h: 36, label: '', sub: '', tone: 'info' });
+        return { ul, bars, f };
       },
-      frame(s,kit,R) {
-        const i=s.i, time=samples[i][0], raw=samples[i][1], left=Math.max(0,time-300), max=held(i,300);
-        tweenAttr(kit,R.windowBand,{x:X(left),width:X(time)-X(left)});
-        tweenAttr(kit,R.cursor,{x1:X(time),x2:X(time)});
-        tweenAttr(kit,R.selected,{cx:X(time),cy:Y(raw)});
-        R.line.setAttribute('d',samples.slice(0,i+1).map(([t,v],n)=>(n?'L':'M')+X(t)+' '+Y(v)).join(' '));
-        R.dots.forEach((d,n)=>{
-          d.style.opacity=n<=i?1:0;
-          d.classList.toggle('peak',n<=i&&samples[n][0]>=left&&samples[n][1]===max);
+      frame(s, kit, R) {
+        const t = s.t || 1;
+        R.ul.setAttribute('d', dpath(UTIL.slice(0, t).map((u, i) => [X0 + i * DX + DX / 2, uy(u)])));
+        R.bars.forEach((b, i) => {
+          const on = i < t, sp = on ? SPEC[i] : 0, rd = on ? READY[i] : 0;
+          b.a.setAttribute('y', ry(sp)); b.a.setAttribute('height', sp ? 262 - ry(sp) : 0);
+          b.b.setAttribute('y', ry(rd)); b.b.setAttribute('height', rd ? 262 - ry(rd) : 0);
         });
-        R.short.setAttribute('d',trace(samples.slice(0,i+1).map((_,n)=>held(n,15)),v=>272-(v-4)*12));
-        R.long.setAttribute('d',trace(samples.slice(0,i+1).map((_,n)=>held(n,300)),v=>272-(v-4)*12));
-        R.podRows.forEach((row,j)=>row.forEach((p,n)=>{p.classList.toggle('active',n<(j?max:held(i,15)));}));
-        R.peak.set('window ['+left+'s, '+time+'s] · max '+max);
-        R.result[0].set(held(i,15)+' pods · follows each dip');
-        R.result[1].set(max+' pods · '+(max>raw?'recent peak retained':'matches recommendation'));
+        R.f.set({ label: s.f || '', tone: s.fT || 'info', w: 520 });
       }
     },
-    bug: samples.map(([time,raw],i)=>({
-      code:i===0?1:4,state:{i},
-      callout:[
-        'Two policies, one identical workload',
-        'The peak enters memory: both scale to 8',
-        'A dip removes pods only with short memory',
-        'Another burst: the short window scales up again',
-        'The new dip is still below a remembered peak',
-        'The five-minute window retains the last peak',
-        'The first peak has aged out; the second remains',
-        'A recent peak can hold capacity after traffic falls',
-        'The last peak sits exactly on the window boundary',
-        'The last peak expires: downscale can proceed'
-      ][i],
-      log:[
-        'Start with 4 replicas. The top line is the raw recommendation after the HPA formula; the shaded interval is the 300-second memory. The lower traces compare window sizes, not two different workloads.',
-        'At 30 s the recommendation rises to 8. Both policies may scale up. Stabilization of scale-down does not make scale-up wait five minutes.',
-        'At 60 s the recommendation falls to 4. The 15-second policy has forgotten the previous peak; the 300-second policy still remembers 8. In a real application, scaling back up also waits for new pods to become Ready.',
-        'At 90 s demand again recommends 8. Short memory produces another down/up cycle. The long-memory fleet was already at 8; it does not need to rebuild capacity for this burst.',
-        'At 120 s the raw recommendation is back to 4. The HPA does not average 4 and 8: the highest recommendation inside the downscale window is still 8.',
-        'At 180 s the workload is quiet. Keeping 8 pods costs extra capacity but avoids reacting to every short lull. Sample times here are illustrative snapshots, not every controller reconciliation.',
-        'At 330 s the first peak is at the left boundary of the inclusive modeled window. The later peak at 90 s is still well inside, so the selected count remains 8.',
-        'At 360 s the first peak is outside the window. The remaining peak at 90 s still supplies the maximum of 8. This is a rolling window over recommendations, not a sleep timer restarted by each low sample.',
-        'At 390 s the last peak is 300 seconds old, on the model boundary. At the next later reconciliation it ages out. Real timestamps and reconciliation cadence determine the exact instant.',
-        'At 420 s the window contains only recommendations of 4. Its maximum is 4, so downscale is now allowed, subject to minReplicas and scaling-rate policies. The chart isolates stabilization; it does not promise instantaneous Ready capacity.'
-      ][i],
-      stats:[{l:'raw',v:raw+' replicas'},{l:'15 s window',v:held(i,15),cls:held(i,15)<held(i,300)?'warn':''},{l:'300 s window',v:held(i,300),cls:'ok'}],
-      ...(i===9?{takeaway:'Remember the peak. Downscale follows the highest recent recommendation, not the latest dip.'}:{})
-    }))
+    bug: [
+      { log: 'Four pods run at 70% of their CPU requests, which is the target. The HPA reads utilisation every 15 s and finds nothing to change.', callout: 'On target: 4 pods at 70%', code: 0, state: { t: 2, f: 'utilisation 70% = target: no change', r: 'steady' }, stats: [{ l: 'replicas', v: '4', cls: 'ok' }, { l: 'utilisation', v: '70%', cls: 'ok' }] },
+      { log: 'At 20:00 a sale starts and requests rise about 7 times. The same four pods now run at 490% of their requests.', callout: 'Traffic rises 7x: utilisation 490%', code: 1, state: { t: 3, f: 'desired = ceil(4 x 490 / 70) = 28', fT: 'warn', r: '7x spike' }, stats: [{ l: 'utilisation', v: '490%', cls: 'bad' }, { l: 'desired', v: '28', cls: 'warn' }] },
+      { log: 'Scale-up has no stabilisation window, but each step is limited: at most the larger of 100% of the current pods or 4 pods per period. The first step goes from 4 to 8.', callout: 'The step limit allows 4 to 8, not 28', code: 2, state: { t: 4, f: 'step limit: max(100%, 4 pods): 4 to 8', fT: 'warn', r: 'step 1' }, stats: [{ l: 'requested', v: '8' }, { l: 'Ready', v: '4', cls: 'bad' }] },
+      { log: 'The new pods still have to be scheduled, pull the image and pass readiness. The HPA keeps measuring the old, overloaded pods, so utilisation stays at 490% and it asks for 16.', callout: 'New pods are not Ready yet: the metric stays high', moment: true, code: 2, state: { t: 5, f: 'Ready lags the request: limit 8 to 16', fT: 'warn', r: 'waiting for Ready' }, stats: [{ l: 'requested', v: '16' }, { l: 'Ready', v: '4', cls: 'bad' }] },
+      { log: 'The first 8 pods become Ready and utilisation falls to 245%. The formula still asks for 28, now within the step limit.', callout: '8 Ready: utilisation 245%, the request reaches 28', code: 2, state: { t: 6, f: 'desired = ceil(8 x 245 / 70) = 28', r: 'step 3' }, stats: [{ l: 'requested', v: '28' }, { l: 'Ready', v: '8', cls: 'warn' }] },
+      { log: 'Sixteen pods are Ready and utilisation is 122%. Twenty-eight are requested and the last ones are starting.', callout: '16 Ready: utilisation 122%', code: 3, state: { t: 7, f: 'utilisation 122%: still above target', r: 'catching up' }, stats: [{ l: 'Ready', v: '16', cls: 'warn' }, { l: 'utilisation', v: '122%', cls: 'warn' }] },
+      { log: 'All 28 pods are Ready and utilisation is back at 70%. Within 10% of the target the HPA does nothing, so it holds.', callout: '28 Ready: back at 70%, within tolerance', code: 3, state: { t: 10, f: 'within 10% of target: hold at 28', fT: 'ok', r: 'converged' }, stats: [{ l: 'Ready', v: '28', cls: 'ok' }, { l: 'utilisation', v: '70%', cls: 'ok' }],
+        takeaway: 'desired = ceil(current x metric / target). Scale-up is capped per step and waits for Ready pods, so overload lasts a few periods.' }
+    ],
   };
+
+  /* ---------- 2. Flapping: a short scale-down window follows every dip ---------- */
+  const FN = 24, FX0 = 60, FDX = 22;
+  const NEED = Array.from({ length: FN }, (_, i) => (i % 6 < 3 ? 4 : 10));
+  const READYOF = spec => spec.map((v, i) => Math.min(v, spec[Math.max(0, i - 1)], spec[Math.max(0, i - 2)]));
+  const SHORT = NEED.slice();
+  const LONG = NEED.map((_, i) => Math.max(...NEED.slice(Math.max(0, i - 19), i + 1)));
+  const RS = READYOF(SHORT), RL = READYOF(LONG);
+  const events = a => a.reduce((n, v, i) => n + (i && v !== a[i - 1] ? 1 : 0), 0);
+  const over = (r) => r.reduce((n, v, i) => n + (v < NEED[i] ? 1 : 0), 0);
+  const fy = r => 248 - r / 12 * 160;
+  const flap = {
+    id: 'flap', label: 'Flapping', desc: 'The load is a sawtooth. A short scale-down window follows every dip and is overloaded after each rise. A 300 s window keeps the highest recent recommendation.',
+    codeLabel: 'Config',
+    code: { bug: ['behavior:', '  scaleDown: {stabilizationWindowSeconds: 15}    # follows every dip', '  scaleDown: {stabilizationWindowSeconds: 300}   # default: highest of the last 5 minutes', 'kubectl describe hpa web      # Events: SuccessfulRescale'] },
+    stage: {
+      w: W, h: H, footer: FOOT,
+      header: s => ({ left: 'replicas over 6 minutes · sawtooth load', right: s.r || '' }),
+      setup(kit) {
+        const ax = kit.el('path', { d: `M${FX0} 84 V248 H${FX0 + FN * FDX}` }, kit.layer); ax.style.stroke = 'var(--mut)'; ax.style.fill = 'none';
+        kit.text(null, { x: FX0 - 6, y: fy(10) + 4, t: '10', cls: 'kt xs mut', anchor: 'end' }); kit.text(null, { x: FX0 - 6, y: fy(4) + 4, t: '4', cls: 'kt xs mut', anchor: 'end' });
+        const need = line(kit, 'var(--mut)', 2, '4 3'), sh = line(kit, 'var(--bad)', 3), lg = line(kit, 'var(--ok)', 3);
+        const strips = [0, 1].map(k => Array.from({ length: FN }, (_, i) => { const r = kit.el('rect', { x: FX0 + i * FDX + 2, y: 254 + k * 12, width: FDX - 4, height: 8, rx: 2 }, kit.layer); r.style.fill = 'var(--bad)'; r.style.opacity = 0; r.style.transition = 'opacity .3s'; return r; }));
+        kit.text(null, { x: FX0 - 6, y: 262, t: 'short', cls: 'kt xs mut', anchor: 'end' }); kit.text(null, { x: FX0 - 6, y: 274, t: '300 s', cls: 'kt xs mut', anchor: 'end' });
+        kit.text(null, { x: FX0, y: 288, t: 'dashed grey = replicas needed · red = 15 s window · green = 300 s window · red blocks = overloaded', cls: 'kt xs mut' });
+        const c1 = kit.chip(null, { x: 60, y: 296, w: 250, h: 28, label: '', sub: '', tone: 'info', small: true, show: false });
+        const c2 = kit.chip(null, { x: 326, y: 296, w: 250, h: 28, label: '', sub: '', tone: 'info', small: true, show: false });
+        return { need, sh, lg, strips, c1, c2 };
+      },
+      frame(s, kit, R) {
+        const px = (a, i) => [FX0 + i * FDX + FDX / 2, fy(a[i])];
+        R.need.setAttribute('d', dpath(NEED.map((_, i) => px(NEED, i))));
+        R.sh.setAttribute('d', s.short ? dpath(SHORT.map((_, i) => px(SHORT, i))) : '');
+        R.lg.setAttribute('d', s.long ? dpath(LONG.map((_, i) => px(LONG, i))) : '');
+        R.strips[0].forEach((r, i) => { r.style.opacity = s.short && s.over && RS[i] < NEED[i] ? 1 : 0; });
+        R.strips[1].forEach((r, i) => { r.style.opacity = s.long && s.over && RL[i] < NEED[i] ? 1 : 0; });
+        R.c1.set({ show: !!s.short && !!s.count, label: 'short: ' + events(SHORT) + ' scale events, ' + over(RS) * 15 + ' s overloaded', tone: 'warn', w: 250 });
+        R.c2.set({ show: !!s.long && !!s.count, label: '300 s: ' + events(LONG) + ' scale event, ' + over(RL) * 15 + ' s overloaded', tone: 'ok', w: 250 });
+      }
+    },
+    bug: [
+      { log: 'The load alternates between needing 4 pods and needing 10, in steps of about 45 s (illustrative). The grey line shows the replicas the load needs.', callout: 'The load needs 4 pods, then 10, then 4 again', code: 0, state: { r: 'sawtooth' }, stats: [{ l: 'needed', v: '4 / 10' }, { l: 'period', v: '90 s' }] },
+      { log: 'With a 15 s scale-down window the HPA follows the recommendation at once, so the replica count goes up and down with every cycle (the red line).', callout: 'A 15 s window follows every dip', code: 1, state: { short: true, r: '15 s window' }, stats: [{ l: 'scale events', v: String(events(SHORT)), cls: 'warn' }, { l: 'window', v: '15 s' }] },
+      { log: 'Each rise needs about 30 s for new pods to become Ready, while each drop removes pods at once. After every cycle the service is short of pods for two periods (red blocks).', callout: 'Pods are removed fast, added slowly: overload each cycle', moment: true, code: 1, state: { short: true, over: true, r: 'overload after each rise' }, stats: [{ l: 'overloaded', v: over(RS) * 15 + ' s', cls: 'bad' }, { l: 'cycles', v: '4' }] },
+      { log: 'The default scale-down window is 300 s. Scale-down uses the highest recommendation of the last five minutes, so a short dip cannot remove pods the next burst needs (the green line).', callout: '300 s window: take the highest recent recommendation', code: 2, state: { short: true, long: true, over: true, r: '300 s window' }, stats: [{ l: 'replicas held', v: '10', cls: 'ok' }, { l: 'window', v: '300 s' }] },
+      { log: 'Scale-down is delayed until the load has stayed low for the whole 300 s window, so the extra pods remain for a few minutes. That is the price of the protection.', callout: 'Idle pods linger for up to 5 minutes', code: 2, state: { short: true, long: true, over: true, r: 'extra pods linger' }, stats: [{ l: 'pods held', v: '10 of 4 needed', cls: 'warn' }, { l: 'window', v: '300 s' }] },
+      { log: 'Only the first rise causes an overload. After that the pods are already there, so the next bursts find capacity ready, and scale-down waits until the load has stayed low for the whole window.', callout: 'Only the first burst overloads; the rest are absorbed', code: 2, state: { short: true, long: true, over: true, count: true, r: 'compare' }, stats: [{ l: 'overloaded (300 s)', v: over(RL) * 15 + ' s', cls: 'ok' }, { l: 'scale events', v: String(events(LONG)), cls: 'ok' }],
+        takeaway: 'Scale up fast, scale down slowly: a few idle pods buy fewer overloads and fewer scale events.' }
+    ],
+  };
+
+  /* ---------- 3. Unknown target: no CPU request means no denominator ---------- */
   const nocpu = {
-    id:'nocpu',label:'CPU needs a denominator',
-    desc:'A usage reading alone cannot tell the HPA its utilisation. Add the request, watch the gauge become meaningful, then see the replica calculation and startup delay.',
-    codeLabel:'CPU utilisation · illustrative values',
-    code:{bug:[
-      'resources: {}                  # no requests.cpu',
-      '# usage is available, utilisation is <unknown>/70%',
-      'resources:', '  requests:', '    cpu: 250m',
-      '# 350m / 250m × 100 = 140% utilisation',
-      '# desired = ceil(4 × 140 / 70) = 8',
-      '# after load splits over 8 Ready pods: 175m / 250m = 70%'
-    ]},
-    stage:{w:W,h:H,footer:'Equal load per pod; one container per pod; CPU samples illustrative.',
-      header:s=>({left:'CPU utilisation is relative to requests',right:s.phase}),
-      setup(kit){
-        const cx=174,cy=181,r=84;
-        const track=kit.el('path',{d:'M101.3 223 A84 84 0 1 1 246.7 223',class:'hpa-dial'},kit.layer);
-        for(const v of [0,70,100,140,200]){
-          const a=(-210+v/200*240)*Math.PI/180;
-          kit.el('line',{x1:cx+Math.cos(a)*75,y1:cy+Math.sin(a)*75,x2:cx+Math.cos(a)*84,y2:cy+Math.sin(a)*84,class:v===70?'hpa-target':'hpa-grid'},kit.layer);
-          kit.text(null,{x:cx+Math.cos(a)*103,y:cy+Math.sin(a)*103+4,t:String(v),cls:'kt xs'+(v===70?' tone-ok':' mut'),anchor:'middle'});
-        }
-        kit.text(null,{x:18,y:88,t:'target 70%',cls:'kt sm b'});
-        const g=kit.el('g',{transform:'translate(174 181)'},kit.layer);
-        const needle=kit.el('line',{x1:0,y1:0,x2:66,y2:0,class:'hpa-needle',transform:'rotate(-210)'},g);
-        kit.el('circle',{cx:0,cy:0,r:6,class:'hpa-hub'},g);
-        const dialValue=kit.text(null,{x:174,y:232,t:'?',cls:'kt b',anchor:'middle'});
-        const dialHint=kit.text(null,{x:174,y:254,t:'',cls:'kt xs mut',anchor:'middle'});
-        kit.text(null,{x:365,y:90,t:'Measurement / configured reference',cls:'kt b sm'});
-        const usage=kit.chip(null,{x:360,y:100,w:244,h:38,label:'350m measured',tone:'info'});
-        kit.el('line',{x1:365,y1:148,x2:599,y2:148,class:'hpa-fraction'},kit.layer);
-        const request=kit.chip(null,{x:360,y:157,w:244,h:38,label:'request missing',tone:'warn'});
-        const ratio=kit.text(null,{x:482,y:222,t:'',cls:'kt b',anchor:'middle'});
-        const formula=kit.text(null,{x:482,y:249,t:'',cls:'kt sm',anchor:'middle'});
-        const outcome=kit.chip(null,{x:360,y:268,w:244,h:40,label:'ScalingActive=False',tone:'warn'});
-        kit.text(null,{x:174,y:285,t:'Replicas (solid = Ready)',cls:'kt xs mut',anchor:'middle'});
-        const pods=Array.from({length:8},(_,i)=>{
-          const g=kit.el('g',{class:'hpa-replica'},kit.layer);
-          const c=kit.el('circle',{cx:70+i*28,cy:307,r:9},g);
-          const t=kit.text(g,{x:70+i*28,y:310,t:String(i+1),cls:'kt xs',anchor:'middle'});
-          return {g,c,t};
-        });
-        const ready=kit.text(null,{x:174,y:337,t:'',cls:'kt sm',anchor:'middle'});
-        return {needle,dialValue,dialHint,usage,request,ratio,formula,outcome,pods,ready,angle:-210};
+    id: 'unknown', label: 'No CPU request', desc: 'Utilisation is usage divided by the CPU request. A container without a request has no denominator, so the HPA shows unknown and never scales; adding a request fixes it.',
+    codeLabel: 'kubectl',
+    code: { bug: ['$ kubectl get hpa web', 'NAME  REFERENCE   TARGETS         MINPODS  MAXPODS  REPLICAS', 'web   Deploy/web  <unknown>/70%   4        30       4', 'failed to get cpu utilization: missing request for cpu in container web', 'resources: {requests: {cpu: 250m}}'] },
+    stage: {
+      w: W, h: H, footer: FOOT,
+      header: s => ({ left: 'HPA web · target cpu 70%', right: s.r || '' }),
+      setup(kit) {
+        const bars = kit.bars(null, { x: 16, y: 96, w: 360, labelW: 90, rowH: 30, items: [{ id: 'use', label: 'usage' }, { id: 'req', label: 'request' }], max: 500, unit: 'm', title: 'per pod CPU (illustrative)' });
+        const fr = kit.chip(null, { x: 16, y: 170, w: 360, h: 44, label: '', sub: '', tone: 'info' });
+        const led = kit.ledger(null, { x: 396, y: 76, w: 228, title: 'kubectl get hpa web', cols: [{ label: 'field', w: 90 }, { label: 'value', w: 120 }], rows: 4, rowH: 18 });
+        const ev = kit.chip(null, { x: 16, y: 232, w: 608, h: 40, label: '', sub: '', tone: 'info', show: false });
+        return { bars, fr, led, ev };
       },
-      frame(s,kit,R){
-        const known=s.request>0, util=known?s.usage/s.request*100:null;
-        const angle=known?-210+Math.min(200,util)/200*240:-210;
-        window.Kit.tween(R,'angle',R.angle,angle,650,v=>{R.angle=v;R.needle.setAttribute('transform','rotate('+v+')');});
-        R.needle.style.opacity=known?1:0;
-        R.dialValue.set(known?Math.round(util)+'%':'?');
-        R.dialHint.set(known?'Usage / request × 100':'No reference → no utilisation');
-        R.usage.set({label:s.usage+'m measured'});
-        R.request.set({label:known?s.request+'m CPU request':'CPU request missing',tone:known?'ok':'warn'});
-        R.ratio.set(known?s.usage+' / '+s.request+' = '+Math.round(util)+'%':'usage / ? = unknown');
-        R.formula.set(s.formula||'desired replicas = unknown');
-        R.outcome.set({label:s.status,tone:known?'ok':'warn'});
-        R.pods.forEach((p,i)=>{
-          p.g.style.opacity=i<s.pods?1:.18;
-          p.g.classList.toggle('ready',i<s.ready);
-          p.g.classList.toggle('pending',i>=s.ready&&i<s.pods);
-        });
-        R.ready.set(s.ready+' Ready / '+s.pods+' desired');
+      frame(s, kit, R) {
+        const use = s.use || 0, req = s.req || 0;
+        R.bars.set('use', use, use > 300 ? 'warn' : 'ok', use ? use + 'm' : '');
+        R.bars.set('req', req, 'info', req ? req + 'm' : (s.noreq ? 'none' : ''));
+        R.fr.set({ label: s.fr || '', sub: s.frSub || '', tone: s.frT || 'info', w: 360 });
+        R.led.clear();
+        const rows = [['TARGETS', s.tg || '-'], ['MINPODS', '4'], ['MAXPODS', '30'], ['REPLICAS', String(s.rep || 4)]];
+        rows.forEach((r, i) => R.led.setRow(i, r, { hl: i === 0 && !!s.hlT, tones: [null, i === 3 && s.rep > 4 ? 'ok' : i === 0 && s.tg && s.tg[0] === '<' ? 'bad' : null] }));
+        R.ev.set({ show: !!s.ev, label: s.ev || '', tone: s.evT || 'warn', w: 608 });
       }
     },
-    bug:[
-      {code:0,callout:'Usage exists, but the CPU request is missing',log:'Four Ready pods each use 50m CPU in this simplified model. Metrics-server can report usage, but CPU utilisation is usage divided by a CPU request. An absent request is not a request of zero.',state:{usage:50,request:0,pods:4,ready:4,status:'ScalingActive=False',phase:'missing reference'}},
-      {code:1,callout:'More load does not repair a missing denominator',log:'Usage per pod rises to 350m. The raw measurement changes, yet the HPA still cannot calculate CPU utilisation. An unknown target is different from a measured zero; inspect HPA conditions and the requests of the relevant containers.',state:{usage:350,request:0,pods:4,ready:4,status:'<unknown> / 70%',phase:'load rises'}},
-      {code:4,callout:'250m gives the gauge its scale',log:'Configure requests.cpu as 250m, based on the workload. The request gives CPU utilisation its denominator; it is a scheduling reference, not a hard CPU ceiling. Recreating pods and collecting fresh metrics are compressed into this step.',state:{usage:350,request:250,pods:4,ready:4,status:'Valid CPU metric',phase:'reference added'}},
-      {code:5,callout:'350m used / 250m requested = 140%',log:'140% utilisation is possible because requests are not limits. The same 350m physical usage appears as a different percentage if requests change. A CPU limit, when set, is the separate ceiling enforced by throttling.',state:{usage:350,request:250,pods:4,ready:4,status:'140% / target 70%',phase:'measurement normalised'}},
-      {code:6,callout:'ceil(4 × 140 / 70) recommends 8 replicas',log:'Assuming complete metrics and equivalent pods, the ratio is 2. The base formula therefore recommends 8 replicas. Bounds, tolerance, stabilization and rate policies can change the final scale decision.',state:{usage:350,request:250,pods:4,ready:4,status:'Recommendation: 8',formula:'ceil(4 × 140 / 70) = 8',phase:'calculate'}},
-      {code:6,callout:'Desired replicas change before Ready capacity does',log:'The Deployment creates four additional pods. They must be scheduled, started and made Ready before they serve traffic. Increasing spec.replicas does not immediately double serving capacity.',state:{usage:350,request:250,pods:8,ready:4,status:'4 new pods starting',formula:'desired = 8; Ready = 4',phase:'actuate'}},
-      {code:7,callout:'Eight Ready pods split the same total CPU work',log:'After the new pods become Ready and receive an equal share of unchanged work, usage per pod falls to 175m. The observed utilisation becomes 70%. Startup and metric reporting introduce delay in the real feedback loop.',state:{usage:175,request:250,pods:8,ready:8,status:'At target: 70%',formula:'175 / 250 × 100 = 70%',phase:'observe again'}},
-      {code:7,callout:'The next recommendation is 8: the loop settles',log:'At 8 current replicas and 70% observed utilisation, ceil(8 × 70 / 70) stays at 8. If latency is high while CPU remains low, CPU may be the wrong signal: use a metric tied to the actual bottleneck.',state:{usage:175,request:250,pods:8,ready:8,status:'Keep 8 replicas',formula:'ceil(8 × 70 / 70) = 8',phase:'steady'},takeaway:'CPU percentage needs a request. Desired replicas need time to become Ready capacity.'}
-    ]
+    bug: [
+      { log: 'The HPA targets 70% CPU utilisation for Deployment web. The container spec has no CPU request, only a memory request.', callout: 'The container declares no CPU request', code: 4, state: { noreq: true, r: 'no request' }, stats: [{ l: 'target', v: '70%' }, { l: 'cpu request', v: 'none', cls: 'warn' }] },
+      { log: 'At 20:00 the load rises. metrics-server reports that each pod now uses about 450m of CPU, so the pods are clearly saturated.', callout: 'Pods really use about 450m CPU each', code: 0, state: { use: 450, noreq: true, tg: '<unknown>/70%', rep: 4, r: 'usage 450m' }, stats: [{ l: 'usage', v: '450m', cls: 'warn' }, { l: 'replicas', v: '4' }] },
+      { log: 'Utilisation is defined as usage divided by the request. With no request there is no denominator, so the HPA cannot compute a percentage.', callout: 'utilisation = usage / request: request missing', moment: true, code: 3, state: { use: 450, noreq: true, tg: '<unknown>/70%', hlT: true, fr: 'utilisation = 450m / ?', frSub: 'no request: undefined', frT: 'warn', ev: 'failed to get cpu utilization: missing request for cpu (representative)', r: 'unknown' }, stats: [{ l: 'TARGETS', v: '<unknown>', cls: 'bad' }, { l: 'utilisation', v: 'undefined', cls: 'bad' }] },
+      { log: 'Without a number, the HPA makes no scaling decision. The Deployment stays at 4 pods while the CPU is saturated and latency grows.', callout: 'No metric: no scaling, at 4 pods', code: 1, state: { use: 450, noreq: true, tg: '<unknown>/70%', rep: 4, fr: 'utilisation = 450m / ?', frSub: 'HPA waits', frT: 'warn', r: 'stuck at 4' }, stats: [{ l: 'replicas', v: '4', cls: 'bad' }, { l: 'CPU', v: 'saturated', cls: 'bad' }] },
+      { log: 'The fix is to give the container a CPU request, here 250m. That value is the denominator for utilisation.', callout: 'Add requests.cpu: 250m', code: 4, state: { use: 450, req: 250, tg: '180%/70%', rep: 4, fr: 'utilisation = 450m / 250m = 180%', frSub: '', frT: 'cursor', r: 'request added' }, stats: [{ l: 'utilisation', v: '180%', cls: 'warn' }, { l: 'target', v: '70%' }] },
+      { log: 'Now the formula works: desired = ceil(4 x 180 / 70) = 11, and the HPA starts scaling the Deployment.', callout: 'desired = ceil(4 x 180 / 70) = 11', code: 4, state: { use: 450, req: 250, tg: '180%/70%', rep: 11, fr: 'desired = ceil(4 x 180 / 70) = 11', frT: 'ok', r: 'scaling to 11' }, stats: [{ l: 'desired', v: '11', cls: 'ok' }, { l: 'replicas', v: '4 to 11' }] },
+      { log: 'With 11 pods the load per pod falls to about 160m, which is about 64% of the request, close to the target. The loop is closed.', callout: 'About 64% of the request: close to the target', code: 4, state: { use: 160, req: 250, tg: '64%/70%', rep: 11, fr: 'utilisation = 160m / 250m = 64%', frT: 'ok', r: 'converged' }, stats: [{ l: 'TARGETS', v: '64%/70%', cls: 'ok' }, { l: 'replicas', v: '11', cls: 'ok' }],
+        takeaway: 'CPU utilisation is relative to requests. No request means an unknown target and no autoscaling.' }
+    ],
   };
-  window.CHAPTER_OVERRIDES=window.CHAPTER_OVERRIDES||{};
-  window.CHAPTER_OVERRIDES[9]={scenarios:[flap,nocpu],explain:`
-<h3>1. A feedback loop with memory</h3>
-<p>The sale in the original problem exposes two delays: new pods need time to start, and utilisation arrives as a sampled measurement. The HPA adjusts the workload's replica count; the Deployment and scheduler turn that desired count into running pods. Watch <b>The moving window</b> first. Orange follows a short downscale memory, while green retains a recent peak. Both receive identical raw recommendations.</p>
-<h3>2. From usage to a replica recommendation</h3>
-<p>For this chapter's CPU target, utilisation means <b>CPU usage as a percentage of CPU requests</b>. A request of <code>250m</code> and usage of <code>350m</code> produce 140%. A request reserves a scheduling reference; a limit is a separate maximum. The base calculation is <code>ceil(currentReplicas × currentMetric / desiredMetric)</code>, so four pods at 140% with a target of 70% recommend eight. A 70% target leaves headroom relative to requests; it is not 70% of a whole machine.</p>
-<p>The second scene makes the denominator visible. Missing requests leave the utilisation metric undefined. Check <code>kubectl describe hpa web</code> for the actual condition and inspect all relevant containers, including sidecars. On multi-metric HPAs, other usable metrics may still allow scaling up; do not infer that every missing CPU metric freezes every HPA. The scene uses one CPU metric and equivalent single-container pods.</p>
-<figure class="mm" style="--diagram-width:560px"><img src="diagrams/ch09-hpa-loop.svg" alt="Flowchart: usage and CPU requests produce utilisation; the HPA formula, bounds and behaviour produce desired replicas; pod readiness and fresh metrics close the feedback loop"><figcaption>Writing a replica count is one action in the loop. Capacity arrives later.</figcaption></figure>
-<h3>3. Why the latest dip is not enough</h3>
-<p>A scale-down stabilization window stores recent <em>recommendations</em>. It selects their highest value inside the rolling interval. The green shaded area in the chart is that interval. Peaks are circled while they remain eligible; a peak stops protecting capacity when it ages out. This is a rolling maximum, not an average, and not an unconditional five-minute sleep after each sample.</p>
-<p>Compare the 60-second dip: the 15-second window has already forgotten the burst at 30 seconds, so it can drop to four; the 300-second window keeps eight. A new burst then needs four new pods only in the short-memory fleet. The illustrated samples are sparse snapshots. Real reconciliation and timestamps determine exactly when a recommendation expires.</p>
-<h3>4. Recommendation, policy, readiness</h3>
-<p>The default controller sync period is 15 seconds and its default tolerance is 10%. Small differences may therefore produce no action. Downscale stabilization defaults to 300 seconds; scale-up defaults to no stabilization delay. Rate policies govern how many replicas may change over a period, and <code>minReplicas</code>/<code>maxReplicas</code> bound the outcome. The chart isolates stabilization and omits these policy limits and Ready lag so its comparison stays legible. See the <a href="https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/" target="_blank" rel="noopener">official HPA algorithm and behaviour reference</a>.</p>
-<p>Real calculations also treat missing metrics and not-yet-ready pods conservatively. Pending pods can reveal a capacity or scheduling problem that the HPA cannot solve alone. Scaling a CPU-bound service can lower per-pod utilisation; adding pods will not necessarily fix a shared database, an external dependency or storage bottleneck.</p>
-<h3>5. Diagnose the loop in order</h3>
-<ol><li><b>Signal:</b> compare <code>kubectl top pods</code>, CPU requests and <code>kubectl describe hpa</code>. Is the metric known and is it related to user-visible latency?</li><li><b>Decision:</b> inspect desired/current replicas, <code>ScalingActive</code>, <code>ScalingLimited</code>, events and behaviour. A recommendation above <code>maxReplicas</code> needs a capacity decision, not a shorter stabilization window.</li><li><b>Actuation:</b> compare desired replicas to Ready pods. Look for Pending pods, slow startup and failed readiness.</li><li><b>History:</b> align the replica graph with load and latency. Repeated down/up cycles suggest a window or rate policy that is too eager for the traffic pattern.</li></ol>
-<h3>6. Configure the memory explicitly</h3>
-<pre>apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata: {name: web}
+
+  const flow = KH.flow(['Kubelet|container usage', 'metrics-server|metrics.k8s.io', '*HPA controller|every 15 s', 'ceil(cur x metric / target)|clamped by min and max', 'Deployment replicas|scale subresource'], 'Flow: the HPA measures, computes a replica count, and writes it to the scale subresource of the Deployment.');
+
+  window.CHAPTER_OVERRIDES = window.CHAPTER_OVERRIDES || {};
+  window.CHAPTER_OVERRIDES[9] = { explain: `
+<h3>1. A loop that sizes the Deployment</h3>
+<p>Load changes faster than people can react, and a fixed rule either lags behind a spike or oscillates around its threshold. The Horizontal Pod Autoscaler closes a loop: it measures utilisation, computes the replica count that would bring the metric back to its target, writes that count, waits for the new pods to be Ready, and measures again. It changes only <code>spec.replicas</code> of the target, through the scale subresource, and the Deployment does the rest as in the previous chapters.</p>
+${flow}
+
+<h3>2. The metrics pipeline and the formula</h3>
+<p>The kubelet exposes container usage and metrics-server serves it through the <code>metrics.k8s.io</code> API. The HPA controller reads it every 15 s by default. For a Resource metric of type Utilization, the value is a percentage of each container's <b>request</b>, averaged over the pods. A container without a CPU request gives no denominator, so the target shows <code>&lt;unknown&gt;</code> and nothing scales, as in the third scene. The count is then:</p>
+<pre>desiredReplicas = ceil( currentReplicas x currentMetric / targetMetric )</pre>
+<p>For 4 pods at 140% against a 70% target that is ceil(4 x 140 / 70) = 8. If the ratio is within a tolerance of 10% of 1.0, the HPA does nothing. The result is clamped between <code>minReplicas</code> and <code>maxReplicas</code>. When the clamp binds, the HPA sets the <code>ScalingLimited</code> condition, which is the only hint that the cap is hiding demand.</p>
+
+<h3>3. Fast up, slow down</h3>
+<p>The <code>behavior</code> field controls how fast the count may move. By default scale-up has no stabilisation window and may add the larger of 100% of the current pods or 4 pods per period. Scale-down has a 300 s window: the HPA takes the highest recommendation seen in that window, so a short dip cannot remove pods that the next burst needs. The first scene shows why even a fast scale-up leaves a few overloaded periods: the HPA keeps measuring the old pods until the new ones are Ready. The second scene shows the opposite problem, flapping, when the scale-down window is too short.</p>
+
+<h3>4. Choose a metric that tracks the bottleneck</h3>
+<p>CPU is only a proxy. An I/O-bound service, or one that waits on a queue, can be overloaded with CPU at 20%, and a CPU-based HPA never reacts. Pods metrics, Object metrics and External metrics (queue length, requests per second) need an adapter, but they follow the real bottleneck. Whatever the metric, set a sensible <code>maxReplicas</code>, check that the cluster has room for it, and alert on <code>ScalingLimited</code> so that a silent ceiling does not become an outage.</p>
+
+<h3>5. The trade-off</h3>
+<p>Fast scale-up and slow scale-down protect users during bursts, and they keep extra pods for a few minutes after each peak. A lower target gives more headroom and costs more. A higher target saves money and leaves less time to react while new pods start. Pods that take a long time to become Ready, such as slow-starting JVMs, need a lower target or a pre-warmed pool, since the HPA cannot add capacity faster than pods can start.</p>
+
+<h3>6. Syntax</h3>
+<pre>kubectl autoscale deploy web --cpu-percent=70 --min=4 --max=30
+kubectl get hpa web -w
+kubectl describe hpa web          # Conditions: AbleToScale, ScalingActive, ScalingLimited
+
 spec:
-  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: web}
   minReplicas: 4
-  maxReplicas: 20
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target: {type: Utilization, averageUtilization: 70}
+  maxReplicas: 30
   behavior:
-    scaleDown:
-      stabilizationWindowSeconds: 300
-      policies: [{type: Percent, value: 25, periodSeconds: 60}]
-    scaleUp:
-      stabilizationWindowSeconds: 0</pre>
-<p>The 25% per minute scale-down policy above is an illustrative choice, not a Kubernetes default. Every relevant container also needs an appropriate CPU request. Retaining capacity buys smoother latency at extra cost; choose that trade-off from traffic, startup time and the service's latency budget.</p>`};
+    scaleDown: {stabilizationWindowSeconds: 300}
+    scaleUp: {policies: [{type: Percent, value: 100, periodSeconds: 15}, {type: Pods, value: 4, periodSeconds: 15}], selectPolicy: Max}</pre>
+<p>Do not set <code>spec.replicas</code> in the Deployment manifest that you apply from Git when an HPA owns the field, or each apply will fight the autoscaler.</p>`, scenarios: [spike, flap, nocpu] };
 })();

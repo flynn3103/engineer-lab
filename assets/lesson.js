@@ -215,6 +215,7 @@
         $('vtitle').textContent = chap().title;
         $('vlead').innerHTML = chap().problem;
         renderExplain(); renderSide(); render(); saveHash();
+        if (opts.scrollToTop) window.scrollTo(0, 0);
       }
 
 
@@ -326,6 +327,7 @@
         else if (sc.scene) { if (mounted !== sc) { scene = sceneMount(sc); mounted = sc; } sceneUpdate(sc, st, scene); }
         else { mounted = null; $('svgwrap').innerHTML = stageHTML(sc, st); }
         $('log').innerHTML = steps().slice(0, idx + 1).map((s, i) => `<li class="${i === idx ? 'cur' : ''}"><span class="i">${i + 1}</span><span>${esc(s.log)}</span></li>`).join('');
+        $('scene-player').hidden = sc.presentation === 'static';
         $('p-count').textContent = `Step ${idx + 1} / ${N}`;
         $('p-scrub').max = N - 1; $('p-scrub').value = idx;
         $('p-prev').disabled = idx === 0; $('p-next').disabled = idx >= N - 1;
@@ -333,7 +335,7 @@
         [...$('scenbar').children].forEach(b => b.setAttribute('aria-pressed', b.dataset.id === sc.id));
         [...$('mode').children].forEach(b => { b.setAttribute('aria-pressed', b.dataset.m === mode); b.disabled = b.dataset.m === 'fix' && !sc.fix; });
         $('modeblk').hidden = !sc.fix;
-        const cur = $('log').querySelector('.cur'); if (cur) cur.scrollIntoView({ block: 'nearest' });
+        const cur = $('log').querySelector('.cur'); if (cur && view === 'visualize') cur.scrollIntoView({ block: 'nearest' });
         saveHash();
       }
 
@@ -375,7 +377,8 @@
         const h = location.hash.slice(1);
         const m = /^ch(\d+)/.exec(h), p = new URLSearchParams(h.replace(/^ch\d+&?/, ''));
         const i = m ? Number(m[1]) : 0;
-        const wantView = p.get('view') === 'explain' ? 'explain' : 'visualize';
+        const wantView = p.get('view') === 'explain' ? 'explain' : (p.get('view') === 'visualize' || p.get('s')) ? 'visualize' : (opts.defaultView || 'visualize');
+        view = wantView;
         if (!m || i !== ci || !sc) loadChapter(i, p.get('s') || '', p.get('m'), p.get('step'));
         else { /* same chapter: only the tabs or scenario may have changed */ if (p.get('s') && sc && p.get('s') !== sc.id) { pickScenario(p.get('s'), p.get('m')); idx = 0; render(); } }
         setView(wantView);

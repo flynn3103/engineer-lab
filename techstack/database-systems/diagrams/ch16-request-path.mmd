@@ -1,0 +1,13 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+sequenceDiagram
+  participant A as Application
+  participant D as Driver
+  participant S as DBMS server
+  A->>D: execute(query)
+  D->>S: query message
+  S-->>D: row description
+  S-->>D: batch of rows (up to fetch size)
+  D-->>A: rows
+  A->>D: fetch more
+  D->>S: continue message
+  S-->>D: next batch of rows

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Distributed Systems course · Linh Trần Nhật</title>
-<meta name="description" content="Problem-based distributed systems course: each chapter starts from a production failure, shows the mechanism as an animated scene, and ends with diagnosis.">
+<meta name="description" content="A guided distributed systems journey: machines and messages, replication foundations, data placement, consistency, coordination, batch and stream processing.">
 <link rel="stylesheet" href="../../assets/lab.css">
 <link rel="stylesheet" href="../../assets/curriculum.css">
 <link rel="stylesheet" href="diagrams.css">
@@ -18,14 +18,24 @@
 <script src="chapters/ch01.js"></script>
 <script src="chapters/ch02.js"></script>
 <script src="chapters/ch03.js"></script>
-<!--CHAPTERS-->
+<script src="chapters/ch04.js"></script>
+<script src="chapters/ch05.js"></script>
+<script src="chapters/ch06.js"></script>
+<script src="chapters/ch07.js"></script>
+<script src="chapters/ch08.js"></script>
+<script src="chapters/ch09.js"></script>
+<script src="chapters/ch10.js"></script>
+<script src="chapters/ch11.js"></script>
+<script src="chapters/ch12.js"></script>
+<script src="chapters/ch13.js"></script>
+<script src="chapters/ch14.js"></script>
 <script src="../../assets/lesson.js"></script>
 <script>
 (function () {
   /* chapters/chNN.js override the course data chapter by chapter (zero-based index). */
   const O = window.CHAPTER_OVERRIDES || {};
   window.COURSE.chapters = window.COURSE.chapters.map((c, i) => (O[i] ? { ...c, ...O[i] } : c));
-  Lesson.course(window.COURSE, { root: '../../' });
+  Lesson.course(window.COURSE, { root: '../../', defaultView: 'explain', scrollToTop: true });
 })();
 </script>
 </body>

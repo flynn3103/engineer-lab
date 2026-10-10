@@ -1,0 +1,9 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Heap["Heap file<br/>an unordered set of pages"] --> Dir["Page directory<br/>which page has room"]
+  Heap --> Pg["Page, 8 KB<br/>header, slot array, tuples"]
+  Pg --> RID["Record ID<br/>page number + slot"]
+  Pg --> Tup["Tuple<br/>header + aligned values"]
+  Tup --> Big{"Value larger<br/>than a page?"}
+  Big -->|Yes| Ovf["Overflow page or TOAST<br/>pointer left in the tuple"]
+  Big -->|No| Inl["Stored inline"]

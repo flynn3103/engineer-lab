@@ -21,9 +21,9 @@ window.SITE_SYSTEMS = [
   { id:'concurrency', name:'Concurrency', color:'#0f9d8a', kind:'Course: threads and locks', chapters:13,
     url:'techstack/concurrency/01-concurrency-end-to-end.html',
     topics:'Locks, deadlock, actors, transactions, lock-free code.' },
-  { id:'distributed', name:'Distributed Systems', color:'#6d4fd0', kind:'Course: replication and consensus', chapters:13,
-    url:'techstack/distributed/01-distributed-systems-end-to-end.html',
-    topics:'Replication, quorums, partitioning, fencing, clocks, linearizability, Raft, two-phase commit, MapReduce, streams.' },
+  { id:'distributed', name:'Distributed Systems', color:'#6d4fd0', kind:'Course: replication and consensus', chapters:15,
+    url:'techstack/distributed/course.html',
+    topics:'Machines and messages, replication foundations, partitioning, consistency, fencing, consensus, atomic commit, batch and streams.' },
   { id:'database-systems', name:'Database Systems', color:'#b45309', kind:'Course: foundations to analytics', chapters:16,
     url:'techstack/database-systems/01-database-systems-end-to-end.html',
     topics:'Pages, indexes, optimizer, isolation, warehouses.' }

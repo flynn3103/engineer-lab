@@ -1,0 +1,10 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Start["Latch the root"] --> Child["Latch the child"]
+  Child --> Safe{"Is the child safe?<br/>insert: not full<br/>delete: more than half full"}
+  Safe -->|Yes| Rel["Release every ancestor latch"]
+  Safe -->|No| Keep["Keep the ancestor latches:<br/>a split or merge may reach them"]
+  Rel --> Leaf{"At the leaf?"}
+  Keep --> Leaf
+  Leaf -->|No| Child
+  Leaf -->|Yes| Op["Do the insert or delete,<br/>then release all latches"]

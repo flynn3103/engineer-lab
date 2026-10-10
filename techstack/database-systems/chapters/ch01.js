@@ -1,7 +1,7 @@
-/* Chapter 2 "Pages, Records, and the Buffer Pool": three bespoke scenes plus the Explain text (index 1, zero-based).
+/* Chapter 2 "Pages, Records, and Log-Structured Storage" (index 1, zero-based): scenes, Explain text and course fields.
+   Lectures: CMU 15-445 L03 Database Storage I (pages, heap files, slotted pages, tuples), L04 Database Storage II (log-structured and index-organized storage, data representation).
    Loads after course.js and scene-tools.js; course.html merges CHAPTER_OVERRIDES into the course.
-   Scenes: a slotted page (slot array and records grow toward each other), a clock sweep around the frames, and a scan flooding the pool.
-   Sizes, page numbers and timings are illustrative. */
+   Scenes, each a different mechanism: a slotted page, an LSM write path with compaction, and byte-level tuple alignment. Sizes and counts illustrative. */
 (function () {
   const DB = window.DB;
 
@@ -56,150 +56,234 @@
     ],
   };
 
-  /* ---- 2. Clock sweep: a hand circles the frames, clears reference bits, and evicts the first unpinned frame at zero ---- */
-  const CX = 214, CY = 208, CR = 98;
-  const fpos = i => ({ x: CX + CR * Math.sin(i * Math.PI / 3) - 42, y: CY - CR * Math.cos(i * Math.PI / 3) - 20 });
-  const hpos = i => ({ x: CX + 50 * Math.sin(i * Math.PI / 3) - 28, y: CY - 50 * Math.cos(i * Math.PI / 3) - 13 });
-  const F0 = [['A', 1, 'dirty'], ['B', 1, ''], ['C', 1, 'pin'], ['D', 1, ''], ['E', 1, ''], ['F', 1, '']];
-  const frames = (over) => F0.map((f, i) => (over && over[i]) ? over[i] : f);
-  const clock = {
-    id: 'clock-sweep', label: 'Clock sweep', desc: 'Six frames on a clock face. A miss with no free frame starts the hand: it clears reference bits and evicts the first unpinned frame at 0 (illustrative).',
-    codeLabel: 'Policy',
-    code: { bug: [
-      'miss on page G, no free frame: run the clock',
-      'hand sees ref = 1: clear it to 0, move on (second chance)',
-      'hand sees a pinned frame: skip it, never evict',
-      'hand sees ref = 0, unpinned: victim',
-      'victim dirty: write it to disk first, then read G into the frame',
-    ] },
+  const SOURCE = { label: 'CMU 15-445 L03 Database Storage I, L04 Database Storage II (notes in output/pdf/cmu-15445-fall2024)', href: '../../output/pdf/cmu-15445-fall2024/notes/03-storage1.pdf' };
+
+  /* ---- 2. Log-structured storage: writes go to memory and to new sorted files, compaction merges them ---- */
+  const FOOT_LSM = 'Simplified: one level 0, one level 1, four keys per memtable. Illustrative.';
+  const LSM_CODE = [
+    'PUT k7=A; PUT k2=B; PUT k9=C; PUT k4=D     -- memtable, in memory',
+    'memtable full: sort by key, write SSTable 1   -- one sequential write',
+    'three more flushes: level 0 has 4 files with overlapping key ranges',
+    'GET k7: memtable, then each file from newest to oldest (Bloom filter first)',
+    'DELETE k2 writes a tombstone; the old value is still in an older file',
+    'compaction: sort-merge the 4 files into one level-1 file; newest value wins',
+  ];
+  const lsm = {
+    id: 'lsm-compaction', label: 'LSM write path', desc: 'Writes land in a memtable and are flushed as immutable sorted files. Reads check newest to oldest, and compaction merges the files back down (counts illustrative).',
+    codeLabel: 'Storage',
+    code: { bug: LSM_CODE },
     stage: DB.stage({
-      footer: 'Simplified: 6 frames, r = reference bit, pin = in use by a query. Illustrative.',
-      header: s => ({ left: 'disk reads ' + (s.rd || 0) + ' · writes ' + (s.wr || 0), right: s.req ? 'request ' + s.req : 'buffer pool' }),
-      decor(kit) { kit.el('circle', { cx: CX, cy: CY, r: CR, class: 'kring-track' }, kit.layer); },
+      footer: FOOT_LSM,
+      header: s => ({ left: 'level-0 files: ' + (s.l0 || []).length + ' · logical writes 16', right: 'disk writes: ' + (s.dw || 0) + ' units' }),
       draw(P, s) {
-        s.fr.forEach((f, i) => {
-          const p = fpos(i), flags = f[2];
-          const tone = s.victim === i ? 'bad' : (flags === 'pin' ? 't3' : (f[1] ? 'warn' : 'info'));
-          P.chip('f' + i, { x: p.x, y: p.y, w: 84, h: 40, label: f[0], sub: 'r' + f[1] + (flags ? ' ' + flags : ''), tone, hl: s.hit === i });
-        });
-        if (s.hand != null) { const h = hpos(s.hand); P.chip('hand', { x: h.x, y: h.y, w: 56, h: 26, label: 'hand', tone: 'cursor', small: true }); }
-        P.text('hc', { x: CX, y: CY + 4, t: 'clock', cls: 'mut sm', anchor: 'middle' });
-        if (s.req) P.chip('req', { x: 420, y: 100, w: 150, h: 44, label: 'request ' + s.req, sub: s.hit != null ? 'hit' : 'miss', tone: s.hit != null ? 'ok' : 'cursor' });
-        P.text('hd', { x: 420, y: 232, t: 'disk', cls: 'mut sm' });
-        P.box('disk', { x: 420, y: 240, w: 190, h: 70, tone: 'mut', label: '' });
-        if (s.io === 'write') P.chip('io', { x: 440, y: 254, w: 150, h: 40, label: 'write A', sub: 'dirty victim', tone: 'warn' });
-        if (s.io === 'read') P.chip('io', { x: 440, y: 254, w: 150, h: 40, label: 'read ' + s.req, sub: 'into the frame', tone: 'ok' });
+        P.text('hm', { x: 30, y: 82, t: 'memory', cls: 'mut sm' });
+        P.text('hd', { x: 250, y: 82, t: 'disk: level 0 (new files)', cls: 'mut sm' });
+        P.box('mem', { x: 30, y: 92, w: 170, h: 136, tone: 'mut', label: '', sw: 2 });
+        P.text('mn', { x: 42, y: 112, t: 'MemTable', cls: 'sm' });
+        (s.mem || []).forEach((k, i) => P.chip('k' + i, { x: 42, y: 120 + i * 26, w: 146, h: 24, label: k, tone: s.hot === i ? 'cursor' : 'info', small: true }));
+        (s.l0 || []).forEach(([n, sub, tone], i) => P.chip('f' + n, { x: 250 + i * 92, y: 104, w: 84, h: 46, label: 'SST ' + n, sub, tone: tone || 'info' }));
+        if (s.tomb) P.chip('tomb', { x: 42, y: 120 + 4 * 26 - 2, w: 146, h: 24, label: 'k2 = DELETE', tone: 'warn', small: true });
+        P.text('hl1', { x: 250, y: 258, t: 'disk: level 1 (merged, sorted)', cls: 'mut sm' });
+        if (s.l1) P.chip('l1', { x: 250, y: 270, w: 300, h: 48, label: s.l1[0], sub: s.l1[1], tone: 'ok' });
+        if (s.read) P.chip('rd', { x: 30, y: 262, w: 170, h: 48, label: 'GET k7', sub: s.read, tone: 'cursor' });
+        if (s.flushArrow) P.line('fa', 200, 160, 250, 128, { tone: 'ok', arrow: true, label: 'flush', dy: -8 });
+        if (s.merge) (s.l0 || []).forEach(([n], i) => P.line('mg' + i, 292 + i * 92, 150, 400, 270, { tone: 'acc', arrow: true }));
       }
     }),
     bug: [
-      { log: 'Six frames hold pages A to F. Every reference bit is 1, A is dirty, and C is pinned by a running query.', callout: 'The pool is full, every bit is 1', code: 0,
-        state: { fr: frames(), hand: 0 }, stats: [{ l: 'free frames', v: '0', cls: 'warn' }] },
-      { log: 'A query asks for page G. It is not in the pool and no frame is free, so the replacer must pick a victim.', callout: 'Miss on G, no free frame', code: 0,
-        state: { fr: frames(), hand: 0, req: 'G' }, stats: [{ l: 'free frames', v: '0', cls: 'warn' }, { l: 'victims found', v: '0' }] },
-      { log: 'The hand sees A with bit 1 and clears it, then B with bit 1 and clears it. Both get a second chance. The hand reaches C.', callout: 'Bit 1: clear it, move on', code: 1,
-        state: { fr: frames({ 0: ['A', 0, 'dirty'], 1: ['B', 0, ''] }), hand: 2, req: 'G' }, stats: [{ l: 'bits cleared', v: '2', cls: 'warn' }] },
-      { log: 'C is pinned, so the hand skips it. D, E and F are cleared in turn, and the hand completes a full lap back to A.', callout: 'Pinned frames are skipped', code: 2,
-        state: { fr: frames({ 0: ['A', 0, 'dirty'], 1: ['B', 0, ''], 3: ['D', 0, ''], 4: ['E', 0, ''], 5: ['F', 0, ''] }), hand: 0, req: 'G' }, stats: [{ l: 'bits cleared', v: '5', cls: 'warn' }, { l: 'laps', v: '1' }] },
-      { log: 'A has bit 0 and no pin, so A is the victim. A is dirty, so its page must go to disk before the frame can be reused.', callout: 'Victim A is dirty: write it first', moment: true, code: 4,
-        state: { fr: frames({ 0: ['A', 0, 'dirty'], 1: ['B', 0, ''], 3: ['D', 0, ''], 4: ['E', 0, ''], 5: ['F', 0, ''] }), hand: 0, req: 'G', victim: 0, io: 'write', wr: 1 }, stats: [{ l: 'disk writes', v: '1', cls: 'bad' }, { l: 'the read waits', v: 'yes', cls: 'bad' }] },
-      { log: 'Page G is read into the frame with bit 1, and the hand moves to B. One miss cost a lap of the clock, one write and one read.', callout: 'G loaded, hand moves on', code: 4,
-        state: { fr: frames({ 0: ['G', 1, ''], 1: ['B', 0, ''], 3: ['D', 0, ''], 4: ['E', 0, ''], 5: ['F', 0, ''] }), hand: 1, req: 'G', io: 'read', rd: 1, wr: 1 }, stats: [{ l: 'disk reads', v: '1' }, { l: 'disk writes', v: '1' }] },
-      { log: 'A later request for E finds it in the pool. A hit only sets E\'s bit back to 1, which protects it from the next sweep.', callout: 'A hit sets the bit back to 1', code: 1,
-        state: { fr: frames({ 0: ['G', 1, ''], 1: ['B', 0, ''], 3: ['D', 0, ''], 4: ['E', 1, ''], 5: ['F', 0, ''] }), hand: 1, req: 'E', hit: 4, rd: 1, wr: 1 }, stats: [{ l: 'disk reads', v: '1' }, { l: 'hit', v: 'E', cls: 'ok' }] },
-      { log: 'The next miss, page H, finds B at the hand with bit 0 and clean. B is evicted at once with no write and no lap.', callout: 'A clean victim at bit 0 costs one read', code: 3,
-        state: { fr: frames({ 0: ['G', 1, ''], 1: ['H', 1, ''], 3: ['D', 0, ''], 4: ['E', 1, ''], 5: ['F', 0, ''] }), hand: 2, req: 'H', io: 'read', rd: 2, wr: 1 }, stats: [{ l: 'disk reads', v: '2' }, { l: 'disk writes', v: '1' }],
-        takeaway: 'Clock approximates LRU with one bit per frame. The expensive miss is the one whose victim is dirty.' },
+      { log: 'Four writes arrive. Each one changes the memtable, a sorted structure in memory. No data page on disk is read or rewritten.', callout: 'Writes only touch memory', code: 0,
+        state: { mem: ['k7 = A', 'k2 = B', 'k9 = C', 'k4 = D'], hot: 3 }, stats: [{ l: 'disk writes', v: '0', cls: 'ok' }] },
+      { log: 'The memtable is full. It is written to disk in key order as one new immutable file, SSTable 1, in a single sequential write.', callout: 'Flush: one sequential write', code: 1,
+        state: { mem: [], flushArrow: 1, dw: 4, l0: [[1, 'k2..k9']] }, stats: [{ l: 'disk writes', v: '4 units', cls: 'ok' }, { l: 'files', v: '1' }] },
+      { log: 'Writes continue and three more flushes follow. Level 0 now has four files. Their key ranges overlap, because each holds whatever arrived in its time window.', callout: 'Level 0 files overlap in key range', code: 2,
+        state: { dw: 16, l0: [[1, 'k2..k9'], [2, 'k1..k8'], [3, 'k3..k9'], [4, 'k2..k7']] }, stats: [{ l: 'files', v: '4', cls: 'warn' }, { l: 'disk writes', v: '16 units' }] },
+      { log: 'GET k7 checks the memtable, then every file from newest to oldest. A Bloom filter and the key range of each file skip files that cannot hold it, but overlapping files still need checks.', callout: 'A read may check several files', moment: true, code: 3,
+        state: { dw: 16, read: 'checks 4 files', l0: [[1, 'k2..k9', 'warn'], [2, 'k1..k8', 'warn'], [3, 'k3..k9', 'ok'], [4, 'k2..k7', 'warn']] }, stats: [{ l: 'files checked', v: '4', cls: 'bad' }] },
+      { log: 'DELETE k2 cannot erase the old value from an immutable file. It writes a tombstone to the memtable, and reads must see the tombstone before the older value.', callout: 'A delete is a new record, a tombstone', code: 4,
+        state: { mem: [], tomb: 1, dw: 16, l0: [[1, 'k2..k9'], [2, 'k1..k8'], [3, 'k3..k9'], [4, 'k2..k7']] }, stats: [{ l: 'space freed', v: '0', cls: 'warn' }] },
+      { log: 'Compaction reads the four files, sort-merges them and keeps the newest record per key. Old versions and the tombstone with its target disappear.', callout: 'Compaction: sort-merge, newest wins', code: 5,
+        state: { dw: 16, merge: 1, l0: [[1, 'k2..k9'], [2, 'k1..k8'], [3, 'k3..k9'], [4, 'k2..k7']] }, stats: [{ l: 'files in', v: '4' }] },
+      { log: 'One sorted file remains, so a read checks one file. But every byte was written twice, once by the flush and once by the compaction. That is write amplification.', callout: 'Fewer files to read, more bytes written', moment: true, code: 5,
+        state: { dw: 28, l1: ['SST 5: k1..k9', 'merged and sorted'], l0: [] }, stats: [{ l: 'files', v: '1', cls: 'ok' }, { l: 'bytes written per user byte', v: '~2+', cls: 'warn' }],
+        takeaway: 'Log-structured storage buys sequential writes by paying later: reads check many files until compaction, and compaction rewrites data.' },
     ],
   };
 
-  /* ---- 3. Scan flooding: a big scan pushes the hot pages out, unless it is held to a small ring ---- */
-  const GX = i => 30 + (i % 4) * 108, GY = i => 100 + Math.floor(i / 4) * 66;
-  const HOTC = ['h1', 'h2', 'h3', 'h4'];
-  const fl = (arr, ring) => arr;
-  const flood = {
-    id: 'scan-flood', label: 'Scan floods the pool', desc: 'Eight frames hold four hot pages. A nightly scan with no limit takes every frame. A small ring for the scan leaves the hot pages alone (illustrative).',
-    codeLabel: 'Config',
+  /* ---- 3. Tuple layout: alignment padding wastes bytes until the columns are reordered ---- */
+  const FIELDS_A = [['a', 1, 'bool'], ['b', 8, 'bigint'], ['c', 1, 'bool'], ['d', 8, 'bigint']];
+  const FIELDS_B = [['b', 8, 'bigint'], ['d', 8, 'bigint'], ['a', 1, 'bool'], ['c', 1, 'bool']];
+  const bytesOf = order => {
+    const out = []; let off = 0;
+    order.forEach(([n, sz]) => {
+      const al = sz >= 8 ? 8 : 1;
+      while (off % al) { out.push({ pad: 1 }); off++; }
+      for (let i = 0; i < sz; i++) out.push({ n, first: i === 0 }); off += sz;
+    });
+    while (off % 8) { out.push({ pad: 1 }); off++; }
+    return out;
+  };
+  const BA = bytesOf(FIELDS_A), BB = bytesOf(FIELDS_B);
+  const bx = (k, x0) => ({ x: x0 + (k % 8) * 34, y: 134 + Math.floor(k / 8) * 40 });
+  const align = {
+    id: 'tuple-padding', label: 'Alignment padding', desc: 'A tuple stores each value at an offset its type is aligned to. A bool between two bigints costs 7 bytes of padding, and putting the wide columns first removes most of it (sizes as in PostgreSQL).',
+    codeLabel: 'DDL',
     code: { bug: [
-      'SELECT * FROM orders;   -- nightly export, 200 GB sequential scan',
-      '-- every scanned page enters the pool as most recently used',
-      '-- hot pages become the oldest and are evicted first',
-      '-- point lookups now miss: shared read up, shared hit down',
-      '-- fix: scans of big tables use a small ring of buffers (PostgreSQL: 256 kB)',
+      'CREATE TABLE t (a bool, b bigint, c bool, d bigint);',
+      '-- bigint must start at an offset divisible by 8; bool can start anywhere',
+      '-- a at 0, pad 1..7, b at 8, c at 16, pad 17..23, d at 24: 32 bytes',
+      'CREATE TABLE t (b bigint, d bigint, a bool, c bool);',
+      '-- b at 0, d at 8, a at 16, c at 17, row padded to 24 bytes',
     ] },
     stage: DB.stage({
-      footer: 'Simplified: 8 frames, LRU order, 4 hot pages. Illustrative.',
-      header: s => ({ left: 'lookup hit rate ' + (s.hit == null ? '100' : s.hit) + '%', right: s.ring ? 'scan limited to a ring' : 'scan uses the whole pool' }),
+      footer: 'One row, one square per byte. Sizes as in PostgreSQL.',
+      header: s => ({ left: s.hl || 'column order a, b, c, d', right: s.rt || '' }),
       draw(P, s) {
-        P.text('hf', { x: 30, y: 82, t: 'buffer pool: 8 frames', cls: 'mut sm' });
-        for (let i = 0; i < 8; i++) P.box('fr' + i, { x: GX(i), y: GY(i), w: 100, h: 54, tone: 'mut', label: '', dash: true, stroke: (s.ring && (i === 6 || i === 7)) ? 'cursor' : null });
-        (s.pool || []).forEach(([id, slot, tone]) => P.chip('p' + id, { x: GX(slot) + 4, y: GY(slot) + 5, w: 92, h: 44, label: id, sub: id[0] === 'h' ? 'hot' : 'scan', tone: tone || (id[0] === 'h' ? 'live' : 'warn') }));
-        if (s.ring) P.text('rg', { x: GX(6), y: GY(6) + 72, t: 'ring: 2 frames reused by the scan', cls: 'xs', });
-        P.text('hd', { x: 490, y: 82, t: 'disk', cls: 'mut sm' });
-        P.box('disk', { x: 480, y: 92, w: 134, h: 200, tone: 'mut', label: '' });
-        (s.disk || []).forEach(([id, k]) => P.chip('d' + id, { x: 494, y: 104 + k * 50, w: 106, h: 40, label: id, sub: 'evicted', tone: 'bad' }));
-        if (s.scan) P.chip('scan', { x: 30, y: 262, w: 150, h: 40, label: 'scan ' + s.scan, sub: 'sequential', tone: 'cursor' });
-        if (s.look) P.chip('look', { x: 220, y: 262, w: 150, h: 40, label: 'lookup ' + s.look[0], sub: s.look[1], tone: s.look[1] === 'hit' ? 'ok' : 'bad' });
+        const draw = (B, x0, tag, upto, dim) => {
+          P.text('h' + tag, { x: x0, y: 112, t: tag === 'A' ? 'a, b, c, d' : 'b, d, a, c', cls: 'mut sm' });
+          B.forEach((c, k) => { if (k >= upto) return; const p = bx(k, x0);
+            P.box(tag + k, { x: p.x, y: p.y, w: 30, h: 30, tone: c.pad ? 'bad' : (c.n === 'a' || c.n === 'c' ? 't0' : 't1'), label: c.pad ? '' : (c.first ? c.n : ''), cls: 'xs', dash: !!c.pad, op: dim ? .45 : 1 }); });
+        };
+        if (s.A) draw(BA, 30, 'A', s.A, s.B != null);
+        if (s.B != null) draw(BB, 340, 'B', s.B, false);
+        if (s.padA) P.chip('pa', { x: 30, y: 300, w: 270, h: 36, label: s.padA, sub: '', tone: 'bad', small: true });
+        if (s.padB) P.chip('pb', { x: 340, y: 300, w: 270, h: 36, label: s.padB, sub: '', tone: 'ok', small: true });
       }
     }),
     bug: [
-      { log: 'Four hot pages (h1 to h4) sit in the 8-frame pool, and the other four frames are free. Point lookups on them are hits.', callout: 'Hot pages are cached', code: 0,
-        state: { pool: HOTC.map((id, i) => [id, i]) }, stats: [{ l: 'lookup hit rate', v: '100%', cls: 'ok' }, { l: 'free frames', v: '4' }] },
-      { log: 'The nightly export starts a sequential scan. Pages s1 and s2 are read into the free frames.', callout: 'The scan starts reading pages', code: 0,
-        state: { pool: [...HOTC.map((id, i) => [id, i]), ['s1', 4], ['s2', 5]], scan: 's1, s2' }, stats: [{ l: 'free frames', v: '2' }, { l: 'lookup hit rate', v: '100%', cls: 'ok' }] },
-      { log: 'Pages s3 and s4 fill the last frames. The pool is full, and the hot pages are now the oldest in LRU order.', callout: 'The pool is full, hot pages are oldest', code: 1,
-        state: { pool: [...HOTC.map((id, i) => [id, i]), ['s1', 4], ['s2', 5], ['s3', 6], ['s4', 7]], scan: 's3, s4' }, stats: [{ l: 'free frames', v: '0', cls: 'warn' }] },
-      { log: 'Scan pages s5 to s8 need frames. LRU evicts the oldest pages, which are the hot ones. The scan will never read those scan pages again.', callout: 'The scan evicts every hot page', moment: true, code: 2,
-        state: { pool: [['s5', 0], ['s6', 1], ['s7', 2], ['s8', 3], ['s1', 4], ['s2', 5], ['s3', 6], ['s4', 7]], disk: HOTC.map((id, i) => [id, i]), scan: 's5 to s8', hit: 0 }, stats: [{ l: 'hot pages cached', v: '0', cls: 'bad' }, { l: 'lookup hit rate', v: '0%', cls: 'bad' }] },
-      { log: 'A customer lookup for h2 now misses and reads from disk. This is the 3 second request in the incident (illustrative).', callout: 'The lookup misses and reads from disk', code: 3,
-        state: { pool: [['s5', 0], ['s6', 1], ['s7', 2], ['s8', 3], ['s1', 4], ['s2', 5], ['s3', 6], ['s4', 7]], disk: HOTC.map((id, i) => [id, i]), look: ['h2', 'miss'], hit: 0 }, stats: [{ l: 'lookup latency', v: '3 s (illustrative)', cls: 'bad' }, { l: 'shared read', v: 'high', cls: 'bad' }] },
-      { log: 'Now the fix. The scan is limited to a ring of two frames. It reuses those two frames for every page it reads and never touches the others.', callout: 'The scan gets a ring of 2 frames', code: 4,
-        state: { ring: 1, pool: [...HOTC.map((id, i) => [id, i]), ['s1', 6], ['s2', 7]], scan: 's1, s2' }, stats: [{ l: 'frames the scan may use', v: '2', cls: 'ok' }, { l: 'lookup hit rate', v: '100%', cls: 'ok' }] },
-      { log: 'The scan reads s3 and s4 into the same two frames and drops s1 and s2. The hot pages are never evicted.', callout: 'The ring recycles its own frames', code: 4,
-        state: { ring: 1, pool: [...HOTC.map((id, i) => [id, i]), ['s3', 6], ['s4', 7]], scan: 's3, s4', look: ['h2', 'hit'] }, stats: [{ l: 'hot pages cached', v: '4', cls: 'ok' }, { l: 'lookup hit rate', v: '100%', cls: 'ok' }],
-        takeaway: 'A page read once is not a hot page. Keep one-time scans in a small ring so they cannot push out the working set.' },
+      { log: 'The table declares a bool, a bigint, a bool and a bigint in that order. Each square is one byte. The first bool takes byte 0.', callout: 'Column a, a bool, takes one byte', code: 0,
+        state: { A: 1 }, stats: [{ l: 'row bytes so far', v: '1' }] },
+      { log: 'A bigint must start at an offset divisible by 8. The next free byte is 1, so seven bytes of padding come first and b starts at byte 8.', callout: 'b needs a multiple of 8: 7 bytes padding', code: 1,
+        state: { A: 16, rt: '7 bytes padded' }, stats: [{ l: 'padding', v: '7', cls: 'bad' }] },
+      { log: 'The same happens again: c takes byte 16, seven bytes of padding follow, and d starts at byte 24.', callout: 'c, then 7 more bytes padding, then d', code: 2,
+        state: { A: 32, rt: '14 bytes padded', padA: '32 bytes, 14 of them padding' }, stats: [{ l: 'row size', v: '32 B', cls: 'warn' }, { l: 'padding', v: '14 B', cls: 'bad' }] },
+      { log: 'Declare the wide columns first: b, d, a, c. Both bigints are already aligned, the two bools sit side by side, and only the tail is padded to 8.', callout: 'Wide columns first', moment: true, code: 3,
+        state: { A: 32, B: 24, hl: 'column order b, d, a, c', rt: '6 bytes padded', padA: '32 bytes, 14 of them padding', padB: '24 bytes, 6 of them padding' }, stats: [{ l: 'row size', v: '24 B', cls: 'ok' }, { l: 'padding', v: '6 B', cls: 'ok' }] },
+      { log: 'The data is identical, 18 bytes of values. At a billion rows the reordered table is 8 GB smaller and each page holds about a third more rows, so scans read fewer pages.', callout: '25% smaller, same values', code: 4,
+        state: { A: 32, B: 24, hl: 'column order b, d, a, c', padA: '1 billion rows: 32 GB', padB: '1 billion rows: 24 GB' }, stats: [{ l: 'saved per billion rows', v: '8 GB', cls: 'ok' }, { l: 'rows per page', v: '+33%', cls: 'ok' }],
+        takeaway: 'Padding is invisible in the data and visible in the file size. Order fixed-width columns from widest to narrowest when the table will be large.' },
     ],
   };
 
   const EXPLAIN = `
-<h3>1. Why pages</h3>
-<p>Disk is far slower than memory, and a query can only work on data that is in RAM. So the database groups rows into fixed-size <b>pages</b>, usually 8 KB, and every disk read moves a whole page. A 200 GB table is about 25 million pages. A server with 16 GB of RAM can hold only a small part of it, so the question for every request is whether its page is already in memory.</p>
+<h3>1. From file to page to row</h3>
+<p>A database is a set of files, and the DBMS manages the bytes itself instead of leaving them to the operating system. A file is cut into fixed-size <b>pages</b>, usually 4, 8 or 16 KB, and every disk read or write moves a whole page. A table is a <b>heap file</b>: an unordered collection of pages, with a <b>page directory</b> that records which page has free space. The DBMS avoids <code>mmap</code> for its files because the OS can evict a page, or flush a dirty page before its log record is on disk, without telling it. Controlling that order is the DBMS&rsquo;s job.</p>
+<figure class="mm" aria-label="Flowchart: heap file, page directory, slotted page, record ID, tuple, overflow for large values" style="--diagram-width:552px">
+  <img src="diagrams/ch01-page-hierarchy.svg" alt="Flowchart: a heap file is an unordered set of pages with a page directory that says which page has room. A page of 8 KB holds a header, a slot array and tuples. A record ID is the page number and the slot. A tuple has a header and aligned values. A value larger than a page goes to an overflow page or TOAST, with a pointer left in the tuple.">
+  <figcaption>Flowchart: what sits between a table and its bytes. Chapter 3 shows how pages are cached.</figcaption>
+</figure>
 
-<h3>2. How a row sits in a page</h3>
-<p>Most engines use a <b>slotted page</b>. A small header comes first. A <b>slot array</b> grows from the left, and the records are packed from the right. Each slot holds the offset and length of one record. The free space sits in one gap between them, and an insert shrinks the gap from both ends.</p>
-<p>A row is found again by its <b>record ID</b>, the pair (page, slot). Because the ID goes through the slot, a record can move inside the page without changing its ID. A delete leaves a hole, and <b>compaction</b> slides records together to rebuild one gap. A <b>free-space map</b> tracks which pages still have room, so an insert does not scan the table to find one.</p>
+<h3>2. The slotted page</h3>
+<p>Most engines use a <b>slotted page</b>. A small header comes first. A <b>slot array</b> grows from the left, and the tuples are packed from the right. Each slot holds the offset and length of one tuple. A tuple is found again by its <b>record ID</b>, the pair (page, slot). Because the ID goes through the slot, a tuple can move inside its page without changing its ID, and indexes that store the ID stay valid. A delete leaves a hole, and compaction slides the tuples back together. A <b>free-space map</b> tells an insert which page has room.</p>
 
-<h3>3. The buffer pool</h3>
-<p>The executor never reads the disk. It asks the <b>buffer pool manager</b> for a page ID. The manager looks in the <b>page table</b>, a map from page ID to <b>frame</b>, which is a fixed slot in RAM that holds one page. If the page is there, that is a <b>hit</b>. Otherwise it is a <b>miss</b>, and the manager must find a frame and read the page into it.</p>
-<p>Each frame carries a <b>pin count</b>, the number of queries using the page right now, and a <b>dirty flag</b>, which says the page differs from the copy on disk. A pinned frame is never evicted. A dirty frame must be written back before its frame is reused, and the new read waits for that write.</p>
+<h3>3. Inside a tuple</h3>
+<p>A tuple is a header followed by bytes. The header holds metadata such as a null bitmap and, in a multi-version engine, visibility information (chapter 23). The tuple does not record the types: the catalog does, and the DBMS reads the bytes by the column definitions. Fixed-width types such as integers and floats are stored in their native form. <b>Alignment</b> matters: a CPU reads a word at an aligned offset, so the DBMS pads values or reorders columns. A <code>bool</code> between two <code>bigint</code> columns costs 7 bytes of padding. For exact decimals, <code>NUMERIC</code> keeps digits in a variable-length form, which is exact but slower than a float. A value too big for a page, such as a long text or a JSON document, is stored in <b>overflow pages</b> (PostgreSQL calls this TOAST), and the tuple keeps a pointer.</p>
 
-<h3>4. Choosing a victim</h3>
-<p>When no frame is free, the <b>replacer</b> picks a victim among the unpinned frames. <b>LRU</b> evicts the page that was used longest ago. <b>Clock</b> approximates it with one reference bit per frame. A hand sweeps around the frames, clears each bit it finds set, and evicts the first unpinned frame whose bit is already 0. A hit sets the bit back to 1, so recently used pages survive a sweep.</p>
-<p>Both policies share a weakness. A loop over 5 pages in a pool of 4 frames evicts, each time, the page needed next, so every request misses. And a one-time sequential scan looks to LRU like a long run of recently used pages, so it pushes out the pages that are really hot. This is why a nightly export can slow down lookups for the whole system.</p>
+<h3>4. Where page-oriented storage hurts</h3>
+<p>The lecture names three costs. <b>Fragmentation</b>: deletes leave holes, so pages are not full. <b>Useless I/O</b>: changing one 120-byte row rewrites a whole 8 KB page. <b>Random I/O</b>: updating 20 rows may mean 20 page writes at 20 places. These costs are small for most workloads and large for ingest-heavy ones.</p>
 
-<h3>5. Defending the working set</h3>
-<p>Real systems add scan resistance. PostgreSQL gives large sequential scans, VACUUM and COPY a small ring of 256 kB of buffers, so they recycle their own frames. InnoDB inserts new pages at the midpoint of its LRU list and promotes them only after a delay set by <code>innodb_old_blocks_time</code>. A background writer (<code>bgwriter_lru_maxpages</code>, <code>bgwriter_delay</code>) cleans dirty pages ahead of time so that a read does not wait for a write.</p>
+<h3>5. Log-structured storage</h3>
+<p>The alternative never updates in place. The DBMS keeps log records of changes, <code>PUT key value</code> or <code>DELETE key</code>, applies them to an in-memory sorted <b>MemTable</b>, and when it is full writes it out as an immutable sorted file, an <b>SSTable</b>. Writes become sequential. A read checks the memtable, then the files from newest to oldest. A summary table with each file&rsquo;s key range and a Bloom filter (chapter 8) lets it skip files. A delete is a <b>tombstone</b>, a record that hides older values until compaction drops both.</p>
+<figure class="mm" aria-label="Flowchart of the log-structured write and read paths: memtable, flush, level 0, compaction, summary table" style="--diagram-width:360px">
+  <img src="diagrams/ch01-lsm-paths.svg" alt="Flowchart: a put or delete goes to the memtable, which is flushed as one sorted SSTable when full. Level 0 files have overlapping key ranges and are compacted by sort-merge into level 1 and deeper levels. A get checks the memtable, then the summary table and Bloom filter, then the level 0 files.">
+  <figcaption>Flowchart: the write path on the left, the read path on the right. Compaction closes the loop.</figcaption>
+</figure>
+<p>Compaction picks files and merges them by sort-merge, keeping the newest record per key. <b>Level compaction</b> merges level 0 into a larger level 1, level 1 into level 2 and so on. <b>Universal compaction</b> merges any files together. The price is <b>write amplification</b>: for each byte the user writes, the system may write several bytes over its life.</p>
 
-<h3>6. The trade-off</h3>
-<p>A larger pool means more hits, but it takes memory from the operating system cache and from per-query work. A smaller pool misses more. Read the numbers before you tune: the hit ratio, the dirty pages written by backends instead of the background writer, and which tables fill the pool. A ratio that falls only during one job points at scan flooding, not at the pool size.</p>
+<h3>6. Index-organized storage</h3>
+<p>Both heap pages and log files need a separate index to find a tuple, because the table itself is unsorted. In <b>index-organized storage</b> the tuples are stored as the values of an index, sorted by key, in pages that look like slotted pages. MySQL InnoDB works this way: the clustered primary-key index <em>is</em> the table. A lookup by key reaches the tuple in one tree descent, and a range scan reads neighbouring pages in order (chapter 7).</p>
 
-<h3>7. Syntax</h3>
-<pre>-- how big is the pool, and how often do reads hit it
-SHOW shared_buffers;
-EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM orders WHERE id = 42;
---   Buffers: shared hit=4 read=0     (all from memory)
+<h3>7. The trade-off</h3>
+<p>Slotted heap pages give cheap in-place updates and stable record IDs, but they pay random I/O, fragmentation and padding. Log-structured storage gives fast sequential writes, and pays with slower reads, compaction work and write amplification. Index-organized storage is fast for key lookups and ranges, but a secondary index must store the primary key and do a second lookup. No layout wins for every workload: pick the one whose cost lands where the workload is cheap.</p>
 
--- which relations fill the pool (extension pg_buffercache)
-SELECT c.relname, count(*) AS buffers
-FROM pg_buffercache b JOIN pg_class c ON b.relfilenode = c.relfilenode
-GROUP BY c.relname ORDER BY buffers DESC LIMIT 5;
+<h3>8. Syntax</h3>
+<pre>-- column order changes the row size
+CREATE TABLE t_bad  (a bool, b bigint, c bool, d bigint);
+CREATE TABLE t_good (b bigint, d bigint, a bool, c bool);
+-- compare: SELECT pg_column_size(t_bad.*)  FROM t_bad  LIMIT 1;
 
--- how many dirty pages did backends have to write themselves
-SELECT buffers_clean, buffers_backend FROM pg_stat_bgwriter;
+-- bloat: dead tuples and free space inside pages (extension pgstattuple)
+SELECT * FROM pgstattuple('orders');
+SELECT n_live_tup, n_dead_tup FROM pg_stat_user_tables WHERE relname = 'orders';
 
--- MySQL InnoDB scan resistance
-SHOW VARIABLES LIKE 'innodb_old_blocks%';</pre>
-<p>A large <code>shared read</code> next to a small <code>shared hit</code> means the working set does not fit, or a scan has pushed it out.</p>`;
+-- leave room in each page so an update can stay on its page
+ALTER TABLE orders SET (fillfactor = 85);
+
+-- a record ID is visible in PostgreSQL as ctid: (page, slot)
+SELECT ctid, id FROM orders LIMIT 3;</pre>
+<p>When the table is much larger than its live rows, count dead tuples before you buy disk.</p>`;
+
+  /* problem, predict and diagnose */
+  const FIELDS = {
+    problem: `An <code>orders</code> table holds 40 GB of live rows and takes 63 GB on disk after months of updates and deletes (illustrative). Each UPDATE of a 120-byte row rewrites a whole 8 KB page. The events team moved to a log-structured store for fast writes, and now its disks stay busy with compaction even when traffic is low.`,
+    predict: {
+      q: `A slotted page has a hole where a deleted record used to be. The DBMS compacts the page by sliding the remaining records together. What happens to the record IDs (page, slot) of the records that moved?`,
+      opts: [
+        `They stay the same: each ID points to a slot, and only the offset stored in the slot changes`,
+        `They all change, so every index entry for those rows must be rewritten`,
+        `Only the records after the hole get new IDs`,
+        `The page cannot be compacted while any index points into it`
+      ],
+      ans: 0,
+      why: `The record ID names a slot, not a byte offset. Compaction updates the offset inside the slot, so the ID and every index that stores it stay valid.`
+    },
+    diagnose: [
+      {
+        t: 'Table bloat',
+        sym: '<b>Table size</b> is far larger than the live rows, and scans get slower every month.',
+        ctx: 'An orders table is updated all day. Each update writes a new row version and leaves the old one in the page until it is cleaned up. Cleanup has fallen behind.',
+        why: 'A page holds dead tuples and holes the engine has not yet reclaimed, so a scan reads many pages for few live rows. Space inside a page is reused only after the dead tuples are removed and the free-space map is updated.',
+        log: `-- representative output, counts illustrative
+SELECT n_live_tup, n_dead_tup FROM pg_stat_user_tables WHERE relname = 'orders';
+ n_live_tup | n_dead_tup
+  41,200,000 | 23,900,000
+
+SELECT pg_size_pretty(pg_total_relation_size('orders'));   ->  63 GB`,
+        note: 'Dead tuples at more than half the live count mean cleanup is behind. Check whether an old transaction is holding the oldest visible version.',
+        fix: [
+          'Measure first: read <code>n_dead_tup</code> and <code>last_autovacuum</code> in <code>pg_stat_user_tables</code>, and <code>pgstattuple</code> for free space inside pages.',
+          'Look for an old open transaction in <code>pg_stat_activity</code> (<code>xact_start</code>). While it is open, VACUUM cannot remove the versions it might still see.',
+          'Make autovacuum run sooner on this table: lower <code>autovacuum_vacuum_scale_factor</code> for it with <code>ALTER TABLE ... SET (...)</code>.',
+          'Leave room so updates stay on their page: lower <code>fillfactor</code> to 85 for update-heavy tables.',
+          'Verify: after a vacuum run, compare <code>n_dead_tup</code> and the size of the table before and after.'
+        ]
+      },
+      {
+        t: 'Write amplification from compaction',
+        sym: '<b>Disk write bandwidth</b> is high while the application writes little.',
+        ctx: 'A log-structured store keeps data in levels. Each level is about 10 times larger than the one above, and a byte moves down through every level.',
+        why: 'Compaction rewrites data to merge sorted files. In a leveled layout a byte can be written several times as it moves down, so the disk writes a multiple of what the application wrote.',
+        log: `-- representative RocksDB-style statistics, counts illustrative
+Cumulative writes: 41 GB   (user)
+Cumulative compaction: 902 GB write, 12 GB/s peak
+Write amplification: 22.0`,
+        note: 'Write amplification above about 10 on a write-heavy workload means compaction is most of your I/O.',
+        fix: [
+          'Measure first: read the store&rsquo;s own statistics for write amplification, pending compaction bytes and stall time.',
+          'Batch small writes in the application, so each memtable flush carries more useful data.',
+          'Choose the compaction style by workload: leveled favours reads and space, universal or tiered style favours write cost.',
+          'Rate-limit compaction I/O so it does not starve foreground reads and writes.',
+          'Verify: compare disk bytes written per user byte before and after the change.'
+        ]
+      },
+      {
+        t: 'Padding waste',
+        sym: '<b>Row size</b> is larger than the sum of the column sizes, on a table with billions of rows.',
+        ctx: 'A fact table declares a bool, then a bigint, then another bool and a bigint. Nobody chose the order on purpose.',
+        why: 'Each bigint must start at an offset divisible by 8, so the bools force padding between them. The padding is stored in every row.',
+        log: `-- representative PostgreSQL output
+SELECT pg_column_size(ROW(true, 1::bigint, true, 2::bigint));    -- 40 (with tuple overhead)
+SELECT pg_column_size(ROW(1::bigint, 2::bigint, true, true));    -- 32`,
+        note: 'The same values in a different column order give a smaller row. The saving repeats in every row of the table.',
+        fix: [
+          'Measure first: compare <code>pg_column_size</code> of a sample row for two column orders.',
+          'For new large tables, declare fixed-width columns from widest to narrowest, then variable-length columns.',
+          'For an existing table, create the reordered table and copy the data in a maintenance window.',
+          'Verify: compare the table size and the rows per page after the copy.'
+        ]
+      }
+    ]
+  };
 
   window.CHAPTER_OVERRIDES = window.CHAPTER_OVERRIDES || {};
-  window.CHAPTER_OVERRIDES[1] = { explain: EXPLAIN, scenarios: [slotted, clock, flood] };
+  window.CHAPTER_OVERRIDES[1] = { ...FIELDS, source: SOURCE, explain: EXPLAIN, scenarios: [slotted, lsm, align] };
 })();

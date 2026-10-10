@@ -1,0 +1,11 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Q["SQL query"] --> FE["Front-end: parse"]
+  FE --> PL["Planner: bind, rewrite,<br/>optimize with a cost model"]
+  PL --> SC["Scheduler: cut the plan<br/>into fragments for workers"]
+  SC --> EX["Execution engines<br/>on worker nodes"]
+  EX <--> IO["I/O service and local cache"]
+  IO <--> OS["Object store:<br/>immutable columnar files"]
+  CAT["Catalog: files, schema,<br/>statistics"] -.-> PL
+  CAT -.-> SC
+  CAT -.-> IO

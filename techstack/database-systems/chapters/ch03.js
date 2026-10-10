@@ -1,286 +1,292 @@
-/* Chapter 4 "Hash Tables, Indexes, and Filters": four bespoke scenes plus the Explain text (index 3, zero-based).
+/* Chapter 4 "Storage Models and File Formats" (index 3, zero-based): scenes, Explain text and course fields.
+   Lectures: CMU 15-445 L05 Database Storage III (workloads, NSM, DSM, PAX); CMU 15-721 L02 Data Formats I (Parquet and ORC layout, type system, nested data).
    Loads after course.js and scene-tools.js; course.html merges CHAPTER_OVERRIDES into the course.
-   Scenes: a B+ tree descent and leaf chain, a leaf split, a Bloom filter bit array, and 16 writers queueing on the rightmost leaf.
-   Key values, page counts and timings are illustrative. */
+   Scenes, each a different mechanism: the same cells on row pages, column chunks and PAX; zone maps skipping row groups; and a nested list shredded into a column with repetition and definition levels. Numbers illustrative. */
 (function () {
   const DB = window.DB;
 
-  /* ---- 1. Descent: one page per level from the root to a leaf, then a jump into the heap ---- */
-  const LY = [88, 140, 192, 244], NX = i => 40 + i * 118, NW = 104;
-  const L2 = ['<20M', '20-40M', '40-60M', '60-80M', '>80M'], L3 = ['40-44M', '44-48M', '48-52M', '52-56M', '56-60M'], L4 = ['58.0M', '58.1M', '58.2M', '58.3M', '58.4M'];
-  const descent = {
-    id: 'btree-descent', label: 'B+ tree descent', desc: 'A lookup for one customer in 100 million rows. A full scan reads every heap page. A B+ tree with 256 entries per node reads one page per level (illustrative).',
+  /* ---- 1. Layout: the same cells, three ways of placing them on pages ---- */
+  const COLS = ['id', 'cu', 'st', 'am', 'sh', 'nt'], CT = ['t0', 't1', 't2', 't3', 't4', 't5'];
+  const CNAME = ['order_id', 'customer', 'status', 'amount', 'ship_date', 'notes'];
+  const place = (lay, r, c) => {
+    if (lay === 'dsm') return { p: c, k: r };
+    if (lay === 'pax') return { p: Math.floor(r / 3) * 3 + Math.floor(c / 2), k: (c % 2) * 3 + (r % 3) };
+    return { p: r, k: c };
+  };
+  const PGX = 90, PGY = p => 92 + p * 40, CWID = 50;
+  const layout = {
+    id: 'row-column', label: 'Row, column, PAX', desc: 'Six rows by six columns drawn as cells, placed on six pages. One query needs only the amount column (sizes illustrative).',
     codeLabel: 'SQL',
     code: { bug: [
-      'SELECT * FROM customers WHERE customer_id = 58114203;   -- no index',
-      'CREATE INDEX customers_id_idx ON customers (customer_id);',
-      '-- 256 entries per node: 256^4 = 4.3 billion, so 4 levels cover 100 million keys',
-      '-- root, inner, inner, leaf: one page each, then the heap page for the row',
-      "SELECT * FROM customers WHERE customer_id BETWEEN 58110000 AND 58130000;",
+      'SELECT SUM(amount) FROM orders;   -- 100 columns in the real table',
+      'row store (NSM): each page holds whole rows',
+      'column store (DSM): each page holds one column',
+      'INSERT INTO orders VALUES (...);  -- one new row',
+      'PAX / Parquet: row groups, and inside each group one chunk per column',
     ] },
     stage: DB.stage({
-      footer: 'Simplified: 5 nodes drawn per level out of 256. Key ranges illustrative.',
-      header: s => ({ left: 'pages read ' + (s.pages == null ? 0 : s.pages), right: s.noindex ? 'full scan' : 'B+ tree, 4 levels' }),
+      footer: 'Simplified: 6 rows, 6 columns, 6 cells per page. Illustrative.',
+      header: s => ({ left: 'layout: ' + ({ nsm: 'row store (NSM)', dsm: 'column store (DSM)', pax: 'PAX row groups' })[s.lay], right: s.pages == null ? '' : 'pages touched ' + s.pages + ' of 6' }),
       draw(P, s) {
-        if (s.noindex) {
-          P.text('hs', { x: 40, y: 86, t: 'heap: 100 rows per page', cls: 'mut sm' });
-          P.box('heap', { x: 40, y: 98, w: 560, h: 40, tone: 'bad', label: '1,000,000 heap pages, all read for 1 row', cls: 'sm' });
-          P.chip('q0', { x: 40, y: 170, w: 250, h: 44, label: 'customer_id = 58114203', sub: 'rows examined: 100,000,000', tone: 'cursor' });
-          P.chip('t0', { x: 320, y: 170, w: 180, h: 44, label: '~100 s', sub: 'at 1M rows/s', tone: 'bad' });
-          return;
+        const touched = new Set();
+        for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++) {
+          const { p } = place(s.lay, r, c);
+          if ((s.query && c === 3) || (s.newrow && r === 5)) touched.add(p);
         }
-        const lv = s.lvl || 0, pathIdx = 2;
-        const pos = [[{ x: NX(2), key: 0 }], [0, 1, 2, 3, 4].map(i => ({ x: NX(i) })), [0, 1, 2, 3, 4].map(i => ({ x: NX(i) })), [0, 1, 2, 3, 4].map(i => ({ x: NX(i) }))];
-        const labels = [['root', '256 keys'], null, null, null];
-        for (let l = 0; l < 4; l++) {
-          const lab = [null, L2, L3, L4][l];
-          pos[l].forEach((p, i) => {
-            const on = l < lv && (l === 0 || i === pathIdx);
-            const rng = s.range && l === 3 && (i === 1 || i === 2);
-            P.chip('n' + l + '_' + i, { x: p.x, y: LY[l], w: NW, h: 40, label: l === 0 ? 'root' : l === 3 ? 'leaf' : 'inner', sub: l === 0 ? '256 keys' : lab[i], tone: rng ? 'ok' : (on ? (l === 3 ? 'ok' : 'cursor') : 'info'), hl: on || rng });
-          });
+        for (let p = 0; p < 6; p++) {
+          P.text('pl' + p, { x: 30, y: PGY(p) + 22, t: 'page ' + p, cls: 'mut xs' });
+          P.box('pg' + p, { x: PGX - 6, y: PGY(p) - 4, w: 6 * CWID + 8, h: 36, tone: touched.has(p) ? 'warn' : 'mut', label: '', sw: touched.has(p) ? 2.4 : 1, stroke: touched.has(p) ? 'warn' : null });
         }
-        pos[0][0].x = NX(2);
-        for (let i = 0; i < 5; i++) {
-          const hot1 = lv >= 2 && i === pathIdx;
-          P.line('e1_' + i, NX(2) + NW / 2, LY[0] + 40, NX(i) + NW / 2, LY[1], { tone: lv >= 2 && i === pathIdx ? 'cursor' : 'mut', sw: hot1 ? 2.6 : 1.2 });
-          P.line('e2_' + i, NX(pathIdx) + NW / 2, LY[1] + 40, NX(i) + NW / 2, LY[2], { tone: lv >= 3 && i === pathIdx ? 'cursor' : 'mut', sw: lv >= 3 && i === pathIdx ? 2.6 : 1.2 });
-          P.line('e3_' + i, NX(pathIdx) + NW / 2, LY[2] + 40, NX(i) + NW / 2, LY[3], { tone: lv >= 4 && i === pathIdx ? 'cursor' : 'mut', sw: lv >= 4 && i === pathIdx ? 2.6 : 1.2 });
+        for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++) {
+          const { p, k } = place(s.lay, r, c);
+          const hot = (s.query && c === 3) || (s.newrow && r === 5);
+          P.box('c' + r + '_' + c, { x: PGX + k * CWID, y: PGY(p), w: CWID - 4, h: 28, tone: CT[c], label: COLS[c] + (r + 1), cls: 'xs', op: (s.query || s.newrow) && !hot ? 0.38 : 1, sw: hot ? 3 : 1.4, stroke: hot ? 'var(--ink)' : null });
         }
-        for (let i = 0; i < 4; i++) P.line('sib' + i, NX(i) + NW, LY[3] + 20, NX(i + 1), LY[3] + 20, { tone: s.range && (i === 1) ? 'ok' : 'mut', arrow: true, sw: s.range && i === 1 ? 2.6 : 1.2 });
-        if (s.key) P.chip('key', { x: 30, y: 300, w: 230, h: 34, label: 'customer_id = 58114203', tone: 'cursor' });
-        if (s.heap) { P.chip('hp', { x: 330, y: 296, w: 150, h: 40, label: 'heap row', sub: '(page, slot)', tone: 'ok' }); P.line('lh', NX(pathIdx) + NW / 2, LY[3] + 40, 405, 296, { tone: 'ok', arrow: true, label: 'record id', dx: 34 }); }
-        if (s.range) P.chip('rq', { x: 30, y: 296, w: 270, h: 40, label: 'BETWEEN 58110000 AND 58130000', sub: 'follow leaf links, no re-descent', tone: 'cursor' });
+        P.text('lg', { x: 430, y: 84, t: 'columns', cls: 'mut sm' });
+        CNAME.forEach((n, c) => P.chip('lg' + c, { x: 430, y: 94 + c * 36, w: 130, h: 30, label: n, tone: CT[c], small: true }));
+        if (s.read != null) P.chip('read', { x: 430, y: 316, w: 180, h: 26, label: s.read, tone: s.readTone || 'warn', small: true });
       }
     }),
     bug: [
-      { log: 'The table has 100 million rows and no index on customer_id. The only way to find one customer is to read every row.', callout: 'No index: read all 1,000,000 heap pages', code: 0,
-        state: { noindex: 1, pages: 1000000 }, stats: [{ l: 'pages read', v: '1,000,000', cls: 'bad' }, { l: 'time', v: '~100 s', cls: 'bad' }] },
-      { log: 'CREATE INDEX builds a B+ tree. Each node holds 256 sorted entries, so each level divides the search by 256.', callout: 'A B+ tree: 256 entries per node', code: 1,
-        state: {}, stats: [{ l: 'fanout', v: '256' }, { l: 'levels for 100M keys', v: '4', cls: 'ok' }] },
-      { log: 'A lookup for customer 58,114,203 starts at the root. One binary search over its 256 keys picks the child.', callout: 'Page 1: the root picks a child', code: 3,
-        state: { lvl: 1, pages: 1, key: 1 }, stats: [{ l: 'pages read', v: '1', cls: 'ok' }] },
-      { log: 'The inner node for 40 to 60 million narrows the range again. Each level reads exactly one page.', callout: 'Page 2: an inner node narrows the range', code: 3,
-        state: { lvl: 2, pages: 2, key: 1 }, stats: [{ l: 'pages read', v: '2', cls: 'ok' }] },
-      { log: 'A second inner node covers 56 to 60 million keys. Three levels have cut 100 million keys to a few hundred.', callout: 'Page 3: the last inner level', code: 3,
-        state: { lvl: 3, pages: 3, key: 1 }, stats: [{ l: 'pages read', v: '3', cls: 'ok' }] },
-      { log: 'The leaf holds the key and a record id, the (page, slot) of the row in the heap.', callout: 'Page 4: the leaf holds the record id', code: 3,
-        state: { lvl: 4, pages: 4, key: 1 }, stats: [{ l: 'pages read', v: '4', cls: 'ok' }] },
-      { log: 'One more page read fetches the row from the heap. The whole lookup touched 5 pages instead of 1,000,000.', callout: '5 pages instead of 1,000,000', moment: true, code: 3,
-        state: { lvl: 4, heap: 1, pages: 5, key: 1 }, stats: [{ l: 'pages read', v: '5', cls: 'ok' }, { l: 'time', v: '~1 ms', cls: 'ok' }] },
-      { log: 'Leaves are linked to their neighbours. A range query descends once, then walks along the leaf chain without going back to the root.', callout: 'Ranges follow the leaf links', code: 4,
-        state: { lvl: 4, range: 1, pages: 6 }, stats: [{ l: 'descents', v: '1', cls: 'ok' }, { l: 'leaves walked', v: '2' }],
-        takeaway: 'A B+ tree turns a search over 100 million keys into one page per level, and keeps the keys in order for ranges.' },
+      { log: 'Six rows by six columns on six pages. In a row store each page holds one whole row, so the colours run across every page.', callout: 'Row store: a page holds whole rows', code: 1,
+        state: { lay: 'nsm' }, stats: [{ l: 'layout', v: 'row (NSM)' }, { l: 'cells per page', v: '6' }] },
+      { log: 'The report runs SUM(amount). Only the amount column is needed, which is one cell in every row.', callout: 'The query needs one column', code: 0,
+        state: { lay: 'nsm', query: 1 }, stats: [{ l: 'columns needed', v: '1 of 6', cls: 'ok' }] },
+      { log: 'A disk read moves a whole page, and every page holds one amount cell. All six pages must be read to use six cells.', callout: 'All 6 pages read for 1 column in 6', moment: true, code: 0,
+        state: { lay: 'nsm', query: 1, pages: 6, read: 'read 6 of 6 pages', readTone: 'bad' }, stats: [{ l: 'bytes read', v: '100%', cls: 'bad' }, { l: 'bytes used', v: '17%', cls: 'ok' }] },
+      { log: 'Now store the table by column. The cells move: each page holds one column for all rows, so amount sits on a single page.', callout: 'Column store: a page holds one column', code: 2,
+        state: { lay: 'dsm' }, stats: [{ l: 'layout', v: 'column (DSM)' }] },
+      { log: 'The same SUM(amount) reads only the page that holds the amount column. The other five pages are never touched.', callout: '1 of 6 pages read', code: 0,
+        state: { lay: 'dsm', query: 1, pages: 1, read: 'read 1 of 6 pages', readTone: 'ok' }, stats: [{ l: 'bytes read', v: '17%', cls: 'ok' }, { l: 'bytes used', v: '100%', cls: 'ok' }] },
+      { log: 'The cost moves to writes. One new order must put one value on each of six pages, one page per column.', callout: 'One new row touches 6 pages', code: 3,
+        state: { lay: 'dsm', newrow: 1, pages: 6, read: 'write 6 pages', readTone: 'bad' }, stats: [{ l: 'pages written per row', v: '6', cls: 'bad' }, { l: 'in a row store', v: '1', cls: 'ok' }] },
+      { log: 'PAX groups rows first: three rows per row group, then one chunk per column pair inside the group. Parquet works this way.', callout: 'PAX: row groups, then column chunks', code: 4,
+        state: { lay: 'pax' }, stats: [{ l: 'row groups', v: '2' }, { l: 'column chunks', v: '3 per group' }] },
+      { log: 'SUM(amount) reads one chunk in each row group, 2 pages. A new row touches only the 3 chunks of its own group.', callout: 'PAX reads 2 pages and writes 3', code: 4,
+        state: { lay: 'pax', query: 1, pages: 2, read: 'read 2 of 6 pages', readTone: 'ok' }, stats: [{ l: 'scan reads', v: '33%', cls: 'ok' }, { l: 'row writes', v: '3 pages', cls: 'warn' }],
+        takeaway: 'Rows suit transactions, columns suit scans. Row groups with column chunks keep most of both.' },
     ],
   };
 
-  /* ---- 2. Split: a full leaf divides in two, and the middle key is copied up to the parent ---- */
-  const CW = 30, KY = 202, RY = 100;
-  const fw = n => Math.max(4, n) * CW + 8;
-  const BEFORE = { A: [5, 10, 20, 25], B: [30, 40, 50, 55], C: [60, 70, 80, 90] };
-  const ax = { A: 40, B: 232, C: 424 }, ax2 = { A: 40, B1: 182, B2: 324, C: 466 };
-  const splitScene = {
-    id: 'leaf-split', label: 'Leaf split', desc: 'Leaves hold at most four keys. Inserting key 45 into a full leaf splits it, and the first key of the new leaf is copied up (keys illustrative).',
+  /* ---- 2. Zone maps: row groups carry a min and max, and a filter skips every group whose range misses it ---- */
+  const AX0 = 100, DAY = 15, AY = 100;
+  const dx = d => AX0 + (d - 1) * DAY;
+  const UNS = [[1, 29], [2, 30], [1, 28], [3, 30]];
+  const SRT = [[1, 8], [8, 15], [16, 23], [24, 30]];
+  const zones = {
+    id: 'zone-maps', label: 'Zone maps', desc: 'Four row groups store the min and max of ship_date in the footer. A narrow date filter reads only the groups whose range overlaps it (dates illustrative).',
     codeLabel: 'SQL',
     code: { bug: [
-      'INSERT INTO customers (customer_id) VALUES (45);   -- leaf capacity is 4 keys',
-      'descend: 45 >= 30 and 45 < 60, so go to the middle leaf',
-      'leaf is full: 5 keys do not fit, so split into two leaves',
-      'copy the first key of the new right leaf (50) up to the parent',
-      'if the parent is full too, it splits, and the tree grows one level',
+      "SELECT SUM(amount) FROM orders WHERE ship_date BETWEEN '2026-06-10' AND '2026-06-12';",
+      'footer: row group 1..4, each with min(ship_date) and max(ship_date)',
+      'a group whose range misses the filter is skipped without reading a byte',
+      'rows arrived in order of creation, so every group spans the whole month',
+      'rewrite sorted by ship_date: each group covers a narrow range',
     ] },
     stage: DB.stage({
-      footer: 'Simplified: 4 keys per node. A real node holds hundreds. Illustrative.',
-      header: s => ({ left: 'height 2 · leaves ' + (s.split ? 4 : 3), right: s.note || '' }),
+      footer: 'Simplified: 4 row groups, one month of dates. Illustrative.',
+      header: s => ({ left: 'row groups read ' + (s.read == null ? '-' : s.read + ' of 4'), right: s.sorted ? 'sorted by ship_date' : 'arrival order' }),
       draw(P, s) {
-        const L = s.split ? { A: BEFORE.A, B1: s.b1, B2: s.b2, C: BEFORE.C } : { A: BEFORE.A, B: s.b || BEFORE.B, C: BEFORE.C };
-        const X = s.split ? ax2 : ax;
-        Object.keys(L).forEach(id => {
-          const keys = L[id], over = !s.split && id === 'B' && keys.length > 4;
-          P.box('f' + id, { x: X[id], y: KY - 4, w: fw(keys.length), h: 34, tone: over ? 'bad' : 'mut', label: '', sw: over ? 2.6 : 1.4, stroke: over ? 'bad' : null });
-          P.text('fl' + id, { x: X[id] + 4, y: KY + 56, t: id === 'B1' ? 'old leaf' : id === 'B2' ? 'new leaf' : 'leaf ' + id, cls: 'mut xs' });
+        const rg = s.sorted ? SRT : UNS;
+        P.text('ax', { x: AX0, y: 84, t: 'ship_date: Jun 1', cls: 'mut xs' });
+        P.text('ax2', { x: dx(30), y: 84, t: 'Jun 30', cls: 'mut xs', anchor: 'end' });
+        P.line('axis', AX0, AY, dx(31), AY, { tone: 'mut' });
+        if (s.query) {
+          P.box('qb', { x: dx(10), y: AY + 4, w: 3 * DAY, h: 214, tone: 'cursor', label: '', op: 0.35, stroke: 'cursor', dash: true });
+          P.text('qt', { x: dx(10) + 1.5 * DAY, y: AY + 232, t: 'filter Jun 10-12', cls: 'xs', anchor: 'middle' });
+        }
+        rg.forEach(([a, b], i) => {
+          const hit = s.query && a <= 12 && b >= 10;
+          P.text('gl' + i, { x: 30, y: AY + 36 + i * 52, t: 'group ' + (i + 1), cls: 'mut sm' });
+          P.box('g' + i, { x: dx(a), y: AY + 14 + i * 52, w: (b - a + 1) * DAY, h: 34, tone: !s.query ? 'acc' : hit ? 'warn' : 'ok', label: 'Jun ' + a + ' - ' + b, cls: 'xs', op: s.query && !hit ? 0.5 : 1, dash: s.query && !hit });
+          if (s.query) P.text('gs' + i, { x: 622, y: AY + 36 + i * 52, t: hit ? 'read' : 'skip', cls: 'sm b tone-' + (hit ? 'warn' : 'ok'), anchor: 'end' });
         });
-        Object.keys(L).forEach(id => L[id].forEach((k, i) => P.box('k' + k, { x: X[id] + 4 + i * CW, y: KY, w: CW - 4, h: 26, tone: k === 45 ? 'cursor' : (id === 'B2' && s.split ? 'ok' : 't0'), label: String(k), cls: 'xs' })));
-        const rk = s.root || [30, 60], rx = 270;
-        P.box('rf', { x: rx - 4, y: RY - 4, w: fw(rk.length), h: 34, tone: 'mut', label: '', sw: 2 });
-        P.text('rl', { x: rx - 4, y: RY - 12, t: 'root (parent)', cls: 'mut xs' });
-        rk.forEach((k, i) => P.box('r' + k, { x: rx + i * CW, y: RY, w: CW - 4, h: 26, tone: k === 50 && s.copied ? 'ok' : 't1', label: String(k), cls: 'xs' }));
-        const kids = s.split ? ['A', 'B1', 'B2', 'C'] : ['A', 'B', 'C'];
-        kids.forEach((id, i) => {
-          const hot = s.descend && id === 'B';
-          P.line('ed' + id, rx + (fw(rk.length) - 8) * (i + 0.5) / kids.length + 2, RY + 30, X[id] + fw(L[id].length) / 2, KY - 4, { tone: hot ? 'cursor' : 'mut', sw: hot ? 2.6 : 1.4 });
+      }
+    }),
+    bug: [
+      { log: 'Each row group stores the min and max of ship_date in the file footer. The bars show those ranges on a month-long axis.', callout: 'Each row group has a min and a max', code: 1,
+        state: {}, stats: [{ l: 'row groups', v: '4' }] },
+      { log: 'Rows were written in the order orders arrived, and shipping dates are spread across the month, so every group spans nearly the whole month.', callout: 'Arrival order: every range is wide', code: 3,
+        state: {}, stats: [{ l: 'widest range', v: '29 days', cls: 'warn' }] },
+      { log: 'The query asks for June 10 to 12. The reader compares the filter with each footer range before reading any data.', callout: 'The filter meets four footer ranges', code: 0,
+        state: { query: 1 }, stats: [{ l: 'filter', v: 'Jun 10-12' }] },
+      { log: 'All four ranges overlap the filter, so no group can be skipped. The scan reads 4 of 4 row groups for three days of data.', callout: 'Nothing pruned: 4 of 4 groups read', moment: true, code: 2,
+        state: { query: 1, read: 4 }, stats: [{ l: 'row groups read', v: '4 of 4', cls: 'bad' }, { l: 'pruned', v: '0', cls: 'bad' }] },
+      { log: 'Rewrite the file sorted by ship_date. The same rows are packed so that each group covers a narrow slice of the month.', callout: 'Sort by ship_date: narrow ranges', code: 4,
+        state: { sorted: 1 }, stats: [{ l: 'widest range', v: '8 days', cls: 'ok' }] },
+      { log: 'Only group 2, Jun 8 to 15, overlaps the filter. Groups 1, 3 and 4 are skipped from the footer alone.', callout: '1 of 4 read, 3 skipped from the footer', code: 2,
+        state: { sorted: 1, query: 1, read: 1 }, stats: [{ l: 'row groups read', v: '1 of 4', cls: 'ok' }, { l: 'pruned', v: '3', cls: 'ok' }],
+        takeaway: 'Zone maps only skip data when each group covers a narrow range, so write order and row-group size decide the benefit.' },
+    ],
+  };
+
+  const SOURCE = { label: 'CMU 15-445 L05 Database Storage III (storage models) and CMU 15-721 L02 Data Formats I (notes in output/pdf)', href: '../../output/pdf/database-system/notes/02-data1.pdf' };
+
+  /* ---- 3. Nested data: a column store shreds a list into one cell per value plus repetition and definition levels ---- */
+  const NEST = [
+    { id: 'o1', label: 'order 1', sub: 'items: A, B', tone: 't0' },
+    { id: 'o2', label: 'order 2', sub: 'items: [ ]', tone: 't1' },
+    { id: 'o3', label: 'order 3', sub: 'items: C, D, E', tone: 't2' },
+  ];
+  const CELLS = [['A', 0, 2, 'o1'], ['B', 1, 2, 'o1'], ['null', 0, 1, 'o2'], ['C', 0, 2, 'o3'], ['D', 1, 2, 'o3'], ['E', 1, 2, 'o3']];
+  const cellY = i => 92 + i * 44;
+  const nested = {
+    id: 'nested-levels', label: 'Nested data', desc: 'Three orders, each with a list of items. A column store keeps one column, items.sku, with a repetition level and a definition level per cell, and can rebuild every record from them (values illustrative).',
+    codeLabel: 'Schema',
+    code: { bug: [
+      '{ "id": 1, "items": [ {"sku": "A"}, {"sku": "B"} ] }',
+      '{ "id": 2, "items": [ ] }',
+      '{ "id": 3, "items": [ {"sku": "C"}, {"sku": "D"}, {"sku": "E"} ] }',
+      '-- column items.sku: one cell per value, not one per record',
+      '-- repetition level r: 0 starts a new record, 1 continues the list',
+      '-- definition level d: 2 value present, 1 list present but empty',
+      'SELECT items.sku FROM orders;   -- reads this one column only',
+    ] },
+    stage: DB.stage({
+      footer: 'Simplified: one repeated field, max repetition 1, max definition 2. Values illustrative.',
+      header: s => ({ left: 'cells in column items.sku: ' + (s.n || 0), right: s.hr || '' }),
+      draw(P, s) {
+        P.text('hl', { x: 30, y: 82, t: 'records (row view)', cls: 'mut sm' });
+        NEST.forEach((o, i) => P.chip(o.id, { x: 30, y: 98 + i * 76, w: 160, h: 56, label: o.label, sub: o.sub, tone: s.focus === o.id ? 'cursor' : o.tone }));
+        if (s.n) P.text('hc', { x: 270, y: 82, t: 'column items.sku', cls: 'mut sm' });
+        CELLS.slice(0, s.n || 0).forEach(([v, r, d, own], i) => {
+          const tone = NEST.find(o => o.id === own).tone;
+          P.chip('c' + i, { x: 270, y: cellY(i), w: 70, h: 38, label: v, sub: '', tone: s.rep && r === 0 ? 'cursor' : tone });
+          if (s.rep) P.chip('r' + i, { x: 352, y: cellY(i), w: 70, h: 38, label: 'r = ' + r, sub: '', tone: r === 0 ? 'cursor' : 'info', small: true });
+          if (s.def) P.chip('d' + i, { x: 434, y: cellY(i), w: 70, h: 38, label: 'd = ' + d, sub: '', tone: d === 1 ? 'warn' : 'info', small: true });
         });
-        if (s.split) for (let i = 0; i < 3; i++) { const a = kids[i], b = kids[i + 1]; P.line('sb' + i, X[a] + fw(L[a].length), KY + 26, X[b], KY + 26, { tone: 'mut', arrow: true, sw: 1.2 }); }
-        if (s.ins) P.chip('ins', { x: s.ins === 1 ? 40 : 200, y: s.ins === 1 ? 100 : 270, w: 150, h: 34, label: 'INSERT 45', sub: '', tone: 'cursor' });
-        if (s.up) P.chip('up', { x: 440, y: 100, w: 170, h: 34, label: 'copy 50 up', tone: 'ok' });
+        if (s.rep) P.text('hr', { x: 352, y: 358, t: 'r = 0: new record', cls: 'xs mut' });
+        if (s.rebuild) CELLS.slice(0, 6).forEach(([v, r, d, own], i) => P.line('b' + i, 270, cellY(i) + 19, 190, 126 + NEST.findIndex(o => o.id === own) * 76, { tone: 'ok', arrow: true, dash: true }));
+        if (s.read) P.chip('q', { x: 520, y: 98, w: 100, h: 56, label: 'one column', sub: 'read only this', tone: 'ok' });
       }
     }),
     bug: [
-      { log: 'A two-level tree. The root holds the separators 30 and 60. Three leaves each hold four keys, which is their capacity.', callout: 'Three leaves, all full', code: 0,
-        state: {}, stats: [{ l: 'height', v: '2' }, { l: 'leaf capacity', v: '4 keys' }] },
-      { log: 'INSERT 45. The root sends it right of 30 and left of 60, so it belongs in the middle leaf.', callout: '45 belongs in the middle leaf', code: 1,
-        state: { descend: 1, ins: 1 }, stats: [{ l: 'pages read', v: '2', cls: 'ok' }] },
-      { log: 'The middle leaf already holds four keys. Placing 45 in sorted order gives five, which does not fit.', callout: 'Five keys in a leaf of four: overflow', moment: true, code: 2,
-        state: { descend: 1, b: [30, 40, 45, 50, 55], note: 'overflow' }, stats: [{ l: 'keys in leaf', v: '5 of 4', cls: 'bad' }] },
-      { log: 'The leaf splits in two. The left leaf keeps 30, 40 and 45. The right leaf takes 50 and 55. Both are about half full now.', callout: 'Split into two half-full leaves', code: 2,
-        state: { split: 1, b1: [30, 40, 45], b2: [50, 55], root: [30, 60] }, stats: [{ l: 'leaves', v: '4' }, { l: 'pages written', v: '2', cls: 'warn' }] },
-      { log: 'The first key of the new leaf, 50, is copied up into the parent as a new separator. The parent now has three keys.', callout: '50 is copied up into the root', code: 3,
-        state: { split: 1, b1: [30, 40, 45], b2: [50, 55], root: [30, 50, 60], copied: 1, up: 1 }, stats: [{ l: 'pages written', v: '3', cls: 'warn' }, { l: 'root keys', v: '3 of 4' }] },
-      { log: 'One more split in the same parent would overflow it too. A full root splits, a new root is made above it, and the tree grows by one level.', callout: 'A full root splits: the tree grows one level', code: 4,
-        state: { split: 1, b1: [30, 40, 45], b2: [50, 55], root: [30, 50, 60], copied: 1, note: 'root has room for 1 more' }, stats: [{ l: 'splits cost', v: '1 to 3 pages', cls: 'warn' }, { l: 'tree stays balanced', v: 'yes', cls: 'ok' }],
-        takeaway: 'Inserts keep the tree balanced by splitting full nodes. Each insert into a full leaf writes two or three pages.' },
-    ],
-  };
-
-  /* ---- 3. Bloom filter: bits set by inserts, a probe says "no" for sure or "maybe" ---- */
-  const BW = 36, BX = i => 30 + (i % 16) * BW, BY = i => 150 + Math.floor(i / 16) * 50;
-  const KEYSET = { ana: [3, 11, 20], ben: [7, 14, 27], cy: [1, 18, 25] };
-  const OWN = { ana: 't0', ben: 't2', cy: 't4' };
-  const bitOwner = (keys, b) => keys.find(k => KEYSET[k].includes(b));
-  const FULL = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28, 30, 31];
-  const bloom = {
-    id: 'bloom-filter', label: 'Bloom filter', desc: 'A 32-bit array and three hash functions. A probe answers "no" for certain or "maybe". A saturated array says "maybe" to everything (illustrative).',
-    codeLabel: 'Config',
-    code: { bug: [
-      '-- one Bloom filter per file: 32 bits, k = 3 hash functions (illustrative)',
-      'insert ana, ben, cy: each key sets the 3 bits its hashes pick',
-      'probe dee: bit 5 is 0, so dee is certainly not in the file: skip the read',
-      'probe eve: all 3 bits happen to be set by other keys: "maybe", a wasted read',
-      '-- sized for 1 million keys, then 5 million arrive: nearly every bit is 1',
-    ] },
-    stage: DB.stage({
-      footer: 'Simplified: 32 bits, 3 hashes. Real filters use about 10 bits per key for 1% errors.',
-      header: s => ({ left: s.fill == null ? 'bits set ' + (s.keys || []).length * 3 : 'bits set ' + s.fill + ' of 32', right: s.keys && s.keys.length ? 'keys: ' + s.keys.join(', ') : 'empty filter' }),
-      draw(P, s) {
-        const keys = s.keys || [];
-        P.text('hb', { x: 30, y: 84, t: 'bit array', cls: 'mut sm' });
-        const set = new Set(s.full ? FULL : keys.flatMap(k => KEYSET[k]));
-        for (let i = 0; i < 32; i++) {
-          const on = set.has(i), own = s.full ? null : bitOwner(keys, i), probe = s.probe && s.probe.bits.includes(i);
-          P.box('b' + i, { x: BX(i), y: BY(i), w: BW - 4, h: 32, tone: on ? (own ? OWN[own] : 'acc') : 'info', label: on ? '1' : '0', cls: 'sm', sw: probe ? 3 : 1.4, stroke: probe ? (set.has(i) ? 'var(--warn)' : 'var(--bad)') : null });
-          P.text('bn' + i, { x: BX(i) + (BW - 4) / 2, y: BY(i) + 46, t: String(i), cls: 'mut xs', anchor: 'middle' });
-        }
-        if (s.add) { const k = s.add; P.chip('add', { x: 30, y: 96, w: 120, h: 34, label: 'insert ' + k, tone: OWN[k] }); KEYSET[k].forEach((b, j) => P.line('ah' + j, 90, 130, BX(b) + 16, BY(b), { tone: 'cursor', arrow: true })); }
-        if (s.probe) {
-          const pr = s.probe;
-          P.chip('pr', { x: 230, y: 96, w: 120, h: 34, label: 'probe ' + pr.key, tone: 'cursor' });
-          pr.bits.forEach((b, j) => P.line('ph' + j, 290, 130, BX(b) + 16, BY(b), { tone: set.has(b) ? 'warn' : 'bad', arrow: true, dash: true }));
-          P.chip('ans', { x: 400, y: 96, w: 210, h: 34, label: pr.ans, sub: '', tone: pr.tone });
-        }
-        if (s.waste) P.chip('waste', { x: 30, y: 270, w: 350, h: 44, label: 'file opened, key not found', sub: 'a false positive: one wasted read', tone: 'bad' });
-        if (s.skip) P.chip('skip', { x: 30, y: 270, w: 350, h: 44, label: 'file skipped, no read', sub: 'a "no" is always correct', tone: 'ok' });
-      }
-    }),
-    bug: [
-      { log: 'An empty Bloom filter: 32 bits, all zero. Three hash functions will turn each key into three bit positions.', callout: 'An empty filter: all bits 0', code: 0,
-        state: {}, stats: [{ l: 'bits', v: '32' }, { l: 'hash functions', v: '3' }] },
-      { log: 'Insert ana. Her three hashes pick bits 3, 11 and 20, and those bits become 1.', callout: 'Insert sets three bits', code: 1,
-        state: { keys: ['ana'], add: 'ana' }, stats: [{ l: 'bits set', v: '3', cls: 'ok' }] },
-      { log: 'Insert ben and cy as well. The array now has nine bits set. Keys leave no trace except the bits.', callout: 'Three keys, nine bits', code: 1,
-        state: { keys: ['ana', 'ben', 'cy'] }, stats: [{ l: 'bits set', v: '9', cls: 'ok' }, { l: 'keys', v: '3' }] },
-      { log: 'Probe dee. Her hashes pick bits 5, 11 and 29. Bit 5 is 0, so dee was never inserted. A no is certain.', callout: 'One zero bit: certainly not here', moment: true, code: 2,
-        state: { keys: ['ana', 'ben', 'cy'], probe: { key: 'dee', bits: [5, 11, 29], ans: 'no: skip the file', tone: 'ok' }, skip: 1 }, stats: [{ l: 'answer', v: 'no', cls: 'ok' }, { l: 'disk reads', v: '0', cls: 'ok' }] },
-      { log: 'Probe eve, who was never inserted. Her bits 7, 18 and 25 were all set by other keys, so the filter answers maybe.', callout: 'All bits set by others: a false positive', code: 3,
-        state: { keys: ['ana', 'ben', 'cy'], probe: { key: 'eve', bits: [7, 18, 25], ans: 'maybe: open the file', tone: 'warn' }, waste: 1 }, stats: [{ l: 'answer', v: 'maybe', cls: 'warn' }, { l: 'disk reads', v: '1', cls: 'bad' }] },
-      { log: 'A maybe costs a read of the file, which then finds nothing. A filter never says no for a key that is present.', callout: 'Maybe costs a read, a no never lies', code: 3,
-        state: { keys: ['ana', 'ben', 'cy'], probe: { key: 'eve', bits: [7, 18, 25], ans: 'maybe: open the file', tone: 'warn' }, waste: 1 }, stats: [{ l: 'false negatives', v: '0', cls: 'ok' }, { l: 'false positives', v: 'possible', cls: 'warn' }] },
-      { log: 'The filter was sized for 1 million keys, and 5 million have arrived. Almost every bit is 1 now.', callout: 'Too many keys: nearly every bit is 1', code: 4,
-        state: { full: 1, fill: 28 }, stats: [{ l: 'bits set', v: '28 of 32', cls: 'bad' }] },
-      { log: 'With 28 of 32 bits set, a random probe of three bits passes about 66% of the time. The filter answers maybe almost always.', callout: 'About 2 in 3 absent keys now say maybe', code: 4,
-        state: { full: 1, fill: 28, probe: { key: 'zed', bits: [9, 21, 29], ans: 'maybe: open the file', tone: 'warn' }, waste: 1 }, stats: [{ l: 'false positive rate', v: '~66%', cls: 'bad' }, { l: 'target', v: '1%', cls: 'ok' }],
-        takeaway: 'A Bloom filter must be sized for the keys it will hold. Past that, it stops skipping files and only adds cost.' },
-    ],
-  };
-
-  /* ---- 4. Hot leaf: increasing keys put every writer on the rightmost leaf ---- */
-  const LX = j => 30 + j * 72, LYY = 262;
-  const tpos = (i, mode) => {
-    if (mode === 'idle') return { x: 30 + (i % 8) * 70, y: 96 + Math.floor(i / 8) * 28 };
-    if (mode === 'hot') return { x: 490 + (i % 4) * 34, y: 122 + Math.floor(i / 4) * 28 };
-    return { x: LX(i % 8) + 12, y: 160 + Math.floor(i / 8) * 40 };
-  };
-  const hot = {
-    id: 'hot-leaf', label: 'Rightmost leaf', desc: 'Sixteen writers insert one key each into an index of eight leaves. Always-increasing keys all land on the last leaf and take its latch one by one (illustrative).',
-    codeLabel: 'SQL',
-    code: { bug: [
-      'INSERT INTO orders (id, ...) VALUES (nextval(\'orders_id_seq\'), ...);   -- 16 writers',
-      '-- every new id is larger than any existing id: it goes to the rightmost leaf',
-      '-- one write latch per leaf: 1 writer holds it, 15 wait',
-      'CREATE INDEX orders_shard_idx ON orders ((id % 8), id);   -- spread by shard',
-      '-- 8 leaves take writes at once; range scans on id now need 8 probes',
-    ] },
-    stage: DB.stage({
-      footer: 'Simplified: 16 writers, 8 leaves, one latch per leaf. Illustrative.',
-      header: s => ({ left: 'latch waits per round: ' + (s.waits == null ? '-' : s.waits), right: s.shard ? 'key = (id % 8, id)' : 'key = id (increasing)' }),
-      draw(P, s) {
-        for (let j = 0; j < 8; j++) {
-          const isHot = s.mode === 'hot' && j === 7;
-          P.box('lf' + j, { x: LX(j), y: LYY, w: 66, h: 44, tone: isHot ? 'bad' : (s.mode === 'spread' ? 'ok' : 'mut'), label: 'leaf ' + (j + 1), cls: 'xs', sw: isHot ? 3 : 1.4 });
-          P.text('lr' + j, { x: LX(j) + 33, y: LYY + 60, t: s.shard ? 'id%8=' + j : (j === 7 ? 'newest ids' : ''), cls: 'mut xs', anchor: 'middle' });
-        }
-        for (let i = 0; i < 16; i++) {
-          const p = tpos(i, s.mode || 'idle');
-          let tone = 'info';
-          if (s.mode === 'hot') tone = i === 0 ? 'ok' : 'bad';
-          if (s.mode === 'spread') tone = i < 8 ? 'ok' : 'warn';
-          P.chip('t' + i, { x: p.x, y: p.y, w: 36, h: 22, label: 't' + (i + 1), tone, small: true, hl: false });
-        }
-      }
-    }),
-    bug: [
-      { log: 'An index on orders.id has eight leaves. Sixteen writer threads are about to insert one new order each.', callout: '16 writers, 8 leaves', code: 0,
-        state: { mode: 'idle' }, stats: [{ l: 'writers', v: '16' }, { l: 'leaves', v: '8' }] },
-      { log: 'Each new id comes from a sequence, so it is larger than every key already in the index.', callout: 'Every new id is the largest so far', code: 1,
-        state: { mode: 'idle' }, stats: [{ l: 'new id vs index', v: 'always bigger', cls: 'warn' }] },
-      { log: 'The tree sends all sixteen writers to the rightmost leaf, the only leaf that holds the largest keys.', callout: 'All 16 head for the last leaf', code: 1,
-        state: { mode: 'hot' }, stats: [{ l: 'writers on leaf 8', v: '16', cls: 'bad' }] },
-      { log: 'A leaf allows one writer at a time, so one thread holds the latch and fifteen wait. The other seven leaves sit idle.', callout: '1 holds the latch, 15 wait', moment: true, code: 2,
-        state: { mode: 'hot', waits: 15 }, stats: [{ l: 'latch waits', v: '15', cls: 'bad' }, { l: 'idle leaves', v: '7', cls: 'warn' }] },
-      { log: 'Prefix the key with a shard number, id % 8. Writers with different ids now land on different leaves.', callout: 'Prefix the key with a shard number', code: 3,
-        state: { mode: 'spread', shard: 1 }, stats: [{ l: 'leaves taking writes', v: '8', cls: 'ok' }] },
-      { log: 'Each leaf has two writers. One holds its latch and one waits, so eight writers proceed at once and eight wait.', callout: '8 waits instead of 15, 8 writers in parallel', code: 4,
-        state: { mode: 'spread', shard: 1, waits: 8 }, stats: [{ l: 'latch waits', v: '8', cls: 'ok' }, { l: 'parallel writers', v: '8', cls: 'ok' }] },
-      { log: 'The trade-off: a range scan over ids must now probe all eight shards and merge the results. Keep the plain key if ranges matter more than write rate.', callout: 'Range scans now probe 8 shards', code: 4,
-        state: { mode: 'spread', shard: 1, waits: 8 }, stats: [{ l: 'range scan probes', v: '8', cls: 'warn' }, { l: 'write contention', v: 'lower', cls: 'ok' }],
-        takeaway: 'Increasing keys make one hot leaf. Spreading the key trades range-scan locality for write parallelism.' },
+      { log: 'Three orders, each with a list of items. In a row store each record is kept whole, braces and lists included.', callout: 'Three records with nested lists', code: 0,
+        state: {}, stats: [{ l: 'records', v: '3' }, { l: 'items', v: '5' }] },
+      { log: 'A column store keeps items.sku as one column. The list is flattened: one cell per value, so order 1 gives two cells and order 3 gives three.', callout: 'The list is flattened into cells', code: 3,
+        state: { n: 5 }, stats: [{ l: 'cells', v: '5' }] },
+      { log: 'Now the column has no record boundaries. A repetition level r marks them: r = 0 starts a new record, r = 1 continues the list inside the same record.', callout: 'Repetition level: 0 starts a record', moment: true, code: 4,
+        state: { n: 5, rep: 1 }, stats: [{ l: 'new records', v: '3' }] },
+      { log: 'Order 2 has an empty list. It still needs a place in the column, so it gets one null cell with a definition level d = 1: the list exists but holds no value.', callout: 'Definition level: 1 means an empty list', code: 5,
+        state: { n: 6, rep: 1, def: 1 }, stats: [{ l: 'cells', v: '6' }, { l: 'null cells', v: '1', cls: 'warn' }] },
+      { log: 'Reading the column back, each r = 0 opens a record and each r = 1 appends to it. The three records are rebuilt exactly.', callout: 'The levels rebuild every record', code: 4,
+        state: { n: 6, rep: 1, def: 1, rebuild: 1 }, stats: [{ l: 'records rebuilt', v: '3', cls: 'ok' }] },
+      { log: 'A query that needs only the item SKUs reads this one column and none of the other fields of the orders.', callout: 'The query reads one column', code: 6,
+        state: { n: 6, rep: 1, def: 1, read: 1, focus: 'o3' }, stats: [{ l: 'columns read', v: '1', cls: 'ok' }],
+        takeaway: 'Nested data stays columnar. Two small integers per cell let the reader rebuild records without storing the structure.' },
     ],
   };
 
   const EXPLAIN = `
-<h3>1. Rule out most rows quickly</h3>
-<p>An index is an extra structure that lets the database skip most of a table. You pay for it with storage and with extra work on every write. The structure must match the query: a hash table for equality, a B+ tree for equality and ranges, and a Bloom filter to skip data that cannot match.</p>
+<h3>1. Match the layout to the access pattern</h3>
+<p>Transactions insert and read whole rows: one order, all its fields. Analytics scans a few columns over many rows: the sum of one amount column over a year. One layout cannot be best for both, so storage engines choose a layout for the workload. The lecture splits workloads into <b>OLTP</b> (many small reads and writes of whole rows), <b>OLAP</b> (long scans and aggregates over a few columns) and <b>HTAP</b>, which tries to serve both in one system.</p>
 
-<h3>2. Hash tables</h3>
-<p>A <b>hash table</b> maps a key to a slot with a fast hash function, so a lookup takes constant time on average. Keys have no order, so it cannot answer a range. With <b>linear probing</b>, a lookup scans forward from the hashed slot until it finds the key or an empty slot. A missing key must reach an empty slot to be sure, so misses get slow as the table fills. <b>Extendible</b> and <b>linear hashing</b> grow the table by splitting buckets rather than rebuilding it.</p>
+<h3>2. Row store, column store and the hybrid</h3>
+<p>A <b>row store</b> (NSM, the N-ary storage model) keeps every column of a row together in a page (chapter 2). One insert writes one page, and a point lookup reads one page. But a report that needs one of 100 columns still reads every page, because a disk read moves a whole page and each page holds whole rows.</p>
+<p>A <b>column store</b> (DSM, the decomposition storage model) keeps each column apart. A scan reads only the columns it names, and each column compresses well because its values look alike (chapter 5). The cost moves to writes: one new row touches one chunk per column, and rebuilding a row means a lookup in each column. <b>PAX</b> is the usual compromise: rows are grouped into row groups, and inside each group the values of one column are stored together. You keep a row-group locality for writes and the column-at-a-time scan inside a group.</p>
+<figure class="mm" aria-label="Flowchart: workload decides between row store, column store and the PAX hybrid" style="--diagram-width:385px">
+  <img src="diagrams/ch03-storage-models.svg" alt="Flowchart: for an OLTP workload that touches one whole row, use a row store, which is cheap for inserts and point reads and expensive for scanning one column. For an OLAP workload that touches few columns of many rows, use a column store or the PAX hybrid, which is cheap for column scans and compresses well, and costs more for an insert because it touches many chunks.">
+  <figcaption>Flowchart: the layout follows the workload.</figcaption>
+</figure>
 
-<h3>3. The B+ tree</h3>
-<p>A <b>B+ tree</b> is a balanced, sorted tree. Every node is a page. Inner nodes hold separator keys, and values (record IDs) sit only in the leaves, which are linked left to right. A lookup reads one node per level. With 256 entries per node, four levels hold more than 4 billion keys, so 100 million keys need four pages and one heap page. A range scan descends once and then follows the leaf links.</p>
-<p>An insert goes into the right leaf in sorted order. A full leaf <b>splits</b>: half the keys move to a new leaf, and the first key of the new leaf is copied up to the parent. A full parent splits the same way, and a full root splits into a new root, so the tree grows at the top and stays balanced. A <b>composite</b> key such as (a, b, c) serves a prefix, a or a and b, but not b alone, because the entries are sorted by a first.</p>
+<h3>3. Modern file formats: Parquet and ORC</h3>
+<p>The open formats used by lakes and warehouses are PAX files. The writer buffers rows until a <b>row group</b> is full, encodes each <b>column chunk</b> separately, writes the chunks, and writes a <b>footer</b> last. The footer holds the schema, the offset of every chunk, and statistics such as the minimum and maximum of each chunk. A reader fetches the footer first, then reads only the chunks it needs. On an object store that is a few ranged reads instead of a download.</p>
+<figure class="mm" aria-label="Flowchart of a Parquet file: row groups, column chunks, pages, and the footer read first" style="--diagram-width:648px">
+  <img src="diagrams/ch03-parquet-layout.svg" alt="Flowchart: a Parquet file holds row groups of about 100 thousand rows and a footer. Each row group holds a column chunk per column, and each chunk holds encoded and compressed data pages. The footer holds the schema, the offsets and the min and max of each chunk, and the reader reads it first to plan which groups and chunks to read.">
+  <figcaption>Flowchart: one file, many row groups, a footer that tells the reader where to read.</figcaption>
+</figure>
+<p>The 15-721 paper on file formats adds design decisions worth knowing: the <b>type system</b> (logical types on top of a few physical ones), a self-describing footer versus a table-level catalog, and how a format handles <b>nested data</b>. Real files are also rarely as wide or as deep as benchmarks suggest, so decoding speed and metadata size matter as much as compression ratio.</p>
 
-<h3>4. The Bloom filter</h3>
-<p>A <b>Bloom filter</b> is a bit array with k hash functions. An insert sets k bits. A probe checks the same k bits. If any bit is 0, the key is certainly absent. If all are 1, the key is possibly present. There are no false negatives. About 10 bits per key with k = 7 gives about 1% false positives. A filter sized for 1 million keys quietly turns into a stream of maybes when 5 million arrive.</p>
+<h3>4. Pruning with zone maps</h3>
+<p>Before reading a chunk, the reader compares the filter with the min and max in the footer. If the filter cannot match, the group is skipped without any I/O. This only works when each group covers a narrow range. Data written in arrival order often has every group covering the whole range, and then nothing can be skipped. Sorting the data by the filter column before writing makes the ranges narrow and disjoint.</p>
 
-<h3>5. Latches protect the structure</h3>
-<p>A <b>latch</b> is a short lock on a page in memory. It is not a transaction lock. A B+ tree walks down using <b>latch crabbing</b>: take the child latch, then release the parent once the child cannot split. Writers serialize on a leaf latch. Increasing keys, such as sequence ids and timestamps, all go to the rightmost leaf, so that one latch becomes the limit of insert throughput.</p>
+<h3>5. Nested data</h3>
+<p>JSON-like records contain lists and sub-records. Parquet follows the Dremel design: it keeps one column per leaf field, and adds two small integers to each cell. The <b>repetition level</b> says at which list the value repeats (0 starts a new record). The <b>definition level</b> says how many optional or repeated parents are present, which distinguishes a null from an empty list. From the two levels the reader rebuilds the records, and a query on one leaf reads one column.</p>
 
 <h3>6. The trade-off</h3>
-<p>Every index adds one more page to write on each insert and one more structure to keep in memory. An index nobody queries is pure cost. Spreading keys across leaves removes contention but loses locality for range scans. Check how often each index is used before you add or drop one, and measure rows examined against rows returned.</p>
+<p>Columns read less and compress better, but appends are buffered until a row group fills, and one row touches many chunks. Updates in place are awkward, so column stores prefer batch loads and rewrite files. Wide row groups compress better and have less metadata but allow less pruning, and the reader needs more memory to decode them. Row stores keep the advantage for point reads and single-row writes.</p>
 
 <h3>7. Syntax</h3>
-<pre>CREATE INDEX customers_id_idx ON customers (customer_id);
--- composite: serves (customer_id) and (customer_id, status), not status alone
-CREATE INDEX orders_cust_status_idx ON orders (customer_id, status);
+<pre>-- Parquet: write sorted, with a sensible row-group size (DuckDB)
+COPY (SELECT * FROM orders ORDER BY ship_date)
+  TO 'orders.parquet' (FORMAT parquet, ROW_GROUP_SIZE 122880);
 
-EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM customers WHERE customer_id = 58114203;
---   Index Scan using customers_id_idx   Buffers: shared hit=5
+-- inspect row groups, encodings and min/max in the footer
+SELECT row_group_id, path_in_schema, encodings, stats_min, stats_max
+FROM parquet_metadata('orders.parquet');
 
--- which indexes are never used
-SELECT relname, indexrelname, idx_scan FROM pg_stat_user_indexes ORDER BY idx_scan;
+-- how many bytes did the scan read, and how many row groups did it skip
+EXPLAIN ANALYZE SELECT SUM(amount) FROM 'orders.parquet'
+WHERE ship_date BETWEEN '2026-06-10' AND '2026-06-12';</pre>
+<p>If bytes read stay near the size of the file while the filter is narrow, the row groups overlap. Sort the data by the filter column and write again.</p>`;
 
--- index height and size
-SELECT * FROM bt_metap('customers_id_idx');   -- extension pageinspect</pre>
-<p>If an index scan examines far more rows than it returns, look at the column order of the key before you add another index.</p>`;
+  /* problem, predict and diagnose */
+  const FIELDS = {
+    problem: `An orders table has 100 columns. Checkout writes one order at a time, and a nightly revenue report needs only three of those columns. The report reads about 1 TB to use about 30 GB (illustrative), and the analytics team sees bytes read close to 100% of the table in the engine profile.`,
+    predict: {
+      q: `The table stores whole rows together in pages, as in chapter 2. The report runs <code>SUM(amount)</code>. Roughly how much of the table must it read?`,
+      opts: [
+        `Only the amount values, because the query names one column`,
+        `Nearly all of it, because every page holds whole rows and must be read to reach amount`,
+        `Only the pages an index points to, because SUM uses the primary key`
+      ],
+      ans: 1,
+      why: `A disk read moves a whole page, and a row page keeps every column of each row together. To reach one column the reader still reads every page, so the scan costs the size of the table.`
+    },
+    diagnose: [
+      {
+        t: 'Row layout wastes I/O',
+        sym: '<b>Bytes read</b> stay near 100% of the table, even though the query uses one column.',
+        ctx: 'The same 8 rows are laid out in row pages. The query needs only amount, but every page is read in full: 256 bytes, which is 100% of the table.',
+        why: 'A row page keeps whole rows together. The reader must read the page to reach any column, so a scan costs the size of the table, not the size of the columns it uses.',
+        log: `-- representative, illustrative
+query: SUM(amount) FROM orders WHERE day >= 2026-03-01
+bytes read: 1.0 TB (columns used: 1 of 100)`,
+        note: 'Compare bytes read with the size of the columns the query uses. A ratio near 100 means the layout is the problem.',
+        fix: [
+          'Measure first: read bytes read and columns used in the engine profile for the slow query.',
+          'Store analytical tables in a columnar format such as Parquet or ORC.',
+          'Select only the columns you need. SELECT * forces every chunk to be read.',
+          'Keep transactional tables in row storage, and copy them to a columnar table for reporting.',
+          'Verify: compare bytes read in the engine profile before and after the change.'
+        ]
+      },
+      {
+        t: 'Schema evolution',
+        sym: '<b>The query fails</b> after amount changes from INT32 to DOUBLE, even though the table still looks fine.',
+        ctx: 'The reader takes its schema from file 1. File 1 stores amount as INT32 and file 2 stores it as DOUBLE.',
+        why: 'A Parquet file records its own column types. The reader must convert each file to one agreed type. Without a table-level schema, the first file decides, and the next file that differs breaks the read.',
+        log: `-- representative, wording varies by engine and version
+Parquet column cannot be converted: expected INT32, found DOUBLE (column: amount)`,
+        note: 'The error names the column and two types. The files disagree, not the table.',
+        fix: [
+          'Measure first: read the column type of amount from each file footer, and find the first file that differs.',
+          'Keep one table-level schema, and check every new file against it before it is committed.',
+          'Widen types explicitly (INT32 to DOUBLE) in the table definition. Do not change a column type in place.',
+          'Use a table format with schema evolution rules, such as Delta or Iceberg, where the schema is kept in the table log (chapter 28).',
+          'Verify: read the table from an old file and from a new file, and check the row count and the sum.'
+        ]
+      },
+      {
+        t: 'Poor sort order or oversized row groups',
+        sym: '<b>Row groups read</b> stay at 4 of 4, even with a narrow date filter.',
+        ctx: '4 row groups of 2 rows each, with the min and max day of each. Query: WHERE day >= 03-04. Unsorted, every row group covers 03-01 to 03-04.',
+        why: 'Row-group statistics only help when a row group covers a narrow range. Unsorted data gives every row group the same wide min and max. Oversized row groups have the same effect: one group covers the whole file, so nothing can be skipped.',
+        log: `-- representative scan summary, counts illustrative
+row groups: 4 total, 0 skipped by statistics
+bytes read: 1.2 GB`,
+        note: 'Zero groups skipped on a narrow filter means the min and max ranges overlap.',
+        fix: [
+          'Measure first: count the row groups skipped by statistics in the scan summary.',
+          'Sort or cluster the data by the column that queries filter, such as day, before writing it.',
+          'Keep row groups small enough that each covers a narrow range, but not so small that the metadata grows.',
+          'Run a periodic rewrite (compaction) that re-sorts recent small files.',
+          'Verify: count the row groups skipped by statistics before and after the change.'
+        ]
+      }
+    ]
+  };
 
   window.CHAPTER_OVERRIDES = window.CHAPTER_OVERRIDES || {};
-  window.CHAPTER_OVERRIDES[3] = { explain: EXPLAIN, scenarios: [descent, splitScene, bloom, hot] };
+  window.CHAPTER_OVERRIDES[3] = { ...FIELDS, source: SOURCE, explain: EXPLAIN, scenarios: [layout, zones, nested] };
 })();

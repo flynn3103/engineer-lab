@@ -1,0 +1,9 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  Need["Transaction wants to lock a row"] --> Path["Walk from the root down the hierarchy"]
+  Path --> DB["Database: intention lock IX"]
+  DB --> Tb["Table: intention lock IX"]
+  Tb --> Rw["Row: lock X"]
+  Rw --> Conf{"Any lock held that<br/>conflicts at this level?"}
+  Conf -->|No| Go["Proceed"]
+  Conf -->|Yes| Wait["Wait, or deadlock handling"]

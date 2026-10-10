@@ -1,0 +1,10 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Arial","fontSize":"14px","primaryColor":"#eef3fb","primaryTextColor":"#17202c","primaryBorderColor":"#65758b","lineColor":"#65758b","secondaryColor":"#fff4df","tertiaryColor":"#f5f7fa"},"state":{"nodeSpacing":22,"rankSpacing":22},"flowchart":{"htmlLabels":false,"nodeSpacing":22,"rankSpacing":26,"padding":10}}}%%
+flowchart TD
+  subgraph P1["Pipeline 1"]
+    S1["Scan customers"] --> B1["Build hash table<br/>pipeline breaker"]
+  end
+  subgraph P2["Pipeline 2"]
+    S2["Scan orders"] --> F2["Filter"] --> J2["Probe hash table"] --> A2["Partial aggregate<br/>pipeline breaker"]
+  end
+  B1 -. "must finish first" .-> J2
+  A2 --> O["Output"]
