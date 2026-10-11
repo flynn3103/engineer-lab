@@ -690,12 +690,49 @@
     return `median ${s.med} s · max ${s.max} s${v.outliers && v.outliers.length ? ' · outliers ' + v.outliers.length : ''}`;
   }
 
+  /* build:2 · two runs side by side, counter by counter. Rows are the same in both runs for the answer, and differ for the costs. */
+  function paintDiff(stage, sim, k) {
+    const v = sim.steps[k].v;
+    if (!v.rows.length) { stage.innerHTML = '<p class="vz-empty">two runs will be compared on their answers and their costs</p>'; return 'nothing compared yet'; }
+    const rows = v.rows.map(([name, a, b]) => {
+      const same = a === b, cls = v.focus === 'bug' && name === 'partition 2' ? 'bad' : same ? 'same' : 'differ';
+      return `<tr class="${cls}"><td>${esc(name)}</td><td>${esc(a)}</td><td>${esc(b)}</td><td>${same ? 'same' : 'differs'}</td></tr>`;
+    }).join('');
+    const hdr = v.focus === 'keys' || v.focus === 'bug' ? 'output rows per partition' : v.focus === 'total' ? 'answer' : 'costs';
+    stage.innerHTML = `<div class="vz-diff"><b>${hdr}</b><table class="vz-tbl"><tr><th>counter</th><th>run A</th><th>run B</th><th></th></tr>${rows}</table></div>
+      ${v.focus === 'bug' ? '<div class="vz-note warn">a mismatch on a key is a bug: the outputs diverged</div>' : ''}`;
+    const differ = v.rows.filter(([, a, b]) => a !== b).length;
+    return v.focus === 'bug' ? 'mismatch on partition 2' : `counters that differ: ${differ} of ${v.rows.length}`;
+  }
+
+  /* build:3 · four partitions as tiles, and the job state. Staged output is not visible; a failed partition ends the job. */
+  function paintAbort(stage, sim, k) {
+    const v = sim.steps[k].v, label = { staging: 'staging, private', committed: 'committed', failing: 'attempt failing', failed: 'attempts used up' };
+    const tiles = v.parts.map((s, i) => `<div class="vz-abtile ${s}"><b>partition ${i}</b><small>${label[s]}</small></div>`).join('');
+    stage.innerHTML = `<div class="vz-abparts">${tiles}</div>
+      <div class="vz-abstate"><span class="vz-chip ${v.job === 'aborted' ? 'bad' : v.job === 'done' ? 'good' : ''}">job: ${v.job}</span><span class="vz-chip ${v.result === '640' ? 'good' : ''}">result: ${v.result === 'none' ? 'nothing published' : v.result}</span></div>`;
+    return `job ${v.job} · result ${v.result === 'none' ? 'not published' : v.result}`;
+  }
+
+  /* build:4 · three option sets, one small bar per counter. The highlighted counter is the one under discussion. */
+  const RUNS = [
+    { name: 'small memory, speculation off', total: 640, spill: 3, attempts: 12, time: 14 },
+    { name: 'large memory, speculation off', total: 640, spill: 0, attempts: 10, time: 10 },
+    { name: 'large memory, speculation on', total: 640, spill: 0, attempts: 13, time: 11 }
+  ];
+  function paintMultiples(stage, sim, k) {
+    const v = sim.steps[k].v, metrics = [['total', 'answer', 640], ['spill', 'spilled', 4], ['attempts', 'attempts', 14], ['time', 'time (s)', 16]];
+    const panels = metrics.map(([key, title, max]) => `<div class="vz-mp${v.focus === key ? ' focus' : ''}"><b>${title}</b>${RUNS.map(r => `<div class="vz-mrow"><span>${r.name.split(',')[0]}</span><div class="vz-track"><span style="width:${r[key] / max * 100}%"></span></div><small>${r[key]}</small></div>`).join('')}</div>`).join('');
+    stage.innerHTML = `<div class="vz-multiples">${panels}</div>${v.note ? `<div class="vz-note good">${esc(v.note)}</div>` : ''}`;
+    return v.focus ? `focus: ${v.focus} · time: ${RUNS.map(r => r.time).join(' / ')} s` : 'three option sets, not yet compared';
+  }
+
   const PAINT = {
     ticks: paintTicks, kanban: paintKanban, stacked: paintStacked, lanes: paintLanes,
     sawtooth: paintSawtooth, bullet: paintBullet, heatmap: paintHeat, strip: paintStrip,
     ledger: paintLedger, filetree: paintFileTree, flow: paintFlow, waterfall: paintWaterfall,
     fanout: paintFanout, scatter: paintScatter, histogram: paintHistogram, donut: paintDonut,
-    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores, paths: paintPaths, routes: paintRoutes, explode: paintExplode, dropqueue: paintDropQueue, window: paintWindow, box: paintBox, switch: paintSwitch, localread: paintLocalRead, loop: paintLoop, merge: paintMerge, pairs: paintPairs, venn: paintVenn, rewrite: paintRewrite, expand: paintExpand, swarm: paintSwarm, renames: paintRenames, overwrite: paintOverwrite, backoff: paintBackoff, exclude: paintExclude, service: paintService, pool: paintPool, shares: paintShares, heap: paintHeap
+    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores, paths: paintPaths, routes: paintRoutes, explode: paintExplode, diff: paintDiff, abort: paintAbort, multiples: paintMultiples, dropqueue: paintDropQueue, window: paintWindow, box: paintBox, switch: paintSwitch, localread: paintLocalRead, loop: paintLoop, merge: paintMerge, pairs: paintPairs, venn: paintVenn, rewrite: paintRewrite, expand: paintExpand, swarm: paintSwarm, renames: paintRenames, overwrite: paintOverwrite, backoff: paintBackoff, exclude: paintExclude, service: paintService, pool: paintPool, shares: paintShares, heap: paintHeap
   };
 
   /* Attach each picture to its use case. Narration (title, text) stays in engine-stories.js. */
@@ -990,7 +1027,28 @@
       { stats: { min: 18, q1: 20, med: 22, q3: 24, max: 26 }, outliers: [], tight: true },
       { stats: { min: 18, q1: 20, med: 22, q3: 24, max: 240 }, outliers: [120, 180, 240] },
       { stats: { min: 18, q1: 20, med: 22, q3: 24, max: 240 }, outliers: [120, 180, 240], inputs: true },
-      { stats: { min: 18, q1: 20, med: 22, q3: 24, max: 240 }, outliers: [120, 180, 240], inputs: true, skew: true }] }
+      { stats: { min: 18, q1: 20, med: 22, q3: 24, max: 240 }, outliers: [120, 180, 240], inputs: true, skew: true }] },
+    'build:2': { kind: 'diff', steps: [
+      { a: null, b: null, rows: [] },
+      { a: null, b: null, rows: [['total', '640', '640'], ['spilled', '3', '0'], ['attempts', '12', '13']], focus: 'counters' },
+      { a: null, b: null, rows: [['total', '640', '640'], ['spilled', '3', '0'], ['attempts', '12', '13'], ['time', '14 s', '11 s']], focus: 'differ' },
+      { a: null, b: null, rows: [['total', '640', '640'], ['spilled', '3', '0'], ['attempts', '12', '13'], ['time', '14 s', '11 s']], focus: 'total' },
+      { a: null, b: null, rows: [['partition 0', '150', '150'], ['partition 1', '180', '180'], ['partition 2', '190', '190'], ['partition 3', '120', '120']], focus: 'keys' },
+      { a: null, b: null, rows: [['partition 0', '150', '150'], ['partition 1', '180', '180'], ['partition 2', '190', '196'], ['partition 3', '120', '120']], focus: 'bug' }] },
+    'build:3': { kind: 'abort', steps: [
+      { parts: ['staging', 'staging', 'staging', 'staging'], job: 'running', result: 'none' },
+      { parts: ['committed', 'staging', 'committed', 'committed'], job: 'running', result: 'none' },
+      { parts: ['committed', 'failing', 'committed', 'committed'], job: 'running', result: 'none', attempts: 4 },
+      { parts: ['committed', 'failed', 'committed', 'committed'], job: 'running', result: 'none', attempts: 4 },
+      { parts: ['committed', 'failed', 'committed', 'committed'], job: 'aborted', result: 'none', attempts: 4 },
+      { parts: ['committed', 'committed', 'committed', 'committed'], job: 'done', result: '640' }] },
+    'build:4': { kind: 'multiples', steps: [
+      { focus: null },
+      { focus: 'total' },
+      { focus: 'spill' },
+      { focus: 'attempts' },
+      { focus: 'time' },
+      { focus: 'time', note: 'memory is the scarce resource: pick small memory with speculation off' }] }
   };
   const SD = root.SparkSystemDesign || (typeof require === "function" ? require("./engine-sysdesign.js") : null);
   for (const [key, spec] of Object.entries(DATA)) {

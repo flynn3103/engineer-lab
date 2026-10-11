@@ -1488,6 +1488,69 @@
     ]
   };
 
+  ST['build:2'] = {
+    trigger: 'You run the same input twice: once with small memory and no speculation, and once with large memory and speculation on.',
+    command: 'run the reference engine with memory=small and speculation=off, then with memory=large and speculation=on; compare the two outputs',
+    expect: 'The two runs give the same total and the same rows per partition, even though their traces differ.',
+    sim: {
+      kind: 'diff',
+      steps: [
+        { title: 'Two runs, two option sets', text: 'Run A uses small memory and no speculation. Run B uses large memory and speculation on. The input is the same 12 rows.' },
+        { title: 'Both finish the same shuffle', text: 'Run A spills to disk and runs one attempt per task. Run B spills nothing and starts a backup attempt for a slow task.' },
+        { title: 'The traces differ', text: 'The traces differ in spill counts, attempt counts and timings. That is expected: the options change how the work runs.' },
+        { title: 'The totals match', text: 'Both runs publish the same rows for each partition, and the total is 640 in both.' },
+        { title: 'Compare key by key', text: 'The check compares the outputs key by key, not the timings. Any mismatch would be a bug in the engine, not a difference between the options.' },
+        { title: 'A mismatch would be a bug', text: 'If the totals differed, the engine would have a race or a lost update. The trace would show the step where the outputs diverged.' }
+      ]
+    },
+    edges: [
+      E('Timings look different between runs', 'That is not a correctness problem.', 'Speculation and spilling change the time taken. Comparing timings as if they were answers would flag false failures.', 'Compare the outputs for equality, and read the timings only as cost.'),
+      E('Random input between runs', 'The outputs can differ for a reason unrelated to options.', 'If the input is generated with a random seed that changes per run, the totals differ without any engine bug.', 'Fix the seed, then compare the runs.')
+    ]
+  };
+
+  ST['build:3'] = {
+    trigger: 'One partition fails on every attempt, for example because a worker keeps dying on the same input.',
+    command: 'set one partition to fail on every attempt in the reference engine, then run it',
+    expect: 'The job aborts after the retry limit. Nothing is published, so readers never see a partial answer.',
+    sim: {
+      kind: 'abort',
+      steps: [
+        { title: 'Four partitions run', text: 'Four partitions run in parallel. Each one writes its output to a private staging area first.' },
+        { title: 'Three partitions commit', text: 'Partitions 0, 1 and 3 are authorized by the coordinator, and each commits its output.' },
+        { title: 'Partition 2 fails again and again', text: 'Partition 2 fails on every attempt. Each failure is retried, until the limit is reached.' },
+        { title: 'The limit is reached', text: 'Partition 2 has used its last allowed attempt. The job cannot produce a complete answer.' },
+        { title: 'The job aborts and nothing is published', text: 'The engine stops the job and writes no readiness marker. The committed partitions stay out of the final output.' },
+        { title: 'Fix the cause and rerun', text: 'After the cause is fixed, the rerun produces the full answer, 640, from scratch.' }
+      ]
+    },
+    edges: [
+      E('Partial output is wanted', 'Use a different output, not this one.', 'Some workflows want the finished partitions even when one fails. This design publishes only complete results.', 'Write each partition to its own location and record success yourself, if partial results are acceptable.'),
+      E('The failure is transient', 'Retries should absorb it.', 'A one-off failure on one attempt does not abort the job; only exhausting every attempt does.', 'Raise the attempt limit only if the failures are truly random.')
+    ]
+  };
+
+  ST['build:4'] = {
+    trigger: 'You want to know what each option costs before choosing one for production.',
+    command: 'run the same input once for each option set, and read the spill, attempt and time counters in each trace',
+    expect: 'Each option changes the cost, not the answer. The small multiples show which option costs what, so the choice is made on evidence.',
+    sim: {
+      kind: 'multiples',
+      steps: [
+        { title: 'Pick the option sets to compare', text: 'Three option sets: small memory with speculation off, large memory with speculation off, and large memory with speculation on.' },
+        { title: 'Run each set once', text: 'Each run gives the same total, 640. The engine records spills, attempts and time for each run.' },
+        { title: 'Spills: only small memory', text: 'Spills appear only with small memory. The large-memory runs spill nothing.' },
+        { title: 'Attempts: speculation adds some', text: 'Speculation adds backup attempts, so the speculative run has more attempts than the plain large-memory run.' },
+        { title: 'Time: the fastest is not the cheapest', text: 'The plain large-memory run is fastest. The speculative run is slightly slower here, because its backups cost more than they saved.' },
+        { title: 'Choose by the cost that matters', text: 'If memory is the scarce resource, small memory with speculation off uses the least, at the cost of spills and time. If time matters most, large memory without speculation is the fastest here.' }
+      ]
+    },
+    edges: [
+      E('One run is not enough', 'Counters vary between runs.', 'A single run can be noisy, especially for time, so one number is not a reliable comparison.', 'Run each option several times and compare the averages.'),
+      E('Speculation helps only with stragglers', 'No slow task means no gain.', 'If no task is slow, speculation adds backup attempts and cost without saving any time.', 'Turn speculation on only when the trace shows slow tasks.')
+    ]
+  };
+
   root.SparkStories = ST;
   if (typeof module === 'object' && module.exports) module.exports = ST;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

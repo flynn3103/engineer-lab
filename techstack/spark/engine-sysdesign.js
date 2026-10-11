@@ -889,7 +889,25 @@
   S-->>E: waves complete
   E->>E: shuffle, spill, merge
   E->>K: publish winners
-  K-->>C: answer + trace` }] }
+  K-->>C: answer + trace` }] },
+      { title: 'UC-02 · The same input gives the same answer under any options', intro: 'Options such as memory and speculation change how the work runs, not what it produces. Running the engine twice with different options and comparing the outputs checks the whole design.', diagrams: [{ kind: SEQ, title: 'Two runs, one answer', src: `sequenceDiagram
+  participant Y as You
+  participant E as Engine
+  Y->>E: run with small memory, no speculation
+  E-->>Y: total 640, trace A
+  Y->>E: run with large memory, speculation on
+  E-->>Y: total 640, trace B
+  Y->>Y: compare outputs key by key` }] },
+      { title: 'UC-03 · When a partition keeps failing, nothing is published', intro: 'If one partition fails every attempt, the job aborts. Partitions that finished are not published as a result, so readers never see a partial answer.', diagrams: [{ kind: STATE, title: 'Job outcome', src: `stateDiagram-v2
+  [*] --> Running
+  Running --> Published: every partition committed, marker written
+  Running --> Aborted: a partition exhausts its attempts
+  Aborted --> [*]: nothing visible
+  Published --> [*]` }] },
+      { title: 'UC-04 · Compare options by what each one costs', intro: 'Each option changes a cost: spills, attempts and time. Running every combination once and comparing the counters shows which option is worth its price for the same answer.', diagrams: [{ kind: FLOW, title: 'Cost per option', src: `flowchart LR
+  O["Options: memory, speculation, worker loss"] --> R["Run each combination once"]
+  R --> C["Counters: total, spills, attempts, time"]
+  C --> D["Choose by the cost that matters"]` }] }
     ],
     hard: null
   };

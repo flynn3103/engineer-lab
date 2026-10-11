@@ -416,3 +416,26 @@
 .vz-bx{fill:var(--p0);stroke:var(--ink);stroke-width:1.5;transition:width .4s}
 .vz-bx.tight{fill:var(--p2)}
 @media (max-width:760px){.vz-wstages{grid-template-columns:repeat(5,minmax(0,1fr))}.vz-dqkeys{grid-template-columns:1fr}}
+
+/* UC: build:2 diff, build:3 abort, build:4 multiples */
+.vz-diff{background:var(--card);border:var(--ink-line);border-radius:14px;padding:14px;box-shadow:var(--shadow);overflow-x:auto;display:grid;gap:8px}
+.vz-diff>b{font:700 12px var(--mono);text-transform:uppercase;letter-spacing:.05em;color:var(--mut)}
+.vz-diff tr.same td{background:transparent}
+.vz-diff tr.differ td{background:var(--p4)}
+.vz-diff tr.bad td{background:var(--p5)}
+.vz-abparts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;background:var(--card);border:var(--ink-line);border-radius:14px;padding:14px;box-shadow:var(--shadow)}
+.vz-abtile{display:grid;gap:4px;align-content:start;border:var(--ink-line);border-radius:12px;padding:12px;background:var(--soft);font:700 12.5px var(--mono);color:var(--ink);transition:background .3s}
+.vz-abtile small{font:600 11px var(--mono);color:var(--mut)}
+.vz-abtile.committed{background:var(--p2)}
+.vz-abtile.staging{background:var(--card);border-style:dashed}
+.vz-abtile.failing{background:var(--p4)}
+.vz-abtile.failed{background:var(--p5)}
+.vz-abstate{display:flex;gap:8px;flex-wrap:wrap}
+.vz-multiples{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;background:var(--card);border:var(--ink-line);border-radius:14px;padding:14px;box-shadow:var(--shadow)}
+.vz-mp{display:grid;gap:8px;align-content:start;border:var(--ink-line);border-radius:12px;padding:10px;background:var(--soft);transition:background .3s,opacity .3s}
+.vz-mp.focus{background:var(--p4)}
+.vz-mp>b{font:700 12px var(--mono);color:var(--ink)}
+.vz-mrow{display:grid;grid-template-columns:minmax(0,1fr);gap:3px}
+.vz-mrow span{font:600 10.5px var(--mono);color:var(--mut)}
+.vz-mrow small{font:700 11px var(--mono);color:var(--ink)}
+@media (max-width:760px){.vz-multiples,.vz-abparts{grid-template-columns:repeat(2,minmax(0,1fr))}}
