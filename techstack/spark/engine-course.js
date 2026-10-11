@@ -66,7 +66,7 @@
     app.innerHTML = `<a class="skip-link" href="#course-main">Skip to content</a>
       <header class="course-top"><button id="menu-toggle" aria-label="Show navigation" aria-controls="course-sidebar" aria-expanded="false">☰</button><nav aria-label="Breadcrumb" id="breadcrumb"></nav><span class="course-version">SYSTEM DESIGN · SPARK 3.5</span></header>
       <div class="course-layout"><aside class="course-sidebar" id="course-sidebar"><label class="search-label" for="course-search">Find a feature</label><input id="course-search" type="search" placeholder="Search features…"><nav id="chapter-nav" aria-label="Pages"></nav></aside>
-      <main id="course-main" tabindex="-1"><article id="page"></article><footer class="course-foot">A finite batch engine model grounded in Spark 3.5. Capacity numbers are stated assumptions, not measurements. Real transport, disk I/O and transactional table storage are extension boundaries.</footer></main></div><button id="sidebar-scrim" class="sidebar-scrim" aria-label="Close navigation" hidden></button>`;
+      <main id="course-main" tabindex="-1"><article id="page"></article><footer class="course-foot">A finite batch engine model grounded in Spark 3.5. Capacity numbers are stated assumptions, not measurements. Real transport, disk I/O and transactional table storage are extension boundaries. This course was built with the <a href="../../skills.html?q=learn-technology-from-scratch">learn-technology-from-scratch</a> skill.</footer></main></div><button id="sidebar-scrim" class="sidebar-scrim" aria-label="Close navigation" hidden></button>`;
 
     const mobile = window.matchMedia('(max-width:850px)');
     const label = id => id === 'architecture' ? 'Overview' : D[id].name;
