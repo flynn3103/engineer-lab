@@ -101,7 +101,7 @@
       const app = document.getElementById('app'), root = opts.root || '';
       const chapters = course.chapters;
       let ci = 0, sc = null, mode = 'bug', idx = 0, view = 'visualize', timer = null, playing = false, speed = 1;
-      let mounted = null, scene = null;
+      let mounted = null, scene = null, journeyScenario = null;
 
       app.innerHTML = `
 <div class="lx">
@@ -123,8 +123,10 @@
       <div id="viz">
         <h1 id="vtitle"></h1>
         <div class="lead" id="vlead"></div>
+        <div class="journey-intro" id="journey-intro" hidden></div>
         <div class="scenbar" id="scenbar" role="group" aria-label="Scenarios"></div>
-        <div class="sqlbox" id="scene-code"><div class="lbl" id="codelbl">Code</div><pre id="sql"></pre></div>
+        <div class="sqlbox" id="scene-code"><div class="lbl" id="codelbl">Code</div><p id="journey-application" hidden></p><pre id="sql"></pre></div>
+        <div class="scene-workspace" id="scene-workspace"><div class="scene-media">
         <div class="stage" id="scene-stage"><div class="cap" id="cap"></div><div class="say" id="say" aria-live="polite"></div><div id="svgwrap"></div></div>
         <div class="player" id="scene-player" role="group" aria-label="Playback">
           <button type="button" id="p-reset" aria-label="Restart">↺</button>
@@ -135,6 +137,9 @@
           <span class="count" id="p-count" aria-live="polite"></span>
           <select id="p-speed" aria-label="Speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
         </div>
+        </div><aside class="journey-step" id="journey-step" aria-label="Current step explanation" hidden></aside></div>
+        <section class="journey-rule" id="journey-rule" hidden></section>
+        <div class="journey-after" id="journey-after" hidden></div>
       </div>
       <article class="prose" id="exp" hidden></article>
     </main>
@@ -161,10 +166,47 @@
       /* ---- sidebar ---- */
       function chapterList(q) {
         const t = q.trim().toLowerCase();
-        $('chapters').innerHTML = chapters.map((c, i) => ({ c, i })).filter(({ c }) => !t || c.title.toLowerCase().includes(t)).map(({ c, i }) =>
-          `<li><a href="#ch${i}"${i === ci ? ' aria-current="page"' : ''}><span class="n">${i + 1}</span><span>${esc(c.title)}</span></a></li>`).join('') || '<li><span class="lk">No match</span></li>';
+        $('chapters').innerHTML = chapters.map((c, i) => ({ c, i })).filter(({ c }) => !t || c.title.toLowerCase().includes(t) || (c.lessonPages || []).some(l => l.title.toLowerCase().includes(t))).map(({ c, i }) => {
+          const lessons = c.lessonPages && (i === ci || t) ? `<ol class="lesson-links" aria-label="Chapter lessons"><li><a href="#ch${i}&view=explain"${i === ci && view === 'explain' ? ' aria-current="page"' : ''}><span class="n">1</span><span>Introduction</span></a></li>${c.lessonPages.map((l,n)=>({...l,n})).filter(l=>!t || c.title.toLowerCase().includes(t) || l.title.toLowerCase().includes(t)).map(l => `<li><a href="#ch${i}&s=${esc(l.id)}"${i === ci && view === 'visualize' && sc && sc.id === l.id ? ' aria-current="page"' : ''}><span class="n">${l.n + 2}</span><span>${esc(l.title)}</span></a></li>`).join('')}</ol>` : '';
+          return `<li><a href="#ch${i}${c.lessonPages ? '&view=explain' : ''}"${i === ci && !lessons ? ' aria-current="page"' : ''}><span class="n">${i + 1}</span><span>${esc(c.title)}</span></a>${lessons}</li>`;
+        }).join('') || '<li><span class="lk">No match</span></li>';
       }
       $('lsearch').addEventListener('input', e => chapterList(e.target.value));
+
+      function renderJourney() {
+        const j = sc && sc.journey, active = !!j && view === 'visualize';
+        document.querySelector('.lx-body').classList.toggle('journey', active);
+        document.querySelector('.lx-tabs').hidden = !!chap().lessonPages;
+        document.querySelector('[data-view=visualize]').textContent = chap().lessonPages ? 'Problem lessons' : '▷ Visualize';
+        document.querySelector('[data-view=explain]').textContent = chap().lessonPages ? 'Introduction' : 'Explain';
+        for (const id of ['journey-intro','journey-step','journey-rule','journey-after','journey-application']) $(id).hidden = !active;
+        if (active) {
+          $('viz').hidden = false; $('exp').hidden = true;
+          document.querySelector('.lx-body').classList.remove('explain');
+          const lessonNumber = (chap().lessonPages || []).findIndex(l => l.id === sc.id) + 2;
+          $('vtitle').textContent = lessonNumber + '. ' + j.title; $('vlead').textContent = j.problem;
+          $('crumb').textContent = j.navTitle || j.title;
+          document.title = j.title + ' · ' + course.name;
+          if (journeyScenario !== sc) {
+            $('journey-intro').innerHTML = `<p class="journey-progress">${esc(chap().title)} / Lesson ${lessonNumber} of ${(chap().lessonPages || []).length + 1} · <a href="#ch${ci}&view=explain">Introduction</a></p><p class="journey-goal"><b>YOUR GOAL</b> ${esc(j.objective)}</p>
+              <nav class="journey-route" aria-label="Learning journey"><button type="button" data-jump="vtitle">01 / Problem</button><button type="button" data-jump="scene-workspace">02 / Watch</button><button type="button" data-jump="journey-rule">03 / Apply</button><button type="button" data-jump="journey-after">04 / Diagnose & recall</button></nav>
+              <h2><span class="journey-number">02</span> ${esc(j.watchTitle || 'Watch the mechanism')}</h2><p class="journey-watch-hint">${esc(j.watchHint || 'Use Next to inspect each change. Play runs the whole sequence.')}</p>`;
+            $('journey-rule').innerHTML = j.rule;
+            $('journey-application').textContent = j.application;
+            $('journey-after').innerHTML = j.after;
+            $('scene-code').setAttribute('aria-label', j.codeLabel || 'Apply the rule');
+          }
+        } else if (journeyScenario) {
+          $('vtitle').textContent = chap().title; $('vlead').innerHTML = chap().problem;
+          $('scene-code').removeAttribute('aria-label');
+          renderSide();
+        }
+        journeyScenario = active ? sc : null;
+      }
+      $('journey-intro').addEventListener('click', e => {
+        const b = e.target.closest('[data-jump]');
+        if (b) $(b.dataset.jump).scrollIntoView({behavior:'auto',block:'start'});
+      });
 
       /* ---- playback ---- */
       function stop() { playing = false; clearTimeout(timer); $('p-play').textContent = '▶'; $('p-play').setAttribute('aria-label', 'Play'); }
@@ -191,10 +233,10 @@
 
       function renderExplain() {
         const c = chap();
-        $('exp').innerHTML = `<h1 class="ptitle">${c.n || ci + 1}. ${esc(c.title)}</h1>
-          <div class="problem"><span class="sect-tag">Problem</span><div>${c.problem}</div></div>
+        $('exp').innerHTML = `<h1 class="ptitle">${c.lessonPages ? '1. Introduction' : (c.n || ci + 1) + '. ' + esc(c.title)}</h1>
+          ${c.explainOnly ? '' : `<div class="problem"><span class="sect-tag">Problem</span><div>${c.problem}</div></div>
           ${c.predict ? predictHTML(c.predict) : ''}
-          <div class="mech"><span class="sect-tag">Mechanism</span></div>
+          <div class="mech"><span class="sect-tag">Mechanism</span></div>`}
           <div class="mechbody">${c.explain}</div>
           ${diagnoseHTML(c.diagnose)}
           ${c.source ? `<p class="src">Original source: <a href="${esc(c.source.href)}" target="_blank" rel="noopener">${esc(c.source.label)}</a></p>` : ''}`;
@@ -316,13 +358,18 @@
       }
 
       function render() {
+        renderJourney();
         const st = steps()[idx] || { log: '' }, N = steps().length;
-        const lines = (sc.code && (sc.code[mode] || sc.code.bug)) || (sc.sql && (sc.sql[mode] || sc.sql.bug)) || [];
-        $('codelbl').textContent = sc.codeLabel || 'Code';
-        $('sql').innerHTML = lines.map((l, i) => `<span class="ln${st.code === i || st.sql === i ? ' on' : ''}">${esc(l).replace(KW, '<b class="kw">$1</b>') || '&nbsp;'}</span>`).join('\n');
+        const lines = sc.journey ? sc.journey.code : (sc.code && (sc.code[mode] || sc.code.bug)) || (sc.sql && (sc.sql[mode] || sc.sql.bug)) || [];
+        $('codelbl').textContent = sc.journey ? sc.journey.codeLabel || 'Apply the rule' : sc.codeLabel || 'Code';
+        $('sql').innerHTML = lines.map((l, i) => `<span class="ln${(!sc.journey || sc.journey.sceneCode) && (st.code === i || st.sql === i) ? ' on' : ''}">${esc(l).replace(KW, '<b class="kw">$1</b>') || '&nbsp;'}</span>`).join('\n');
         const phase = sc.fix ? (mode === 'fix' ? ' · after the fix' : ' · the bug') : '';
         $('cap').textContent = `${sc.label}${phase} · step ${idx + 1} of ${N}`;
         $('say').innerHTML = st.log || '';
+        if (sc.journey) {
+          const snapshot = (frame,initial=false) => `<b>${esc(initial ? 'Initial scene' : frame.state && frame.state.phase || 'Current phase')}</b>${(frame.stats || []).length ? `<dl>${frame.stats.map(x=>`<div><dt>${esc(x.l)}</dt><dd>${esc(x.v)}</dd></div>`).join('')}</dl>` : '<p>No numeric state is shown for this phase.</p>'}`;
+          $('journey-step').innerHTML = `<span class="sect-tag">Step ${idx + 1} of ${N}</span><h3>${esc(st.callout || sc.label)}</h3>${sc.engine ? `<div class="engine-transition"><section><span class="engine-label">BEFORE</span>${idx ? snapshot(steps()[idx-1]) : '<b>Model setup</b><p>Start with the components and input shown in the scene.</p>'}</section><span class="engine-state-arrow" aria-hidden="true">↓</span><section class="engine-current"><span class="engine-label">AFTER THIS STEP</span>${snapshot(st)}</section></div><p class="engine-label">WHY THIS TRANSITION MATTERS</p>` : ''}<p>${esc(st.log)}</p><p class="journey-step-cue">${idx === N - 1 ? 'Check the guarantee against its boundary, then diagnose a failure below.' : 'Follow the highlighted change, then inspect the next transition.'}</p>`;
+        }
         if (sc.stage) { if (mounted !== sc) { scene = customMount(sc); mounted = sc; } customUpdate(sc, st, scene); }
         else if (sc.scene) { if (mounted !== sc) { scene = sceneMount(sc); mounted = sc; } sceneUpdate(sc, st, scene); }
         else { mounted = null; $('svgwrap').innerHTML = stageHTML(sc, st); }
@@ -335,7 +382,8 @@
         [...$('scenbar').children].forEach(b => b.setAttribute('aria-pressed', b.dataset.id === sc.id));
         [...$('mode').children].forEach(b => { b.setAttribute('aria-pressed', b.dataset.m === mode); b.disabled = b.dataset.m === 'fix' && !sc.fix; });
         $('modeblk').hidden = !sc.fix;
-        const cur = $('log').querySelector('.cur'); if (cur && view === 'visualize') cur.scrollIntoView({ block: 'nearest' });
+        const cur = $('log').querySelector('.cur'); if (cur && view === 'visualize' && !sc.journey) cur.scrollIntoView({ block: 'nearest' });
+        chapterList($('lsearch').value);
         saveHash();
       }
 
@@ -365,6 +413,8 @@
       /* ---- view switch ---- */
       function setView(v) {
         view = v; stop();
+        renderJourney();
+        chapterList($('lsearch').value);
         document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === v));
         $('viz').hidden = v !== 'visualize'; $('exp').hidden = v !== 'explain';
         document.querySelector('.lx-body').classList.toggle('explain', v === 'explain');
@@ -377,10 +427,16 @@
         const h = location.hash.slice(1);
         const m = /^ch(\d+)/.exec(h), p = new URLSearchParams(h.replace(/^ch\d+&?/, ''));
         const i = m ? Number(m[1]) : 0;
-        const wantView = p.get('view') === 'explain' ? 'explain' : (p.get('view') === 'visualize' || p.get('s')) ? 'visualize' : (opts.defaultView || 'visualize');
+        const wantView = p.get('view') === 'explain' ? 'explain' : (p.get('view') === 'visualize' || p.get('s')) ? 'visualize' : (opts.defaultView || (chapters[i] && chapters[i].lessonPages ? 'explain' : 'visualize'));
         view = wantView;
         if (!m || i !== ci || !sc) loadChapter(i, p.get('s') || '', p.get('m'), p.get('step'));
-        else { /* same chapter: only the tabs or scenario may have changed */ if (p.get('s') && sc && p.get('s') !== sc.id) { pickScenario(p.get('s'), p.get('m')); idx = 0; render(); } }
+        else {
+          stop();
+          if (p.get('s') && p.get('s') !== sc.id) pickScenario(p.get('s'), p.get('m'));
+          mode = p.get('m') === 'fix' && sc.fix ? 'fix' : 'bug';
+          idx = Math.max(0, Math.min(steps().length - 1, Number(p.get('step') || 1) - 1));
+          render();
+        }
         setView(wantView);
       }
       addEventListener('hashchange', fromHash);

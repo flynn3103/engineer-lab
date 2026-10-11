@@ -80,10 +80,6 @@ UN  10.0.1.13  Load 205 GB  Owns (effective) 16.9%`,
           ]
         }
       ],
-      source: {
-        label: `Original: Partition Key and Token Ring`,
-        href: `01-scylla-internals-end-to-end.html#ch0`
-      },
       scenarios: [
         {
           id: `hot-key`,
@@ -611,10 +607,6 @@ SELECT price, WRITETIME(price) FROM orders WHERE id = 42;
           ]
         }
       ],
-      source: {
-        label: `Original: Coordinator and Consistency Levels`,
-        href: `01-scylla-internals-end-to-end.html#ch1`
-      },
       scenarios: [
         {
           id: `down-replica`,
@@ -1189,10 +1181,6 @@ SELECT views FROM orders_stats WHERE id = 42;  ->  2   (expected 1)`,
           ]
         }
       ],
-      source: {
-        label: `Original: Timeouts, Retries and Routing`,
-        href: `01-scylla-internals-end-to-end.html#ch2`
-      },
       scenarios: [
         {
           id: `retry-storm`,
@@ -1686,10 +1674,6 @@ InvalidRequest: Batch too large`,
           ]
         }
       ],
-      source: {
-        label: `Original: Replica Write Path`,
-        href: `01-scylla-internals-end-to-end.html#ch3`
-      },
       scenarios: [
         {
           id: `periodic-ack`,
@@ -2238,10 +2222,6 @@ cqlsh> SELECT * FROM orders WHERE status = 'open' ALLOW FILTERING;
           ]
         }
       ],
-      source: {
-        label: `Original: Read Path`,
-        href: `01-scylla-internals-end-to-end.html#ch4`
-      },
       scenarios: [
         {
           id: `bloom-probes`,
@@ -2777,10 +2757,6 @@ SSTable age and disk usage: expired-window files persist`,
           ]
         }
       ],
-      source: {
-        label: `Original: Compaction`,
-        href: `01-scylla-internals-end-to-end.html#ch5`
-      },
       scenarios: [
         {
           id: `backlog`,
@@ -3319,10 +3295,6 @@ rows returned by SELECT in the last 24 h: ~6 GB worth`,
           ]
         }
       ],
-      source: {
-        label: `Original: Deletes, TTL and Tombstones`,
-        href: `01-scylla-internals-end-to-end.html#ch6`
-      },
       scenarios: [
         {
           id: `queue-scan`,
@@ -3827,10 +3799,6 @@ SELECT ... CONSISTENCY ONE  -> served by C  -> stale order status`,
           ]
         }
       ],
-      source: {
-        label: `Original: Repair and gc_grace_seconds`,
-        href: `01-scylla-internals-end-to-end.html#ch7`
-      },
       scenarios: [
         {
           id: `hint-window`,
@@ -4147,10 +4115,6 @@ UN  10.0.1.14  Load 0.81 TB   (joined 7 days ago)`,
           ]
         }
       ],
-      source: {
-        label: `Original: Tablets and Migration`,
-        href: `01-scylla-internals-end-to-end.html#ch8`
-      },
       scenarios: [
         {
           id: `tablet-move`,
@@ -4696,10 +4660,6 @@ OperationTimedOut: errors={}, last_host=10.0.1.11`,
           ]
         }
       ],
-      source: {
-        label: `Original: Raft Metadata Consensus`,
-        href: `01-scylla-internals-end-to-end.html#ch9`
-      },
       scenarios: [
         {
           id: `majority`,

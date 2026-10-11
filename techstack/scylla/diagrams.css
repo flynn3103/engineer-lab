@@ -1,9 +1,10 @@
-/* Scylla Explain diagrams: each figure declares a width derived from its
-   Mermaid viewBox. Never enlarge above native size; fit smaller screens. */
+/* Scylla Explain diagrams: fit medium panels without changing proportions. */
 .prose figure.mm{padding:14px}
 .prose figure.mm img{
-  width:min(100%,var(--diagram-width,620px));
-  max-width:100%;
+  width:auto;
+  max-width:min(100%,var(--diagram-width,560px),560px);
+  max-height:320px;
+  object-fit:contain;
   height:auto;
   margin:0 auto;
 }
@@ -16,3 +17,6 @@
 @media(max-width:820px){
   .lx-body.explain{grid-template-columns:minmax(0,1fr)}
 }
+
+.review-explain li{margin:0 0 10px}
+.review-explain h2{margin-top:26px}

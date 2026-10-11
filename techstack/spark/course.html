@@ -3,33 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Course · Linh Trần Nhật</title>
-<meta name="description" content="Problem-based course: each chapter starts from a production problem, predicts the outcome, shows the mechanism step by step, and ends with diagnosis.">
+<title>Design a batch processing system · Apache Spark</title>
+<meta name="description" content="Learn Spark as a system design: an overview, then one page per feature and per use case, with spec, estimates, diagrams and animations for the hard parts.">
 <link rel="stylesheet" href="../../assets/lab.css">
 <link rel="stylesheet" href="../../assets/curriculum.css">
-<link rel="stylesheet" href="diagrams.css">
+<link rel="stylesheet" href="engine-course.css">
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="7"/><feDisplacementMap in="SourceGraphic" scale="2.2"/></filter></svg>
 <div id="app"></div>
-<script src="course.js"></script>
-<script src="scene-tools.js"></script>
-<script src="chapters/ch00.js"></script>
-<script src="chapters/ch01.js"></script>
-<script src="chapters/ch02.js"></script>
-<script src="chapters/ch03.js"></script>
-<script src="chapters/ch04.js"></script>
-<script src="chapters/ch05.js"></script>
-<script src="chapters/ch06.js"></script>
-<script src="chapters/ch07.js"></script>
-<script src="chapters/ch08.js"></script>
-<script src="chapters/ch09.js"></script>
-<script src="chapters/ch10.js"></script>
-<script src="chapter-notes.js"></script>
-<script src="../../assets/scene-kit.js"></script>
-<script src="../../assets/lesson.js"></script>
-<script>
-window.COURSE.chapters = window.COURSE.chapters.map((c, i) => ({ ...c, ...(window.CHAPTER_OVERRIDES[i] || {}) }));
-Lesson.course(window.COURSE, { root: '../../' });
-</script>
+<script src="engine-model.js"></script>
+<script src="engine-traces.js"></script>
+<script src="engine-curriculum.js"></script>
+<script src="engine-stories.js"></script>
+<script src="engine-sysdesign.js"></script>
+<script src="engine-pages.js"></script>
+<script src="engine-scenes.js"></script>
+<script src="engine-readsim.js"></script>
+<script src="engine-story.js"></script>
+<script src="engine-packsim.js"></script>
+<script src="engine-mapsim.js"></script>
+<script src="engine-treesim.js"></script>
+<script src="engine-comparesim.js"></script>
+<script src="engine-pipesim.js"></script>
+<script src="engine-lineagesim.js"></script>
+<script src="engine-course.js"></script>
+<noscript><p>This course needs JavaScript for its diagrams and computed experiments. </p></noscript>
 </body>
 </html>

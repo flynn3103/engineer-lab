@@ -1,10 +1,10 @@
 /* The deep-dive tours. Order = display order. Add a system here (and its tour under techstack/<id>/), then run `python3 tools/build_site_index.py`. */
 window.SITE_SYSTEMS = [
-  { id:'spark', name:'Apache Spark', color:'#e25a1c', kind:'Distributed data processing', chapters:11,
-    url:'techstack/spark/01-spark-internals-end-to-end.html',
-    topics:'Partitions, lazy DAGs, shuffle, retries.' },
+  { id:'spark', name:'Apache Spark', color:'#e25a1c', kind:'Distributed data processing', chapters:15,
+    url:'techstack/spark/course.html',
+    topics:'Build an engine: tasks, shuffle, spill, recovery, SQL.' },
   { id:'scylla', name:'ScyllaDB', color:'#2f6fed', kind:'Leaderless wide-column store', chapters:10,
-    url:'techstack/scylla/01-scylla-internals-end-to-end.html',
+    url:'techstack/scylla/course.html',
     topics:'Token ring, quorum, compaction, tablets.' },
   { id:'redis', name:'Redis', color:'#d82c20', kind:'In-memory data server', chapters:11,
     url:'techstack/redis/01-redis-internals-end-to-end.html',
