@@ -505,12 +505,31 @@
     return `fetch: ${from}`;
   }
 
+  /* commit:3 · each file's place in the commit: private folder, job folder, output. The counter is the number of renames so far. */
+  function paintRenames(stage, sim, k) {
+    const v = sim.steps[k].v, label = { temp: 'private folder', jobtmp: 'job temp folder', output: 'output folder' };
+    const files = v.files.map((s, i) => `<div class="vz-fmove ${s}"><b>file ${i}</b><small>${label[s]}</small></div>`).join('');
+    stage.innerHTML = `<div class="vz-fmoves">${files}</div>
+      <div class="vz-row"><span class="vz-chip">algorithm version ${v.alg}</span><span class="vz-chip ${v.renames >= 8 ? 'warn' : ''}">renames so far: ${v.renames}</span>${v.failed ? '<span class="vz-chip bad">job failed: readers see the two output files</span>' : ''}</div>`;
+    return `renames: ${v.renames} · visible in output: ${v.files.filter(s => s === 'output').length} of 4`;
+  }
+
+  /* commit:4 · the output folder as items. Old output, staged output and deleted output are shown on their own tiles. */
+  function paintOverwrite(stage, sim, k) {
+    const v = sim.steps[k].v;
+    const tiles = v.items.map(it => `<div class="vz-otile ${it.st}"><b>${it.n}</b><small>${{ old: 'previous run', new: 'new run', staged: 'staged, not visible', gone: 'removed' }[it.st]}</small></div>`).join('');
+    const empty = v.items.length ? '' : '<p class="vz-empty">the folder is empty: readers get nothing</p>';
+    stage.innerHTML = `<div class="vz-ofolder">${tiles}${empty}</div>
+      <div class="vz-row">${v.dynamic ? '<span class="vz-chip good">dynamic mode: only written partitions change</span>' : '<span class="vz-chip warn">full overwrite: the whole folder is cleared first</span>'}${v.failed ? '<span class="vz-chip bad">job failed before commit</span>' : ''}</div>`;
+    return v.items.length ? `visible to readers: ${v.items.filter(i => i.st === 'old' || i.st === 'new').length} items` : 'visible to readers: nothing';
+  }
+
   const PAINT = {
     ticks: paintTicks, kanban: paintKanban, stacked: paintStacked, lanes: paintLanes,
     sawtooth: paintSawtooth, bullet: paintBullet, heatmap: paintHeat, strip: paintStrip,
     ledger: paintLedger, filetree: paintFileTree, flow: paintFlow, waterfall: paintWaterfall,
     fanout: paintFanout, scatter: paintScatter, histogram: paintHistogram, donut: paintDonut,
-    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores, paths: paintPaths, routes: paintRoutes, explode: paintExplode, backoff: paintBackoff, exclude: paintExclude, service: paintService, pool: paintPool, shares: paintShares, heap: paintHeap
+    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores, paths: paintPaths, routes: paintRoutes, explode: paintExplode, renames: paintRenames, overwrite: paintOverwrite, backoff: paintBackoff, exclude: paintExclude, service: paintService, pool: paintPool, shares: paintShares, heap: paintHeap
   };
 
   /* Attach each picture to its use case. Narration (title, text) stays in engine-stories.js. */
@@ -712,7 +731,21 @@
       { exec: 'dead', svc: 'up', fetch: null },
       { exec: 'dead', svc: 'up', fetch: 'svc' },
       { exec: 'dead', svc: 'down', fetch: 'fail' },
-      { exec: 'released', svc: 'up', fetch: 'svc', idle: true }] }
+      { exec: 'released', svc: 'up', fetch: 'svc', idle: true }] },
+    'commit:3': { kind: 'renames', steps: [
+      { alg: 1, files: ['temp', 'temp', 'temp', 'temp'], renames: 0 },
+      { alg: 1, files: ['jobtmp', 'jobtmp', 'temp', 'temp'], renames: 2 },
+      { alg: 1, files: ['jobtmp', 'jobtmp', 'jobtmp', 'jobtmp'], renames: 4 },
+      { alg: 1, files: ['output', 'output', 'output', 'output'], renames: 8 },
+      { alg: 2, files: ['output', 'output', 'temp', 'temp'], renames: 2 },
+      { alg: 2, files: ['output', 'output', 'temp', 'temp'], renames: 2, failed: true }] },
+    'commit:4': { kind: 'overwrite', steps: [
+      { items: [{ n: 'part-0', st: 'old' }, { n: 'part-1', st: 'old' }, { n: 'part-2', st: 'old' }, { n: 'part-3', st: 'old' }] },
+      { items: [{ n: 'part-0', st: 'old' }, { n: 'part-1', st: 'old' }, { n: 'part-2', st: 'old' }, { n: 'part-3', st: 'old' }, { n: 'staged 0', st: 'staged' }, { n: 'staged 1', st: 'staged' }] },
+      { items: [{ n: 'part-0', st: 'gone' }, { n: 'part-1', st: 'gone' }, { n: 'part-2', st: 'gone' }, { n: 'part-3', st: 'gone' }, { n: 'staged 0', st: 'staged' }, { n: 'staged 1', st: 'staged' }] },
+      { items: [], failed: true },
+      { items: [{ n: 'day=1', st: 'old' }, { n: 'day=2', st: 'staged' }, { n: 'day=3', st: 'old' }], dynamic: true },
+      { items: [{ n: 'day=1', st: 'old' }, { n: 'day=2', st: 'old' }, { n: 'day=3', st: 'old' }], dynamic: true, failed: true }] }
   };
   const SD = root.SparkSystemDesign || (typeof require === "function" ? require("./engine-sysdesign.js") : null);
   for (const [key, spec] of Object.entries(DATA)) {

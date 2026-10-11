@@ -1194,6 +1194,48 @@
     ]
   };
 
+  ST['commit:3'] = {
+    trigger: 'A Hadoop-style job finishes many tasks, and their output must be moved from temporary folders into the output folder.',
+    command: 'spark-submit --conf mapreduce.fileoutputcommitter.algorithm.version=2 app.py  # version 1 is the default',
+    expect: 'Version 2 moves each file fewer times, so the job commit is faster. The price is that a failed job can leave partial output visible.',
+    sim: {
+      kind: 'renames',
+      steps: [
+        { title: 'Every task writes to its own folder', text: 'Four tasks each write one file into a private temporary folder. Nothing is visible in the output folder yet.' },
+        { title: 'Version 1: a task commit moves its file once', text: 'With algorithm version 1, a task commit moves its file from its private folder into the job temporary folder. Two tasks are done.' },
+        { title: 'All tasks moved into the job folder', text: 'All four files are now in the job temporary folder. Still nothing is in the output folder.' },
+        { title: 'The job commit moves everything again', text: 'The job commit renames every file into the output folder. That is a second rename per file: eight renames for four files. On an object store each rename copies the data, so this step is slow.' },
+        { title: 'Version 2: tasks commit straight to the output', text: 'With version 2, each task commit moves its file directly into the output folder. Two tasks are committed, so two files are already visible.' },
+        { title: 'A failure midway leaves partial output', text: 'The job fails before the other two tasks commit. Version 2 has already published two files, so readers see a partial result. Version 1 would have shown none.' }
+      ]
+    },
+    edges: [
+      E('Readers run during the job', 'Version 2 exposes partial files early.', 'With version 2, readers can see the files of finished tasks before the job is complete.', 'Write to a new path and switch readers only after the job commits, or use the _SUCCESS marker as in UC-02.'),
+      E('Object store with many files', 'Renames are copies, so commit time grows.', 'On an object store a rename copies the whole file, so the second rename in version 1 can dominate the job time.', 'Use an output committer built for object stores, or fewer, larger output files.')
+    ]
+  };
+
+  ST['commit:4'] = {
+    trigger: 'A job writes its result into a folder that already holds the previous run, using overwrite mode.',
+    command: 'df.write.mode("overwrite").partitionBy("day").parquet("/data/out")  # with spark.sql.sources.partitionOverwriteMode=dynamic only the written partitions are replaced',
+    expect: 'Full overwrite can remove the old output before the new output is ready. Dynamic partition overwrite replaces only the partitions the job writes, and a failed job leaves the old partitions in place.',
+    sim: {
+      kind: 'overwrite',
+      steps: [
+        { title: 'Yesterday output is in place', text: 'The folder holds the output of the previous run: four part files. Readers see them.' },
+        { title: 'The job writes new files to staging', text: 'New files are written to a staging area first. The old output is still there, so readers still get the previous run.' },
+        { title: 'Overwrite clears the old output', text: 'In full overwrite mode, Spark removes the old output before the new files are committed. The staged files are not visible yet.' },
+        { title: 'The job fails before commit', text: 'The job fails. The old files are gone and the new ones never became visible. The folder is empty, so readers get nothing.' },
+        { title: 'Dynamic overwrite: only the written partitions', text: 'With spark.sql.sources.partitionOverwriteMode=dynamic, only the partitions the job writes are replaced. Here only day=2 is rewritten. Days 1 and 3 are not touched.' },
+        { title: 'Dynamic overwrite fails safely', text: 'If the job fails before day=2 commits, the staged files are discarded and the old day=2 files stay in place. Readers still see the previous complete data.' }
+      ]
+    },
+    edges: [
+      E('Full overwrite on a large table', 'A failure can leave nothing.', 'Full overwrite removes the old data first, so a job that fails midway leaves the table with no data at all.', 'Write to a new path or table, then switch readers. Or use dynamic partition overwrite for partitioned tables.'),
+      E('Dynamic overwrite with no partition column', 'Dynamic mode has nothing to select by.', 'Without partitionBy, dynamic mode behaves like full overwrite, because the whole table is one partition.', 'Partition the table by the column that changes, such as day, or accept full overwrite.')
+    ]
+  };
+
   root.SparkStories = ST;
   if (typeof module === 'object' && module.exports) module.exports = ST;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -306,3 +306,19 @@
 .vz-svc.none{border-style:dashed;background:transparent}
 .vz-svc.reducer{background:var(--p0)}
 @media (max-width:760px){.vz-execs{grid-template-columns:repeat(2,minmax(0,1fr))}.vz-svcs{grid-template-columns:1fr}}
+
+/* UC: commit:3 renames, commit:4 overwrite */
+.vz-fmoves{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.vz-fmove{display:grid;gap:6px;align-content:start;border:var(--ink-line);border-radius:14px;padding:14px;background:var(--card);box-shadow:var(--shadow);font:700 13px var(--mono);color:var(--ink);transition:background .3s}
+.vz-fmove small{font:600 11px var(--mono);color:var(--mut)}
+.vz-fmove.temp{background:var(--card)}
+.vz-fmove.jobtmp{background:var(--p4)}
+.vz-fmove.output{background:var(--p2)}
+.vz-ofolder{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;background:var(--card);border:var(--ink-line);border-radius:14px;padding:14px;box-shadow:var(--shadow);min-height:90px;align-content:start}
+.vz-otile{display:grid;gap:4px;align-content:start;border:var(--ink-line);border-radius:12px;padding:10px;background:var(--soft);font:700 12.5px var(--mono);color:var(--ink);transition:background .3s}
+.vz-otile small{font:600 10.5px var(--mono);color:var(--mut)}
+.vz-otile.old{background:var(--p0)}
+.vz-otile.new{background:var(--p2)}
+.vz-otile.staged{background:var(--card);border-style:dashed}
+.vz-otile.gone{background:var(--p5);text-decoration:line-through;opacity:.7}
+@media (max-width:760px){.vz-fmoves,.vz-ofolder{grid-template-columns:repeat(2,minmax(0,1fr))}}

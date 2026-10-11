@@ -646,7 +646,19 @@
   Authorized --> Promoted: final path written
   Promoted --> Ready: marker covers all partitions
   Discarded --> [*]
-  Ready --> [*]` }] }
+  Ready --> [*]` }] },
+      { title: 'UC-03 · Commit algorithm v1 versus v2', intro: 'The Hadoop commit algorithm decides how many times each output file is moved. Version 2 moves fewer files, so the job commit is quicker, but partial output can then become visible.', diagrams: [{ kind: FLOW, title: 'Where each file moves', src: `flowchart LR
+  subgraph V1["Algorithm v1"]
+    A1["task commit: temp to job folder"] --> A2["job commit: job folder to output"]
+  end
+  subgraph V2["Algorithm v2"]
+    B1["task commit: temp straight to output"] --> B2["job commit: write marker only"]
+  end` }] },
+      { title: 'UC-04 · Overwrite can clear output before the new output is ready', intro: 'Overwrite mode replaces a folder. Spark may remove the old output before the new output is complete, so a failed job can leave the folder empty.', diagrams: [{ kind: STATE, title: 'Output folder across an overwrite', src: `stateDiagram-v2
+  [*] --> Previous
+  Previous --> Cleared: overwrite starts
+  Cleared --> Written: job commits
+  Cleared --> Empty: job fails` }] }
     ],
     hard: { title: 'How can duplicate attempts publish only once?', body: 'Run speculative attempts and watch one winner promoted while the job stays unready until every partition is done.' }
   };
