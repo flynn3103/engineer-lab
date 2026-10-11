@@ -384,15 +384,20 @@
   D->>D: keep narrow steps together inside one stage
   D->>U: run stages, parents first` }],
     trigger: 'Your program calls an action such as collect(). Spark must now decide which steps can run together and which must wait for a shuffle.',
+    command: 'lines.map(parse).reduceByKey(add).sortByKey().collect()',
+    expect: 'Three stages. The two shuffles, at reduceByKey and sortByKey, each cut the plan once. read and map stay together.',
     sim: {
-      actors: ['Your code', 'Planner', 'Stage plan'],
+      kind: 'dag',
+      nodes: ['read', 'map', 'reduceByKey', 'sortByKey', 'collect'],
+      wide: [false, false, true, true, false],
+      maxStages: 3,
       steps: [
-        S('An action starts the plan', 'Nothing has run yet. The program only described the steps: read, map, reduceByKey, sortByKey. Calling collect() says "now do it".', ['Your code', 'Planner', 'collect()'], { 'Your code': ['read → map → reduceByKey → sortByKey → collect'] }),
-        S('Start from the end', 'The planner makes the last stage first, the result stage. It will hold the work after the final shuffle.', ['Planner', 'Stage plan', 'create stage 3'], { 'Stage plan': ['Stage 3: result'] }),
-        S('Walk backwards: a wide step', 'sortByKey needs data from every earlier partition. That is a wide step, meaning a shuffle, and the work cannot continue across it. So the planner cuts here and makes a new parent stage.', ['Planner', 'Stage plan', 'cut at sortByKey'], { 'Stage plan': ['Stage 3: result', '+Stage 2: parent of 3'] }),
-        S('Walk backwards again', 'Before that comes reduceByKey, another wide step. Another cut, another parent stage.', ['Planner', 'Stage plan', 'cut at reduceByKey'], { 'Stage plan': ['Stage 3: result', 'Stage 2: parent of 3', '+Stage 1: parent of 2'] }),
-        S('Narrow steps stay together', 'Read and map only need their own partition, so they are narrow. They are pipelined into stage 1 and need no shuffle at all.', ['Planner', 'Stage plan', 'group read + map'], { 'Stage plan': ['Stage 3: result', 'Stage 2: parent of 3', 'Stage 1: read + map'] }),
-        S('Parents run first', 'The planner starts only stages whose parents are finished. Stage 1 has no parent, so it goes first. Stages 2 and 3 wait.', ['Planner', 'Stage plan', 'submit stage 1'], { 'Stage plan': ['!Stage 3: waiting', '!Stage 2: waiting', '+Stage 1: running'] })
+        { title: 'Nothing has run yet', text: 'The program only describes the work: read, map, reduceByKey, sortByKey. collect() is the action that asks for an answer. The planner has not cut anything yet.', cur: -1, stages: [] },
+        { title: 'Start at the action', text: 'The planner makes the result stage first. It holds collect() and the sortByKey work that feeds it.', cur: 4, stages: [{ id: 3, name: 'Stage 3 · sortByKey + collect', nodes: [3, 4], state: 'walking' }] },
+        { title: 'sortByKey is wide: cut here', text: 'sortByKey needs rows from every parent partition, so it cannot be pipelined. The planner cuts before it and makes a parent stage for everything earlier.', cur: 3, stages: [{ id: 3, name: 'Stage 3 · sortByKey + collect', nodes: [3, 4], state: 'built' }, { id: 2, name: 'Stage 2 · parent', nodes: [0, 1, 2], state: 'walking' }] },
+        { title: 'reduceByKey is wide too: cut again', text: 'Walking back, reduceByKey is another wide step. Another cut, and another parent stage. Stage 2 keeps only reduceByKey.', cur: 2, stages: [{ id: 3, name: 'Stage 3 · sortByKey + collect', nodes: [3, 4], state: 'built' }, { id: 2, name: 'Stage 2 · reduceByKey', nodes: [2], state: 'built' }, { id: 1, name: 'Stage 1 · read + map', nodes: [0, 1], state: 'walking' }] },
+        { title: 'Narrow steps stay together', text: 'read and map each need only their own partition, so they are pipelined into stage 1. No shuffle is needed inside it.', cur: 0, stages: [{ id: 3, name: 'Stage 3 · sortByKey + collect', nodes: [3, 4], state: 'built' }, { id: 2, name: 'Stage 2 · reduceByKey', nodes: [2], state: 'built' }, { id: 1, name: 'Stage 1 · read + map', nodes: [0, 1], state: 'built' }] },
+        { title: 'Parents run first', text: 'Only stage 1 has no parent, so it runs first. Stages 2 and 3 wait for its output, one shuffle at a time.', cur: -1, stages: [{ id: 3, name: 'Stage 3 · sortByKey + collect', nodes: [3, 4], state: 'waiting' }, { id: 2, name: 'Stage 2 · reduceByKey', nodes: [2], state: 'waiting' }, { id: 1, name: 'Stage 1 · read + map', nodes: [0, 1], state: 'running' }] }
       ]
     },
     edges: [
@@ -403,21 +408,109 @@
 
   ST['stages:2'] = {
     trigger: 'A task in a parent stage finishes, or a worker dies and takes some finished output with it.',
+    command: 'counts.collect()  # stage 1 has 4 tasks, stage 2 waits for all 4 outputs',
+    expect: 'Stage 2 starts only when the tracker holds 4 of 4 outputs, and it closes again if an output is lost.',
     sim: {
-      actors: ['Stage 1 (producer)', 'Driver tracker', 'Stage 2 (child)'],
+      kind: 'gate',
+      tasks: 4,
       steps: [
-        S('Stage 2 waits', 'Stage 1 has four tasks. Stage 2 needs all four outputs before it may start, so it waits.', null, { 'Driver tracker': ['outputs: 0 / 4'] }, { 'Stage 1 (producer)': 'RUNNING', 'Stage 2 (child)': 'WAITING' }),
-        S('One task finishes', 'Task 1 finishes and tells the driver where its output is. The driver writes it down.', ['Stage 1 (producer)', 'Driver tracker', 'task 1 output at host A'], { 'Driver tracker': ['outputs: 1 / 4', '+task 1 at A'] }),
-        S('More outputs arrive', 'Tasks 2 and 3 finish. Stage 2 still waits, because one is missing.', ['Stage 1 (producer)', 'Driver tracker', 'tasks 2, 3'], { 'Driver tracker': ['outputs: 3 / 4', 'task 1 at A', '+task 2 at B', '+task 3 at C'] }),
-        S('The last one arrives', 'Task 4 finishes. Four of four outputs are recorded, so the tracker lets stage 2 go.', ['Driver tracker', 'Stage 2 (child)', 'all 4 are ready'], { 'Driver tracker': ['outputs: 4 / 4'] }, { 'Stage 1 (producer)': 'DONE', 'Stage 2 (child)': 'RUNNABLE' }),
-        S('A worker dies', 'Host C dies and its output goes with it. The tracker forgets task 3 and says 3 of 4 again. Stage 1 goes back to RESUBMITTING and reruns only task 3.', ['Driver tracker', 'Stage 1 (producer)', 'task 3 is lost, rerun it'], { 'Driver tracker': ['outputs: 3 / 4', 'task 1 at A', 'task 2 at B', '!task 3 lost'] }, { 'Stage 1 (producer)': 'RESUBMITTING', 'Stage 2 (child)': 'WAITING' }),
-        S('A late message is ignored', 'An old message from the first attempt of task 3 shows up late. It belongs to an earlier stage attempt, so the tracker ignores it.', ['Stage 1 (producer)', 'Driver tracker', 'late: task 3 (old attempt)'], { 'Driver tracker': ['outputs: 3 / 4', 'task 1 at A', 'task 2 at B', '!task 3 lost', '~late message ignored'] }),
-        S('Complete again', 'The rerun of task 3 finishes on host D. Four of four again, and stage 2 can run.', ['Stage 1 (producer)', 'Driver tracker', 'task 3 at D'], { 'Driver tracker': ['outputs: 4 / 4', '+task 3 at D'] }, { 'Stage 1 (producer)': 'DONE', 'Stage 2 (child)': 'RUNNABLE' })
+        { title: 'Stage 2 waits for all four outputs', text: 'Stage 1 has four tasks. Stage 2 needs every one of their outputs before it may start, so it waits.', tiles: [{ s: 'run' }, { s: 'run' }, { s: 'run' }, { s: 'run' }], outputs: 0, parent: 'running', child: 'waiting', msg: null },
+        { title: 'Task 1 reports its output', text: 'Task 1 finishes on host A and tells the driver where its output is. The tracker records one of four.', tiles: [{ s: 'done', h: 'A' }, { s: 'run' }, { s: 'run' }, { s: 'run' }], outputs: 1, parent: 'running', child: 'waiting', msg: null },
+        { title: 'Tasks 2 and 3 finish', text: 'Two more outputs arrive. Stage 2 still waits, because task 4 is missing.', tiles: [{ s: 'done', h: 'A' }, { s: 'done', h: 'B' }, { s: 'done', h: 'C' }, { s: 'run' }], outputs: 3, parent: 'running', child: 'waiting', msg: null },
+        { title: 'The last output arrives', text: 'Task 4 finishes on host D. Four of four outputs are registered, so the gate opens and stage 2 can run.', tiles: [{ s: 'done', h: 'A' }, { s: 'done', h: 'B' }, { s: 'done', h: 'C' }, { s: 'done', h: 'D' }], outputs: 4, parent: 'done', child: 'runnable', msg: null },
+        { title: 'Host C dies', text: 'Host C dies with task 3 output on it. The tracker drops that output, so the gate shuts at three of four. Stage 1 goes back to resubmitting, and stage 2 waits again.', tiles: [{ s: 'done', h: 'A' }, { s: 'done', h: 'B' }, { s: 'lost', h: 'C' }, { s: 'done', h: 'D' }], outputs: 3, parent: 'resubmitting', child: 'waiting', msg: null },
+        { title: 'A late report is ignored', text: 'A message about the first attempt of task 3 arrives late. It carries the old attempt number, so the tracker ignores it and the gate stays shut.', tiles: [{ s: 'done', h: 'A' }, { s: 'done', h: 'B' }, { s: 'lost', h: 'C' }, { s: 'done', h: 'D' }], outputs: 3, parent: 'resubmitting', child: 'waiting', msg: 'late report: task 3, attempt 0 · ignored' },
+        { title: 'Only task 3 reruns', text: 'Task 3 reruns on host D and reports success. Four of four outputs again, so the gate opens and stage 2 runs. Tasks 1, 2 and 4 were never rerun.', tiles: [{ s: 'done', h: 'A' }, { s: 'done', h: 'B' }, { s: 'rerun', h: 'D' }, { s: 'done', h: 'D' }], outputs: 4, parent: 'done', child: 'runnable', msg: null }
       ]
     },
     edges: [
       E('Late messages from an old attempt', 'They must not change anything.', 'A task from an earlier try of the stage reports success after the stage was already restarted.', 'Every message carries its attempt number. The tracker ignores any that are not from the current attempt.'),
       E('A stage that keeps losing outputs', 'It cannot retry forever.', 'The same stage loses its outputs again and again, for example on a very unreliable machine.', 'After a set number of tries the job fails with a clear error instead of looping for ever.')
+    ]
+  };
+
+  ST['stages:3'] = {
+    trigger: 'Two branches of one graph both depend on the same shuffled dataset, so the planner reaches the same parent twice while building one job.',
+    command: 'a = raw.reduceByKey(add); a.mapValues(f).join(a.filter(g)).collect()',
+    expect: 'The shared shuffle is planned once and runs once. Both branches read its outputs.',
+    sim: {
+      kind: 'diamond',
+      steps: [
+        { title: 'The plan is a diamond', text: 'The result joins two branches, A and B. Both come from one shuffled dataset, D. Drawn out, D sits at the top and the result sits at the bottom.', n: { D: 'idle', A: 'idle', B: 'idle', R: 'idle' }, stages: [], memo: [], dup: false },
+        { title: 'Walk branch A first', text: 'The planner makes the result stage, then the parent for branch A. Walking back from A reaches D, a wide step, so it creates D\'s stage. The memo now remembers D.', n: { D: 'planned', A: 'planned', B: 'idle', R: 'planned' }, stages: [{ id: 'R', name: 'Result · join + collect', state: 'built' }, { id: 'A', name: 'Map side · branch A', state: 'built' }, { id: 'D', name: 'Shuffle 1 · map side of D', state: 'built' }], memo: ['D → stage D'], dup: false },
+        { title: 'Walk branch B', text: 'Now branch B. Its parent is a new stage of its own. Walking back from B, the next step is D again.', n: { D: 'planned', A: 'planned', B: 'planned', R: 'planned' }, stages: [{ id: 'R', name: 'Result · join + collect', state: 'built' }, { id: 'A', name: 'Map side · branch A', state: 'built' }, { id: 'D', name: 'Shuffle 1 · map side of D', state: 'built' }, { id: 'B', name: 'Map side · branch B', state: 'built' }], memo: ['D → stage D'], dup: false },
+        { title: 'Reach D again: reuse it', text: 'The second path reaches D. The memo says its stage exists, so the planner links branch B to that stage. No new stage is created.', n: { D: 'reused', A: 'planned', B: 'planned', R: 'planned' }, stages: [{ id: 'R', name: 'Result · join + collect', state: 'built' }, { id: 'A', name: 'Map side · branch A', state: 'built' }, { id: 'D', name: 'Shuffle 1 · map side of D', state: 'built' }, { id: 'B', name: 'Map side · branch B', state: 'built' }], memo: ['D → stage D'], dup: false },
+        { title: 'Without the memo, D runs twice', text: 'A planner without a memo would add a second copy of D. The same reads and reduceByKey would run twice, and the join would see two sets of outputs. This planner never makes that copy.', n: { D: 'reused', A: 'planned', B: 'planned', R: 'planned' }, stages: [{ id: 'R', name: 'Result · join + collect', state: 'built' }, { id: 'A', name: 'Map side · branch A', state: 'built' }, { id: 'D', name: 'Shuffle 1 · map side of D', state: 'built' }, { id: 'B', name: 'Map side · branch B', state: 'built' }], memo: ['D → stage D'], dup: true },
+        { title: 'D runs once', text: 'Stage D runs once, with 4 tasks. Branches A and B wait for its outputs, and the result waits for them.', n: { D: 'running', A: 'planned', B: 'planned', R: 'planned' }, stages: [{ id: 'D', name: 'Shuffle 1 · map side of D', state: 'running' }, { id: 'A', name: 'Map side · branch A', state: 'waiting' }, { id: 'B', name: 'Map side · branch B', state: 'waiting' }, { id: 'R', name: 'Result · join + collect', state: 'waiting' }], memo: ['D → stage D'], dup: false },
+        { title: 'Branches, then the result', text: 'D finished, so A and B run from its outputs, and then the result runs. Shuffle 1 was paid for once, not twice.', n: { D: 'done', A: 'done', B: 'done', R: 'running' }, stages: [{ id: 'D', name: 'Shuffle 1 · map side of D', state: 'done' }, { id: 'A', name: 'Map side · branch A', state: 'done' }, { id: 'B', name: 'Map side · branch B', state: 'done' }, { id: 'R', name: 'Result · join + collect', state: 'running' }], memo: ['D → stage D'], dup: false }
+      ]
+    },
+    edges: [
+      E('The memo lives for one plan', 'Reuse holds inside one planning pass.', 'The memo is built while one job is planned. A later job is planned again from the start.', 'Later jobs can still skip a finished shuffle through its registered outputs. See UC-04.'),
+      E('Two reduceByKey calls look alike', 'Same code, two shuffles.', 'Two separate reduceByKey calls over the same input look alike, but they are two shuffles with two ids. Spark cannot merge them.', 'Assign the dataset to one variable and reuse it, so the planner sees a single shuffle.')
+    ]
+  };
+
+  ST['stages:4'] = {
+    trigger: 'A second action runs on a dataset whose shuffle already ran in an earlier job of the same application.',
+    command: 'counts = df.groupBy("k").count(); counts.collect(); counts.count()',
+    expect: 'The second job runs only its result stage. Its map side is marked skipped, because the outputs from job 1 are still registered.',
+    sim: {
+      kind: 'skip',
+      steps: [
+        { title: 'Job 1 is about to run', text: 'collect() needs one shuffle. The map side has four tasks, and its outputs stay on the executors that wrote them. The result has two tasks.', j1: [['Map side · shuffle 1', 'idle'], ['Result · 2 tasks', 'idle']], j2: null, outputs: 0, tasks: 0 },
+        { title: 'The map side writes its outputs', text: 'Four map tasks run. Each one writes its output for the reducers and reports it to the driver.', j1: [['Map side · shuffle 1', 'run'], ['Result · 2 tasks', 'idle']], j2: null, outputs: 0, tasks: 0 },
+        { title: 'All four outputs are registered', text: 'The driver records four of four outputs. The map side is done, and its outputs remain on the executors.', j1: [['Map side · shuffle 1', 'done'], ['Result · 2 tasks', 'idle']], j2: null, outputs: 4, tasks: 4 },
+        { title: 'Job 1 finishes', text: 'The result stage fetches the outputs and runs its two tasks.', j1: [['Map side · shuffle 1', 'done'], ['Result · 2 tasks', 'run']], j2: null, outputs: 4, tasks: 4 },
+        { title: 'Job 2 reuses the outputs', text: 'count() needs the same shuffle. The planner finds four of four outputs still registered, so the map side is skipped and only the new result waits to run.', j1: [['Map side · shuffle 1', 'done'], ['Result · 2 tasks', 'done']], j2: [['Map side · shuffle 1', 'skip'], ['Result · 2 tasks', 'waiting']], outputs: 4, tasks: 6 },
+        { title: 'Only the new result runs', text: 'Only the two result tasks of job 2 run. The shuffle work is not repeated.', j1: [['Map side · shuffle 1', 'done'], ['Result · 2 tasks', 'done']], j2: [['Map side · shuffle 1', 'skip'], ['Result · 2 tasks', 'run']], outputs: 4, tasks: 8 },
+        { title: 'A lost output brings back one task', text: 'An executor holding one map output dies, so outputs fall to three of four. The skip no longer holds. The planner resubmits only the missing map task before the result can run.', j1: [['Map side · shuffle 1', 'done'], ['Result · 2 tasks', 'done']], j2: [['Map side · shuffle 1', 'rerun'], ['Result · 2 tasks', 'waiting']], outputs: 3, tasks: 8 }
+      ]
+    },
+    edges: [
+      E('An executor with map outputs is lost', 'The skip stops at the missing output.', 'Outputs live on the executor that wrote them. When that executor dies, some outputs disappear, and the stage is no longer complete.', 'The planner resubmits only the missing map tasks. Surviving outputs are reused.'),
+      E('Shuffle files are cleaned up', 'The skip needs the outputs to still exist.', 'Shuffle files are removed when the application no longer needs them, for example after a long idle time or through external cleanup.', 'Spark recomputes the map side. Cache the result if reuse must survive a long gap.')
+    ]
+  };
+
+  ST['stages:5'] = {
+    trigger: 'A join runs on two inputs that may already be laid out by the same key, such as two bucketed tables.',
+    command: 'spark.table("orders").join(spark.table("customers"), "id").explain()',
+    expect: 'The plan shows the join with no exchange under either input when the layouts match.',
+    sim: {
+      kind: 'copart',
+      steps: [
+        { title: 'Two tables, one join', text: 'orders and customers join on id. Spark cannot see how either side is laid out, so it must assume the rows are scattered.', a: { name: 'orders', tag: 'layout unknown', parts: 8, set: false }, b: { name: 'customers', tag: 'layout unknown', parts: 8, set: false }, plan: [], moved: 'not planned yet' },
+        { title: 'Without a match: exchange both sides', text: 'Each side is hashed by id and written out, then read back by the join. That makes three stages. Every row of both tables moves across the network.', a: { name: 'orders', tag: 'layout unknown', parts: 8, set: false }, b: { name: 'customers', tag: 'layout unknown', parts: 8, set: false }, plan: [{ name: 'orders → hash(id)', kind: 'out' }, { name: 'customers → hash(id)', kind: 'out' }, { name: 'join + collect', kind: 'in' }], moved: 'every row, both sides' },
+        { title: 'Matching layout: partition i meets partition i', text: 'Both tables are laid out by hash(id) into 8 partitions, with the same partitioner. Each join task reads partition i of orders and partition i of customers directly.', a: { name: 'orders', tag: 'hash(id) % 8', parts: 8, set: true }, b: { name: 'customers', tag: 'hash(id) % 8', parts: 8, set: true }, plan: [{ name: 'join + collect', kind: 'local' }], moved: 'nothing' },
+        { title: 'One side changes its partition count', text: 'customers is now laid out with 16 partitions, so the partitioners no longer match. Spark exchanges customers again. orders can stay where it is, but the join is two stages once more.', a: { name: 'orders', tag: 'hash(id) % 8', parts: 8, set: true }, b: { name: 'customers', tag: 'hash(id) % 16', parts: 16, set: false }, plan: [{ name: 'customers → hash(id) % 8', kind: 'out' }, { name: 'join + collect', kind: 'in' }], moved: 'customers only' }
+      ]
+    },
+    edges: [
+      E('Bucket counts differ', 'The exchange comes back.', 'One table uses 8 buckets and the other uses 16. The layouts do not match, so Spark exchanges the side that does not fit.', 'Rebuild one table with the same bucket count and key. Then check explain() again.'),
+      E('The layout is trusted, not checked', 'A wrong layout gives wrong joins.', 'Spark trusts the bucket metadata. If files were written with another key or partitioner, the join can return wrong rows without an error.', 'Write both tables with the same job and check their layout in the catalog before joining.')
+    ]
+  };
+
+  ST['stages:6'] = {
+    trigger: 'A stage is planned with a partition count that differs from the number of executor slots.',
+    command: 'df.repartition(12).count()  # 4 cores: 12 tasks run in 3 waves',
+    expect: 'The stage has one task per partition. The slots set how many run together, so the number of waves is partitions divided by slots, rounded up.',
+    sim: {
+      kind: 'waves',
+      steps: [
+        { title: 'Count the partitions', text: 'Stage 1 reads 12 partitions. Spark makes one task per partition, so the stage has 12 tasks. The executors offer four slots.', parts: 12, slots: 4, started: false, done: 0 },
+        { title: 'Wave 1 fills all four slots', text: 'Four tasks start at once, one in each slot. The other eight wait in line for a free slot.', parts: 12, slots: 4, started: true, done: 0 },
+        { title: 'Wave 2 starts as slots free up', text: 'Each slot takes its next task as soon as its last one finishes. The second wave is four more tasks.', parts: 12, slots: 4, started: true, done: 1 },
+        { title: 'Wave 3 is the last', text: 'The third wave runs the final four tasks. Twelve tasks on four slots take three rounds.', parts: 12, slots: 4, started: true, done: 2 },
+        { title: 'Everything is done', text: 'All 12 tasks finished in three waves. More slots would shorten the stage. More partitions help only while they outnumber the slots.', parts: 12, slots: 4, started: true, done: 3 },
+        { title: 'repartition(6): 6 tasks, two waves', text: 'Six tasks now run. Four run in wave 1, and only two run in wave 2. Two slots sit idle in that second wave.', parts: 6, slots: 4, started: true, done: 0 },
+        { title: 'Two partitions leave slots idle', text: 'With 2 partitions there is one wave, and two of the four slots never get work. More partitions, not more executors, would put them to use.', parts: 2, slots: 4, started: true, done: 0 }
+      ]
+    },
+    edges: [
+      E('Too few partitions for the slots', 'Slots sit idle for the whole stage.', 'A stage with 2 tasks on 8 slots leaves 6 slots idle until it ends.', 'Raise the partition count to at least the slot count, ideally a multiple of it.'),
+      E('Too many tiny partitions', 'Scheduling overhead dominates.', 'A stage with 20,000 tiny partitions spends more time starting tasks than doing real work.', 'Coalesce, or set a target size, so each task reads a useful amount of data.')
     ]
   };
 

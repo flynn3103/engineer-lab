@@ -330,7 +330,38 @@
   Resubmitting --> Running: missing tasks relaunched
   Running --> Failed: attempts exhausted
   Complete --> [*]
-  Failed --> [*]` }] }
+  Failed --> [*]` }] },
+      { title: 'UC-03 · A shared parent stage is planned once', intro: 'Two branches of one graph both need the same shuffle. The planner keeps a memo of stages it has made, so the shared parent is linked twice and run once.', diagrams: [{ kind: FLOW, title: 'Diamond plan', src: `flowchart TD
+  D["Shuffle 1: read + reduceByKey"] --> A["Branch A: map"]
+  D --> B["Branch B: filter"]
+  A -- "shuffle" --> R["Result: join + collect"]
+  B -- "shuffle" --> R
+  M["Planner memo: D already has a stage?"] -. "yes: link it, plan nothing new" .-> D` }] },
+      { title: 'UC-04 · A second job skips a finished shuffle', intro: 'Two actions run on the same dataset. The map outputs from the first job are still registered, so the second job does not run that stage again.', diagrams: [{ kind: SEQ, title: 'Two jobs, one shuffle', src: `sequenceDiagram
+  participant U as Your code
+  participant D as Driver
+  participant E as Executors
+  U->>D: job 1: collect()
+  D->>E: run map side (4 tasks)
+  E-->>D: 4 of 4 outputs registered
+  D->>E: run result (2 tasks)
+  U->>D: job 2: count()
+  D->>D: map side has 4 of 4 outputs, skip it
+  D->>E: run only the result (2 tasks)
+  E-->>U: count` }] },
+      { title: 'UC-05 · A join with matching layouts adds no exchange', intro: 'When both sides are already partitioned by the same key and partition count, each join task reads matching partitions directly. The stage and its exchange disappear.', diagrams: [{ kind: FLOW, title: 'Two plans for one join', src: `flowchart LR
+  subgraph S1["Layouts unknown"]
+    A1["orders"] -- "exchange" --> J1["join stage"]
+    B1["customers"] -- "exchange" --> J1
+  end
+  subgraph S2["Layouts match"]
+    A2["orders: hash(id) % 8"] -- "partition i to i" --> J2["join stage"]
+    B2["customers: hash(id) % 8"] -- "partition i to i" --> J2
+  end` }] },
+      { title: 'UC-06 · Tasks follow partitions, not slots', intro: 'A stage makes one task per partition. Slots decide only how many of those tasks run at the same time, in waves.', diagrams: [{ kind: FLOW, title: 'Partitions to waves', src: `flowchart LR
+  P["12 partitions"] --> T["12 tasks"]
+  T --> S["4 slots"]
+  S --> W["3 waves of 4 tasks"]` }] }
     ],
     hard: { title: 'Why can a reducer not start early?', body: 'Step through producer outputs becoming available and see which stage unlocks, and why task count is not slot count.' }
   };

@@ -1,0 +1,115 @@
+/* Stage animations (engine-stagesim.js). Colours come from the course tokens, so light and dark themes both work. */
+.sg-stage{display:grid;gap:12px;min-width:0}
+.sg-empty{margin:0;font:600 12px var(--mono);color:var(--mut)}
+
+/* UC-01: operator chain and stage cards */
+.sg-chain{display:flex;align-items:center;flex-wrap:wrap;gap:6px;overflow-x:auto;background:var(--card);border:var(--ink-line);border-radius:14px;padding:16px 14px;box-shadow:var(--shadow)}
+.sg-node{flex:none;display:grid;gap:2px;min-width:104px;border:var(--ink-line);border-radius:12px;padding:8px 12px;background:var(--soft);transition:background .3s}
+.sg-node small{font:700 10px var(--mono);color:var(--mut)}
+.sg-node b{font:700 13px var(--mono);color:var(--ink)}
+.sg-node.now{outline:2px solid var(--ink);outline-offset:3px}
+.sg-t0{background:var(--p0)}.sg-t1{background:var(--p1)}.sg-t2{background:var(--p2)}
+.sg-gap{flex:none;font:600 11px var(--mono);color:var(--mut);padding:0 2px}
+.sg-gap.wide{color:var(--ink);background:var(--p5);border:1.5px dashed var(--ink);border-radius:999px;padding:2px 9px}
+
+.sg-cards{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.sg-card{display:grid;gap:6px;align-content:start;background:var(--card);border:var(--ink-line);border-radius:12px;padding:10px 12px;box-shadow:var(--shadow);transition:background .3s,opacity .3s}
+.sg-card b{font:700 13px/1.4 var(--mono);color:var(--ink)}
+.sg-card em{justify-self:start;font:700 10px var(--mono);font-style:normal;text-transform:uppercase;letter-spacing:.06em;color:var(--ink);border:1.5px solid var(--ink);border-radius:999px;padding:1px 8px;background:var(--p4)}
+.sg-card.building em,.sg-card.walking em{background:var(--p4)}
+.sg-card.built em{background:var(--p0)}
+.sg-card.running em{background:var(--p2)}
+.sg-card.waiting em,.sg-card.new em{background:var(--p7)}
+.sg-card.duplicate{background:var(--p5);opacity:.85}
+.sg-card.duplicate b{text-decoration:line-through}
+.sg-card.shuffle em{background:var(--p5)}
+.sg-card.join em{background:var(--p4)}
+.sg-card.local em{background:var(--p2)}
+.sg-chips{display:flex;gap:5px;flex-wrap:wrap}
+.sg-chips span{font:600 11.5px var(--mono);color:var(--ink);background:var(--soft);border:1px solid var(--ink);border-radius:6px;padding:1px 7px}
+
+/* UC-02: producer tiles, the driver's gate and the child stage */
+.sg-gate{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,.8fr);gap:12px;align-items:stretch}
+.sg-box,.sg-gatebox{display:grid;gap:8px;align-content:start;background:var(--card);border:var(--ink-line);border-radius:14px;padding:12px;box-shadow:var(--shadow);min-width:0;transition:background .3s}
+.sg-box b,.sg-gatebox b{font:700 13px var(--mono);color:var(--ink)}
+.sg-box small,.sg-gatebox small{font:600 11px var(--mono);color:var(--mut)}
+.sg-box.running{background:var(--p0)}
+.sg-box.done{background:var(--p2)}
+.sg-box.resubmitting{background:var(--p5)}
+.sg-box.waiting,.sg-box.runnable{background:var(--p7)}
+.sg-box.runnable{background:var(--p2)}
+.sg-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.sg-tile{display:grid;gap:2px;border:var(--ink-line);border-radius:10px;padding:6px 8px;background:var(--soft);transition:background .3s}
+.sg-tile span{font:700 12px var(--mono);color:var(--ink)}
+.sg-tile em{font:600 11px var(--mono);font-style:normal;color:var(--mut)}
+.sg-tile.done{background:var(--p2)}
+.sg-tile.run{background:var(--p4)}
+.sg-tile.lost{background:var(--p5)}
+.sg-tile.rerun{background:var(--p0)}
+.sg-bar{height:12px;border:1.5px solid var(--ink);border-radius:999px;overflow:hidden;background:var(--card)}
+.sg-bar span{display:block;height:100%;background:var(--p2);transition:width .3s}
+.sg-gatebox{align-content:center;justify-items:stretch}
+.sg-gatebox.open{background:var(--p2)}
+.sg-gatebox.shut{background:var(--p5)}
+.sg-gatebox strong{font:700 22px var(--mono);color:var(--ink)}
+.sg-msg{font:600 13px/1.6 var(--mono);color:var(--ink);background:var(--p5);border:var(--ink-line);border-radius:12px;padding:8px 14px}
+
+/* UC-03: the diamond and the planner memo */
+.sg-dia{display:grid;gap:8px;justify-items:center;background:var(--card);border:var(--ink-line);border-radius:14px;padding:16px 12px;box-shadow:var(--shadow)}
+.sg-row{display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
+.sg-op{display:grid;gap:2px;justify-items:center;min-width:150px;border:var(--ink-line);border-radius:12px;padding:8px 12px;background:var(--soft);transition:background .3s,outline .2s}
+.sg-op b{font:700 13px var(--mono);color:var(--ink)}
+.sg-op small{font:600 11px var(--mono);color:var(--mut)}
+.sg-op.planned{background:var(--p0)}
+.sg-op.reused{background:var(--p4);outline:2px solid var(--ink);outline-offset:3px}
+.sg-op.running{background:var(--p2)}
+.sg-op.done{background:var(--p2);opacity:.8}
+.sg-arrow{font:700 16px var(--mono);color:var(--ink)}
+.sg-memo{display:grid;gap:8px;background:var(--soft);border:var(--ink-line);border-radius:12px;padding:10px 14px}
+.sg-memo b{font:700 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}
+
+/* UC-04: jobs as rows of stages, and the outputs bar */
+.sg-jobs{display:grid;gap:10px}
+.sg-job{display:grid;gap:8px;background:var(--card);border:var(--ink-line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow)}
+.sg-job b{font:700 13px var(--mono);color:var(--ink)}
+.sg-job>small{font:600 12px var(--mono);color:var(--mut)}
+.sg-stages{display:flex;gap:8px;flex-wrap:wrap}
+.sg-st{display:grid;gap:2px;min-width:170px;border:var(--ink-line);border-radius:10px;padding:8px 12px;background:var(--soft);font:700 12px/1.4 var(--mono);color:var(--ink);transition:background .3s,opacity .3s}
+.sg-st small{font:700 10px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--mut)}
+.sg-st.run{background:var(--p4)}
+.sg-st.done{background:var(--p2)}
+.sg-st.skip{background:var(--p7)}
+.sg-st.skip b,.sg-st.skip{text-decoration:none}
+.sg-st.rerun{background:var(--p5)}
+.sg-st.waiting{opacity:.75}
+.sg-outputs{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;background:var(--card);border:var(--ink-line);border-radius:14px;padding:12px 14px}
+.sg-outputs b{font:700 12px var(--mono);color:var(--ink);text-transform:uppercase;letter-spacing:.06em}
+.sg-outputs strong{font:700 16px var(--mono);color:var(--ink)}
+
+/* UC-05: two inputs with their partition cells, then the join plan */
+.sg-data{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:center}
+.sg-ds{display:grid;gap:8px;background:var(--card);border:var(--ink-line);border-radius:14px;padding:12px;box-shadow:var(--shadow);min-width:0;transition:background .3s}
+.sg-ds b{font:700 13px var(--mono);color:var(--ink)}
+.sg-ds small{font:600 11px var(--mono);color:var(--mut)}
+.sg-ds.set{background:var(--p2)}
+.sg-cells{display:grid;grid-template-columns:repeat(auto-fill,minmax(14px,1fr));gap:4px}
+.sg-cells i{height:16px;border:1.5px solid var(--ink);border-radius:3px;background:var(--card)}
+.sg-ds.set .sg-cells i{background:var(--p0)}
+.sg-join{font:700 26px var(--mono);color:var(--ink)}
+
+/* UC-06: one column per wave, one cell per slot */
+.sg-waves{display:grid;gap:10px;overflow-x:auto;justify-content:start;background:var(--card);border:var(--ink-line);border-radius:14px;padding:14px;box-shadow:var(--shadow)}
+.sg-wave{display:grid;gap:6px;align-content:start}
+.sg-wave>small{font:700 11px var(--mono);color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.sg-cell{border:var(--ink-line);border-radius:8px;padding:9px 6px;text-align:center;font:600 12px var(--mono);color:var(--ink);background:var(--soft);transition:background .3s}
+.sg-cell.done{background:var(--p2)}
+.sg-cell.run{background:var(--p4);outline:2px solid var(--ink);outline-offset:2px}
+.sg-cell.wait{background:var(--card);color:var(--mut)}
+.sg-cell.idle{background:repeating-linear-gradient(135deg,transparent 0 4px,color-mix(in srgb,var(--ink) 22%,transparent) 4px 6px);color:var(--mut);border-style:dashed}
+
+@media (max-width:700px){
+  .sg-gate,.sg-data{grid-template-columns:1fr}
+  .sg-outputs{grid-template-columns:1fr}
+  .sg-join{justify-self:center}
+}
+@media (prefers-reduced-motion:reduce){.sg-node,.sg-card,.sg-tile,.sg-bar span,.sg-st,.sg-op,.sg-cell,.sg-ds{transition:none}}

@@ -119,6 +119,7 @@
       if (window.SparkCompare) window.SparkCompare.mount($('page'));
       if (window.SparkPipe) window.SparkPipe.mount($('page'));
       if (window.SparkLineage) window.SparkLineage.mount($('page'));
+      if (window.SparkStageSim) window.SparkStageSim.mount($('page'));
     }
     function renderStep() {
       const phaseFocus = $('phase-nav').contains(document.activeElement);
