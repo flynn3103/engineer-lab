@@ -2,7 +2,7 @@
 window.COURSE = {
   name: 'Redis',
   kick: '11 chapters · problem-based · Redis 7.2+',
-  lead: `A marketplace keeps sessions, carts, a leaderboard and an order-event queue in Redis. Its production failures come from one executor that a slow command can block, memory limits that refuse writes, persistence and replication windows that can lose acknowledged data, and a cluster that splits keys into slots. Each chapter starts from one of these incidents, asks you to predict the outcome, then shows the mechanism step by step.`,
+  lead: `A marketplace keeps sessions, carts, a leaderboard and an order-event queue in Redis. Its production failures come from one executor that a slow command can block, memory limits that refuse writes, persistence and replication windows that can lose acknowledged data, and a cluster that splits keys into slots. Each chapter starts from one of these incidents, asks you to predict the outcome, then shows the mechanism step by step. Prefer a top-down view? Read <a href="design/design.html">Redis as a system design</a>: requirements, estimates and 25 use cases.`,
   chapters: [
 {
   title: 'RESP and the Event Loop',

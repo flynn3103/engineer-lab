@@ -1743,5 +1743,15 @@ window.SITE_TECH_INDEX = [
 "olap"
 ],
 "id": 115
+},
+{
+  "type": "Tour",
+  "system": "redis",
+  "title": "Redis as a system design: 9 features, 25 use cases",
+  "summary": "Design an in-memory data server: problem, requirements, estimates and high-level design, then each feature walked through use cases with a step-by-step picture.",
+  "body": "RESP framing, pipelining, slow commands, listpack encodings, skip list, incremental rehash, TTL expiry, sampled LRU, noeviction, RDB fork copy-on-write, AOF everysec, AOF rewrite, PSYNC backlog, async replication loss, WAIT, Sentinel quorum and election, split brain, hash slots, MOVED and ASK, CROSSSLOT, MULTI and WATCH, streams consumer groups, Pub/Sub.",
+  "url": "techstack/redis/design/design.html",
+  "tags": ["tour", "system design", "use cases"],
+  "id": 122
 }
 ];
