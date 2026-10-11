@@ -59,7 +59,7 @@ RD.spec = {
 
 RD.features = [
   {
-    id: 'proto', name: 'Protocol and event loop',
+    id: 'proto', tag: 'event loop', name: 'Protocol and event loop',
     summary: 'How bytes become commands, why one executor makes every command atomic, and what one slow command costs everyone.',
     goal: 'Turn a TCP byte stream into complete commands and run them in order with low latency.',
     scope: [['RESP framing and the client query buffer', 'Pipelining', 'The single executor and what blocks it'], ['TLS, ACLs', 'Client library behaviour']],
@@ -69,7 +69,7 @@ RD.features = [
     decisions: [['Threads?', 'One executor', 'No locks, easy reasoning; CPU-bound commands cannot use more cores.'], ['Framing?', 'Length-prefixed RESP', 'Partial data is detectable; binary-safe; costs a few bytes per argument.']]
   },
   {
-    id: 'data', name: 'Data structures and encodings',
+    id: 'data', tag: 'encodings', name: 'Data structures and encodings',
     summary: 'Typed values with compact encodings that switch to bigger ones at set thresholds, and a hash table that grows without a pause.',
     goal: 'Give O(1) or O(log N) operations per type while keeping small values cheap in memory.',
     scope: [['Hash, sorted set, and the main dict', 'Encoding thresholds', 'Incremental rehash'], ['Every type in detail', 'Module types']],
@@ -79,7 +79,7 @@ RD.features = [
     decisions: [['Compact form?', 'listpack up to a limit', 'Less memory and good cache use; O(N) scan, so the limit stays small.'], ['Resize?', 'Two tables, move one bucket per operation', 'No long pause; briefly holds two tables.']]
   },
   {
-    id: 'mem', name: 'Expiry, eviction and the memory bound',
+    id: 'mem', tag: 'eviction', name: 'Expiry, eviction and the memory bound',
     summary: 'How keys leave: by TTL, by eviction under pressure, or by the server refusing writes.',
     goal: 'Keep memory at or under a limit without a global scan or a per-key list.',
     scope: [['TTL expiry (lazy and active)', '<code>maxmemory</code> and policies', 'Sampled LRU'], ['LFU tuning', 'Memory fragmentation']],
@@ -89,7 +89,7 @@ RD.features = [
     decisions: [['Find expired keys?', 'Lazy on access plus sampled active sweep', 'No timer per key; a few expired keys linger in memory.'], ['Choose victims?', 'Sample 5 keys, keep a pool of 16', 'Cheap and good enough; not the exact oldest.']]
   },
   {
-    id: 'persist', name: 'Persistence: RDB and AOF',
+    id: 'persist', tag: 'persistence', name: 'Persistence: RDB and AOF',
     summary: 'Snapshots by fork and an append-only log, and the exact loss window each leaves.',
     goal: 'Recover the dataset after a restart with a bounded, known loss.',
     scope: [['RDB snapshot by fork', 'AOF append and fsync policy', 'AOF rewrite (7.0 multi-part)'], ['Backup tooling', 'Cloud snapshots']],
@@ -99,7 +99,7 @@ RD.features = [
     decisions: [['Snapshot how?', 'fork + copy-on-write', 'No pause beyond the fork; memory can double under heavy writes.'], ['fsync when?', '<code>everysec</code> (default)', 'About a second of loss for most of the throughput.']]
   },
   {
-    id: 'repl', name: 'Replication',
+    id: 'repl', tag: 'replication', name: 'Replication',
     summary: 'A replica applies the primary write stream; a backlog lets it catch up after a gap, and acknowledged writes can still be lost.',
     goal: 'Keep copies for failover and read scale with a cheap catch-up path.',
     scope: [['PSYNC and the backlog', 'Async acknowledgement', 'Offsets and WAIT'], ['Diskless internals', 'Chained replicas']],
@@ -109,7 +109,7 @@ RD.features = [
     decisions: [['Acknowledge writes?', 'Before replicas confirm', 'Low latency; failover can drop acknowledged writes.'], ['Catch up how?', 'Partial resync from backlog, else full RDB', 'Cheap when the backlog is large enough.']]
   },
   {
-    id: 'ha', name: 'High availability with Sentinel',
+    id: 'ha', tag: 'sentinel', name: 'High availability with Sentinel',
     summary: 'Several Sentinels agree a primary is down, elect a leader, and promote a replica.',
     goal: 'Replace a failed primary without a human, and avoid two primaries.',
     scope: [['SDOWN, ODOWN, quorum', 'Election and replica choice', 'Split brain limits'], ['Cluster failover', 'Client library discovery details']],
@@ -119,7 +119,7 @@ RD.features = [
     decisions: [['Who decides?', 'An odd number of Sentinels', 'Tolerates a minority loss; needs three machines in separate failure domains.'], ['Data safety?', 'Not guaranteed', 'Async replication means writes after the last replicated offset are lost.']]
   },
   {
-    id: 'cluster', name: 'Sharding with Redis Cluster',
+    id: 'cluster', tag: 'cluster', name: 'Sharding with Redis Cluster',
     summary: 'Every key maps to one of 16384 slots; nodes own slot ranges and redirect clients that ask the wrong one.',
     goal: 'Scale writes and memory by splitting the keyspace, with online resharding.',
     scope: [['Key to slot', 'MOVED and ASK', 'Multi-key rules and coverage'], ['Gossip internals', 'Cluster bus protocol']],
@@ -129,7 +129,7 @@ RD.features = [
     decisions: [['Placement?', 'Fixed 16384 hash slots', 'Resharding moves whole slots; no consistent-hash ring to recompute.'], ['Coverage?', '<code>cluster-require-full-coverage yes</code>', 'Safe by default; one lost shard halts all queries.']]
   },
   {
-    id: 'msg', name: 'Transactions, streams and messaging',
+    id: 'msg', tag: 'messaging', name: 'Transactions, streams and messaging',
     summary: 'What MULTI really guarantees, how a stream keeps a durable work queue, and why Pub/Sub can lose messages.',
     goal: 'Give clients atomic grouping and two ways to move messages between processes.',
     scope: [['MULTI/EXEC/WATCH', 'Streams with consumer groups', 'Pub/Sub'], ['Lua and Functions internals', 'Modules']],
@@ -139,7 +139,7 @@ RD.features = [
     decisions: [['Transactions?', 'Queue then run, no rollback', 'Simple and fast; the client must handle partial failure.'], ['Messaging?', 'Two tools: log (stream) and broadcast (Pub/Sub)', 'Pick durability or simplicity per use.']]
   },
   {
-    id: 'e2e', name: 'End to end',
+    id: 'e2e', tag: 'end to end', name: 'End to end',
     summary: 'One write, followed through every layer, with the places it can be lost marked.',
     goal: 'Prove the parts fit by following a single <code>SET cart:42</code> from client to replica and disk.',
     scope: [['One write path', 'Where each loss window sits'], ['Failure injection']],

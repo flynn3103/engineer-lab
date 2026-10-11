@@ -1,16 +1,29 @@
-/* Router and page renderer for the Redis system-design course.
+/* Shell, router and page templates for the Redis system-design course.
+ * Layout follows the Spark course (techstack/spark): sticky top bar, left navigation with nested use cases, page head,
+ * jump bar, numbered sections, feature and use-case cards, pager.
  * Routes: #/ (overview) · #/f/N (feature) · #/f/N/u/M (use case). N and M start at 1.
- * Content lives in spec.js (RD.spec, RD.features) and uc-*.js (RD.uc[featureId]); pictures in paint.js (RD.PAINT). */
+ * Content lives in spec.js, uc-*.js and diagrams.js; pictures in paint.js. */
 (function () {
   'use strict';
   const RD = window.RD;
   const app = document.getElementById('app');
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  // Narration text may carry <code> and <b>; everything else is escaped by the author, so it is passed through.
-  const li = a => '<ul class="rd-list">' + a.map(x => '<li>' + x + '</li>').join('') + '</ul>';
-  const table = (head, rows) => '<table class="rd-t"><thead><tr>' + head.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>' +
-    rows.map(r => '<tr>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+  // Narration and spec text carry a little inline markup (<code>, <b>) written by the author, so it is passed through.
+  const list = a => '<ul>' + a.map(x => '<li>' + x + '</li>').join('') + '</ul>';
+  const table = (head, rows) => '<div class="table-scroll"><table><thead><tr>' + head.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>' +
+    rows.map(r => '<tr>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>';
   const feats = RD.features;
+  const ucs = f => RD.uc[f.id] || [];
+  const pad = n => String(n).padStart(2, '0');
+  const TONES = ['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6'];
+  const tone = i => 'var(--' + TONES[i % TONES.length] + ')';
+  const firstSentence = t => { const p = String(t).replace(/<[^>]+>/g, ''); return p.length <= 110 ? p : (p.match(/^.*?[.!?](\s|$)/) || [p])[0].trim(); };
+  const href = (n, m) => '#/' + (n ? 'f/' + n + (m ? '/u/' + m : '') : '');
+  const section = (id, n, title, body, sub) => '<section class="sec" id="' + id + '"><h2><span>' + pad(n) + '</span>' + title + '</h2>' + (sub ? '<p class="sub">' + sub + '</p>' : '') + body + '</section>';
+  const chips = items => '<div class="chips">' + items.map(c => '<span>' + esc(c) + '</span>').join('') + '</div>';
+  const jump = items => '<nav class="jump" aria-label="On this page">' + items.map(([id, l]) => '<a href="#' + id + '" data-jump>' + l + '</a>').join('') + '</nav>';
+
+  /* ---------- diagrams (Mermaid, loaded on demand) ---------- */
   const diagram = (d, hero) => '<figure class="diagram' + (hero ? ' diagram-hero' : '') + '"><figcaption><b>' + esc(d.kind) + '</b>' + (d.title ? ' · ' + esc(d.title) : '') +
     '</figcaption><div class="diagram-body" data-mermaid><pre class="diagram-src">' + esc(d.src.trim()) + '</pre></div></figure>';
   let loading;
@@ -26,7 +39,7 @@
     });
     return loading;
   }
-  /* Mermaid cannot read CSS variables, so resolve the palette at draw time. */
+  /* Mermaid cannot read CSS variables, so resolve the site palette at draw time. */
   function themeVars() {
     const cs = getComputedStyle(document.documentElement), v = n => cs.getPropertyValue(n).trim();
     const ink = v('--ink'), card = v('--card'), line = v('--line');
@@ -37,6 +50,14 @@
       noteBkgColor: v('--p4'), noteBorderColor: ink, noteTextColor: ink, activationBkgColor: v('--p2'), activationBorderColor: ink, sequenceNumberColor: card,
       stateBkg: v('--p2'), stateLabelColor: ink, altBackground: v('--soft') };
   }
+  /* A diamond grows with its label width, so wrap long decision labels onto short lines. */
+  const wrapDecisions = src => src.replace(/\{"([^"]*)"\}/g, (m, t) => {
+    if (t.includes('<br')) return m;
+    const lines = []; let cur = '';
+    for (const w of t.split(' ')) { if (cur && (cur + ' ' + w).length > 16) { lines.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w; }
+    if (cur) lines.push(cur);
+    return '{"' + lines.join('<br/>') + '"}';
+  });
   let counter = 0;
   async function draw(container) {
     const nodes = [...container.querySelectorAll('[data-mermaid]:not([data-drawn])')];
@@ -49,7 +70,7 @@
     m.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base', themeVariables: themeVars(), flowchart: { htmlLabels: true, curve: 'basis', padding: 8 }, sequence: { useMaxWidth: true, mirrorActors: false } });
     for (const n of nodes) {
       try {
-        const { svg } = await m.render('mmd-' + (++counter), n.querySelector('pre').textContent);
+        const { svg } = await m.render('mmd-' + (++counter), wrapDecisions(n.querySelector('pre').textContent));
         if (!n.isConnected) continue;
         n.innerHTML = svg; n.setAttribute('data-drawn', '1');
       } catch (e) {
@@ -59,123 +80,142 @@
       }
     }
   }
-  const ucs = f => RD.uc[f.id] || [];
 
-  function top(crumbs) {
-    return '<div class="rd-top"><a href="../../../index.html">Engineer Lab</a><span>/</span><a href="../course.html">Redis course</a><span>/</span>' +
-      crumbs.map((c, i) => i === crumbs.length - 1 ? '<span>' + c[0] + '</span>' : '<a href="' + c[1] + '">' + c[0] + '</a>').join('<span>/</span>') + '</div>';
+  /* ---------- page templates ---------- */
+  function featureCard(f, i) {
+    return '<a class="ccard" href="' + href(i + 1) + '"><div class="art" style="--p:' + tone(i) + '"><svg viewBox="0 0 200 90" aria-hidden="true"><rect x="22" y="22" width="156" height="46" rx="10" fill="var(--card)" stroke="var(--ink)" stroke-width="2"/>' +
+      '<text x="100" y="51" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="15" font-weight="700" fill="var(--ink)">' + esc(f.tag) + '</text></svg><span class="flag">' + pad(i + 1) + '</span></div>' +
+      '<div class="body"><h3>' + esc(f.name) + '</h3><p>' + f.summary + '</p><div class="chips"><span>' + ucs(f).length + ' use case' + (ucs(f).length > 1 ? 's' : '') + '</span></div></div></a>';
   }
-
-  function hldFlow() {
-    const box = (id, t, s) => '<a href="#/f/' + id + '"><b>' + t + '</b><small>' + s + '</small></a>';
-    return '<div class="rd-flow">' +
-      '<div><b>Clients</b><small>RESP over TCP, pipelines, pools</small></div>' +
-      box(1, '1 · Event loop', 'read, parse, run one command at a time') +
-      box(2, '2 · Data', 'dict + compact encodings') +
-      box(3, '3 · Memory', 'TTL, eviction, maxmemory') +
-      box(4, '4 · Persistence', 'RDB fork, AOF append') +
-      box(5, '5 · Replication', 'stream + backlog to replicas') +
-      box(6, '6 · Sentinel', 'detect, elect, promote') +
-      box(7, '7 · Cluster', '16384 slots across primaries') +
-      box(8, '8 · Messaging', 'MULTI, streams, Pub/Sub') +
-      '</div>';
+  function useCaseCards(f, n) {
+    return '<div class="ucgrid">' + ucs(f).map((u, i) => {
+      const kinds = [...new Set((RD.diagrams[f.id + ':' + (i + 1)] || []).map(d => d.kind.toLowerCase()))].concat(['picture']);
+      return '<a class="uccard" href="' + href(n, i + 1) + '"><span class="ucn">UC-' + pad(i + 1) + '</span><h3>' + esc(u.title) + '</h3><p>' + firstSentence(u.intro) + '</p>' +
+        '<div class="chips">' + kinds.map(k => '<span>' + esc(k) + '</span>').join('') + '</div><b class="go">Go deeper →</b></a>';
+    }).join('') + '</div>';
   }
 
   function overview() {
-    const s = RD.spec;
-    const total = feats.reduce((n, f) => n + ucs(f).length, 0);
-    return top([['Design an in-memory data server', '#/']]) +
-      '<div class="rd-kick">Redis ' + esc(s.version) + ' · system-design course</div>' +
-      '<h1>' + esc(s.title) + '</h1><p class="rd-lead">' + s.lead + '</p>' +
-      '<p><span class="rd-pill">' + feats.length + ' features</span><span class="rd-pill">' + total + ' use cases</span><span class="rd-pill">a picture for every use case</span></p>' +
-      '<h2>Overview</h2><div class="rd-card">' + s.overview.map(p => '<p>' + p + '</p>').join('') + '</div>' +
-      '<h2>Problem statement</h2><div class="rd-card"><table class="rd-t"><tbody>' + s.problem.map(r => '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td></tr>').join('') + '</tbody></table></div>' +
-      '<h2>Requirements</h2><div class="rd-two"><div class="rd-card"><h3>Functional</h3>' + li(s.fr) + '</div><div class="rd-card"><h3>Non-functional</h3>' + li(s.nfr) + '</div></div>' +
-      '<div class="rd-card" style="margin-top:12px"><b>Out of scope.</b> ' + s.out + '</div>' +
-      '<h2>Estimation</h2><p class="rd-src">Assumptions, not measurements. Replace each number with one from your own system.</p>' +
-      '<div class="rd-card">' + table(['Question', 'Calculation', 'Implication'], s.est) + '</div>' +
-      '<h2>High-level design</h2>' + diagram({ kind: 'Flow', title: 'The whole server', src: RD.hldOverall }, true) + '<div class="rd-card">' + hldFlow() + '<p class="rd-src" style="margin-top:10px">' + s.hldNote + '</p></div>' +
-      '<div class="rd-card" style="margin-top:12px">' + table(['Decision', 'Choice', 'Trade-off'], s.decisions) + '</div>' +
-      '<h2>Features</h2><div class="rd-grid">' + feats.map((f, i) =>
-        '<a class="rd-card rd-fcard" href="#/f/' + (i + 1) + '"><b><span class="rd-num">' + (i + 1) + '</span>' + esc(f.name) + '</b><small>' + f.summary + '</small>' +
-        '<div style="margin-top:8px">' + ucs(f).map(u => '<span class="rd-pill">' + esc(u.short || u.title) + '</span>').join('') + '</div></a>').join('') + '</div>' +
-      '<h2>How the facts were checked</h2><div class="rd-card">' + li(s.verify) + '</div>';
+    const s = RD.spec, total = feats.reduce((n, f) => n + ucs(f).length, 0);
+    const strip = t => t.replace(/^<b>[^<]*<\/b>\s*/, '');
+    const secs = [
+      ['overview', 'Overview', '<div class="two"><div><h3>What it is</h3><p>' + strip(s.overview[0]) + '</p></div><div><h3>Who does what</h3><p>' + strip(s.overview[1]) + '</p></div></div>'],
+      ['problem', 'Problem statement', '<p class="lead-problem">' + s.problem[0][1] + '</p><div class="two"><div><h3>Naive design</h3><p>' + s.problem[1][1] + '</p></div><div><h3>Fails when</h3><p>' + s.problem[2][1] + '</p></div></div><p class="note"><b>Principle.</b> ' + s.problem[3][1] + '</p>'],
+      ['spec', 'Functional and non-functional spec', '<div class="two"><div><h3>Functional requirements</h3>' + list(s.fr) + '</div><div><h3>Non-functional requirements</h3>' + list(s.nfr) + '</div></div><p class="note"><b>Out of scope.</b> ' + s.out + '</p>'],
+      ['estimate', 'Back-of-the-envelope estimation', '<p class="assume"><b>Assumptions.</b> These are assumptions, not measurements. Replace each number with one from your own system.</p>' + table(['Question', 'Calculation', 'Implication'], s.est)],
+      ['hld', 'High-level design', diagram({ kind: 'Flowchart', title: 'The whole server', src: RD.hldOverall }, true) + '<p class="caption">' + s.hldNote + '</p>' +
+        '<div class="rd-hld-links">' + feats.map((f, i) => '<a href="' + href(i + 1) + '">' + pad(i + 1) + ' · ' + esc(f.tag) + '</a>').join('') + '</div>' + table(['Decision', 'Choice', 'Trade-off'], s.decisions)]
+    ];
+    const nav = [['overview', 'Overview'], ['problem', 'Problem'], ['spec', 'Spec'], ['estimate', 'Estimation'], ['hld', 'High-level design'], ['features', 'Features'], ['checks', 'Checks']];
+    return '<header class="page-head"><p class="kick">OVERVIEW · SYSTEM DESIGN</p><h1>' + esc(s.title) + '</h1><p class="lead">' + s.lead + '</p>' +
+      chips([feats.length + ' features', total + ' use cases', 'Redis ' + s.version]) + '</header>' + jump(nav) +
+      secs.map((x, i) => section(x[0], i + 1, x[1], x[2])).join('') +
+      section('features', secs.length + 1, 'Features', '<div class="cgrid">' + feats.map(featureCard).join('') + '</div>', 'Pick a feature to see its own spec, design and use cases.') +
+      section('checks', secs.length + 2, 'How the facts were checked', '<div class="note">' + list(s.verify) + '</div>');
   }
 
   function feature(n) {
-    const f = feats[n - 1]; if (!f) return notFound();
+    const f = feats[n - 1];
     const prev = feats[n - 2], next = feats[n];
-    return top([['Features', '#/'], [esc(f.name), '#/f/' + n]]) +
-      '<div class="rd-kick">Feature ' + n + ' of ' + feats.length + '</div><h1>' + esc(f.name) + '</h1><p class="rd-lead">' + f.summary + '</p>' +
-      '<div class="rd-two"><div class="rd-card"><h3>Goal</h3><p>' + f.goal + '</p><h3>In scope</h3>' + li(f.scope[0]) + '<h3>Out of scope</h3>' + li(f.scope[1]) + '</div>' +
-      '<div class="rd-card"><h3>Functional requirements</h3>' + li(f.fr) + '<h3>Non-functional requirements</h3>' + li(f.nfr) + '</div></div>' +
-      '<h2>High-level design</h2>' + diagram({ kind: 'Flow', title: esc(f.name), src: RD.hld[f.id] }, true) + '<div class="rd-card">' + table(['Decision', 'Choice', 'Trade-off'], f.decisions) + '</div>' +
-      '<h2>Use cases</h2><div class="rd-grid">' + ucs(f).map((u, i) =>
-        '<a class="rd-card rd-fcard" href="#/f/' + n + '/u/' + (i + 1) + '"><b>UC-' + (i + 1) + ' · ' + esc(u.title) + '</b><small>' + u.intro + '</small></a>').join('') + '</div>' +
-      '<div class="rd-nav">' + (prev ? '<a href="#/f/' + (n - 1) + '">← ' + esc(prev.name) + '</a>' : '<span></span>') +
-      (next ? '<a href="#/f/' + (n + 1) + '">' + esc(next.name) + ' →</a>' : '<span></span>') + '</div>';
+    return '<header class="page-head"><p class="kick">FEATURE ' + pad(n) + ' · ' + esc(f.tag.toUpperCase()) + '</p><h1>' + esc(f.name) + '</h1><p class="lead">' + f.summary + '</p></header>' +
+      section('goal', 1, 'Goal and scope', '<div class="two"><div><h3>Goal</h3><p>' + f.goal + '</p></div><div><h3>Scope</h3>' + list(f.scope[0].map(x => 'In scope: ' + x).concat(f.scope[1].map(x => 'Out of scope: ' + x))) + '</div></div>') +
+      section('spec', 2, 'Functional and non-functional spec', '<div class="two"><div><h3>Functional requirements</h3>' + list(f.fr) + '</div><div><h3>Non-functional requirements</h3>' + list(f.nfr) + '</div></div>') +
+      section('hld', 3, 'High-level design', diagram({ kind: 'Flowchart', title: 'Components and flows', src: RD.hld[f.id] }, true) + table(['Decision', 'Choice', 'Trade-off'], f.decisions)) +
+      section('usecases', 4, 'Use cases', useCaseCards(f, n), 'Pick one to see how it works, step by step.') +
+      '<nav class="pager" aria-label="Previous and next feature"><a href="' + href(n > 1 ? n - 1 : 0) + '"><small>' + (prev ? 'PREVIOUS FEATURE' : 'BACK TO') + '</small><b>← ' + esc(prev ? prev.name : 'Overview') + '</b></a>' +
+      (next ? '<a class="next" href="' + href(n + 1) + '"><small>NEXT FEATURE</small><b>' + esc(next.name) + ' →</b></a>' : '') + '</nav>';
+  }
+
+  function edgeCard(e, i) {
+    return '<details class="edgecard"><summary><span class="en">' + (i + 1) + '</span><span class="et"><b>' + esc(e.t) + '</b><small>' + firstSentence(e.ctx) + '</small></span><span class="ex" aria-hidden="true"></span></summary>' +
+      '<div class="eb"><div><h4>Context</h4><p>' + e.ctx + '</p></div><div><h4>Solution</h4><p>' + e.fix + '</p></div></div></details>';
   }
 
   let player = null;
   function useCase(n, m) {
-    const f = feats[n - 1], u = f && ucs(f)[m - 1]; if (!u) return notFound();
-    const list = ucs(f);
-    const prevHref = m > 1 ? '#/f/' + n + '/u/' + (m - 1) : (n > 1 ? '#/f/' + (n - 1) + '/u/' + ucs(feats[n - 2]).length : null);
-    const nextHref = m < list.length ? '#/f/' + n + '/u/' + (m + 1) : (n < feats.length ? '#/f/' + (n + 1) + '/u/1' : null);
-    const html = top([[esc(f.name), '#/f/' + n], ['UC-' + m, '#/f/' + n + '/u/' + m]]) +
-      '<div class="rd-kick">Feature ' + n + ' · use case ' + m + ' of ' + list.length + '</div><h1>' + esc(u.title) + '</h1><p class="rd-lead">' + u.intro + '</p>' +
-      '<div class="rd-two"><div class="rd-card"><h3>Trigger</h3><p>' + u.trigger + '</p><h3>Expect</h3><p>' + u.expect + '</p></div>' +
-      '<div class="rd-card"><h3>Run</h3><pre>' + esc(u.run) + '</pre></div></div>' +
-      '<h2>Diagrams</h2>' + (RD.diagrams[f.id + ':' + m] || []).map(d => diagram(d)).join('') +
-      '<h2>Step by step</h2><div class="rd-card" id="rd-player"><div class="pv" id="rd-pic" aria-live="polite"></div>' +
-      '<div class="rd-step" id="rd-txt"></div><div class="rd-stat" id="rd-stat"></div>' +
-      '<div class="rd-btns"><button class="rd-btn" id="rd-back">← Back</button><button class="rd-btn pri" id="rd-next">Next →</button><button class="rd-btn" id="rd-reset">Restart</button><span class="rd-dots" id="rd-dots"></span></div></div>' +
-      '<h2>Edge cases</h2>' + u.edges.map(e => '<div class="rd-edge"><b>' + esc(e.t) + '</b><p><i>Context.</i> ' + e.ctx + '</p><p><i>Solution.</i> ' + e.fix + '</p></div>').join('') +
-      '<h2>Invariant</h2><div class="rd-inv">' + u.invariant + '</div>' +
-      '<p class="rd-src">Sources: ' + u.src + '</p>' +
-      '<div class="rd-nav">' + (prevHref ? '<a href="' + prevHref + '">← Previous use case</a>' : '<span></span>') +
-      (nextHref ? '<a href="' + nextHref + '">Next use case →</a>' : '<a href="#/">Back to overview</a>') + '</div>';
-    app.innerHTML = html + foot;
-    mountPlayer(u);
-    draw(app);
+    const f = feats[n - 1], L = ucs(f), u = L[m - 1];
+    const prev = L[m - 2], next = L[m];
+    return '<header class="page-head"><p class="kick">FEATURE ' + pad(n) + ' · USE CASE ' + pad(m) + '</p><h1>' + esc(u.title) + '</h1><p class="lead">' + u.intro + '</p></header>' +
+      section('trigger', 1, 'Trigger', '<p class="lead-problem">' + u.trigger + '</p><div class="cmd"><span>Run</span><code>' + esc(u.run) + '</code></div><p class="expect"><b>Expect.</b> ' + u.expect + '</p>') +
+      section('flow', 2, 'Diagrams', (RD.diagrams[f.id + ':' + m] || []).map(d => diagram(d, true)).join('')) +
+      section('steps', 3, 'Step by step', '<div class="rd-player"><div class="pv-stage"><div class="pv" id="rd-pic" aria-live="polite"></div></div>' +
+        '<div class="rd-inspector"><p class="kick" id="rd-kick"></p><h3 id="rd-title"></h3><p id="rd-text"></p><div class="rd-stat" id="rd-stat"></div></div>' +
+        '<div class="rd-controls" role="group" aria-label="Step controls"><button id="rd-reset" aria-label="Restart">↺</button><button id="rd-back">← Back</button><button id="rd-next" class="go">Next step →</button><span class="rd-dots" id="rd-dots"></span></div></div>',
+        'Press Next step to walk through it one move at a time. The arrow keys work too.') +
+      section('edges', 4, 'Edge cases and failure modes', '<div class="edges">' + u.edges.map(edgeCard).join('') + '</div>') +
+      section('rule', 5, 'Invariant', '<div class="invariant"><b>Must always hold</b><p>' + u.invariant + '</p></div><p class="sub" style="margin-top:14px">Sources: ' + u.src + '</p>') +
+      '<nav class="pager" aria-label="Use cases"><a href="' + (prev ? href(n, m - 1) : href(n)) + '"><small>' + (prev ? 'PREVIOUS USE CASE' : 'BACK TO') + '</small><b>← ' + esc(prev ? prev.title : f.name) + '</b></a>' +
+      (next ? '<a class="next" href="' + href(n, m + 1) + '"><small>NEXT USE CASE</small><b>' + esc(next.title) + ' →</b></a>' : '<a class="next" href="' + href(n) + '"><small>BACK TO</small><b>' + esc(f.name) + ' →</b></a>') + '</nav>';
   }
 
   function mountPlayer(u) {
-    const paint = RD.PAINT[u.kind];
-    const pic = document.getElementById('rd-pic'), txt = document.getElementById('rd-txt'), stat = document.getElementById('rd-stat'), dots = document.getElementById('rd-dots');
-    const back = document.getElementById('rd-back'), next = document.getElementById('rd-next'), reset = document.getElementById('rd-reset');
+    const paint = RD.PAINT[u.kind], $ = id => document.getElementById(id);
     let i = 0;
     function show() {
       const st = u.steps[i];
-      pic.innerHTML = paint(st.s, st);
-      txt.innerHTML = '<h3>' + (i + 1) + '. ' + st.t + '</h3><p>' + st.x + '</p>';
-      stat.innerHTML = st.stat || '&nbsp;';
-      dots.innerHTML = u.steps.map((_, k) => '<i class="' + (k === i ? 'on' : k < i ? 'done' : '') + '"></i>').join('');
-      back.disabled = i === 0; next.disabled = i === u.steps.length - 1;
+      $('rd-pic').innerHTML = paint(st.s, st);
+      $('rd-kick').textContent = 'STEP ' + (i + 1) + ' OF ' + u.steps.length;
+      $('rd-title').textContent = st.t;
+      $('rd-text').innerHTML = st.x;
+      $('rd-stat').innerHTML = st.stat || '&nbsp;';
+      $('rd-dots').innerHTML = u.steps.map((_, k) => '<i class="' + (k === i ? 'on' : k < i ? 'done' : '') + '"></i>').join('');
+      $('rd-back').disabled = i === 0; $('rd-next').disabled = i === u.steps.length - 1;
     }
-    back.onclick = () => { if (i > 0) { i--; show(); } };
-    next.onclick = () => { if (i < u.steps.length - 1) { i++; show(); } };
-    reset.onclick = () => { i = 0; show(); };
-    player = e => {
-      if (e.key === 'ArrowRight') next.click();
-      else if (e.key === 'ArrowLeft') back.click();
-    };
+    $('rd-back').onclick = () => { if (i > 0) { i--; show(); } };
+    $('rd-next').onclick = () => { if (i < u.steps.length - 1) { i++; show(); } };
+    $('rd-reset').onclick = () => { i = 0; show(); };
+    player = e => { if (e.key === 'ArrowRight') $('rd-next').click(); else if (e.key === 'ArrowLeft') $('rd-back').click(); };
     show();
   }
 
-  const foot = '<p class="rd-src" style="margin-top:40px">Built with the <a href="../../../skills.html?q=learn-technology-from-scratch">learn-technology-from-scratch</a> skill. Numbers marked as examples are assumptions, not measurements. Targets Redis 7.2.</p>';
-  function notFound() { return top([['Not found', '#/']]) + '<h1>Not found</h1><p><a href="#/">Back to the overview</a></p>'; }
+  const notFound = () => '<header class="page-head"><p class="kick">NOT FOUND</p><h1>No such page</h1></header><p><a href="#/">Back to the overview</a></p>';
+
+  /* ---------- shell ---------- */
+  app.className = 'rd-course';
+  app.innerHTML = '<a class="skip-link" href="#course-main">Skip to content</a>' +
+    '<header class="course-top"><button id="menu-toggle" aria-label="Show navigation" aria-controls="course-sidebar" aria-expanded="false">☰</button><nav aria-label="Breadcrumb" id="breadcrumb"></nav><span class="course-version">SYSTEM DESIGN · REDIS ' + esc(RD.spec.version) + '</span></header>' +
+    '<div class="course-layout"><aside class="course-sidebar" id="course-sidebar"><label class="search-label" for="course-search">Find a feature</label><input id="course-search" type="search" placeholder="Search features…"><nav id="chapter-nav" aria-label="Pages"></nav></aside>' +
+    '<main id="course-main" tabindex="-1"><article id="page"></article><footer class="course-foot">A model of Redis ' + esc(RD.spec.version) + ' for learning. Numbers marked as examples are assumptions, not measurements. This course was built with the <a href="../../../skills.html?q=learn-technology-from-scratch">learn-technology-from-scratch</a> skill.</footer></main></div>' +
+    '<button id="sidebar-scrim" class="sidebar-scrim" aria-label="Close navigation" hidden></button>';
+  const $ = id => document.getElementById(id);
+  let route = { n: 0, m: 0 };
+
+  function renderNav() {
+    const q = $('course-search').value.trim().toLowerCase();
+    const link = (h, text, cls, cur) => '<a href="' + h + '"' + (cur ? ' aria-current="page"' : '') + ' class="' + (cls || '') + '">' + text + '</a>';
+    const shown = feats.map((f, i) => [f, i]).filter(([f]) => !q || [f.name, f.summary, f.tag].some(x => x.toLowerCase().includes(q)));
+    $('chapter-nav').innerHTML = (q ? '' : '<p class="nav-group">Overview</p>' + link(href(0), '<span>◆</span><div><b>In-memory data server</b><small>The whole system on one page</small></div>', 'nav-item', !route.n)) +
+      '<p class="nav-group">Features</p>' + (shown.map(([f, i]) => link(href(i + 1), '<span>' + pad(i + 1) + '</span><div><b>' + esc(f.name) + '</b><small>' + f.summary + '</small></div>', 'nav-item', route.n === i + 1 && !route.m) +
+        (route.n === i + 1 ? '<div class="nav-uc">' + ucs(f).map((u, k) => link(href(i + 1, k + 1), esc(u.title), '', route.m === k + 1)).join('') + '</div>' : '')).join('') || '<p class="empty-state">No matching feature.</p>') +
+      '<p class="nav-group">Related</p>' + link('../course.html', '<span>↗</span><div><b>Problem-based course</b><small>11 chapters that start from incidents</small></div>', 'nav-item', false);
+  }
+  function renderCrumb() {
+    const parts = ['<a href="../../../tech.html">Tech Stack</a>', '<a href="' + href(0) + '">Redis</a>'];
+    const f = feats[route.n - 1];
+    if (f) parts.push(route.m ? '<a href="' + href(route.n) + '">' + esc(f.name) + '</a>' : '<b>' + esc(f.name) + '</b>');
+    if (f && route.m && ucs(f)[route.m - 1]) parts.push('<b>' + esc(ucs(f)[route.m - 1].title) + '</b>');
+    $('breadcrumb').innerHTML = parts.join('<span>›</span>');
+  }
+  function closeMenu() { $('course-sidebar').classList.remove('open'); $('sidebar-scrim').hidden = true; $('menu-toggle').setAttribute('aria-expanded', 'false'); }
 
   function render() {
     player = null;
     const p = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
-    let html;
-    if (!p.length) { html = overview(); document.title = RD.spec.title + ' · Redis'; }
-    else if (p[0] === 'f' && p[2] === 'u') { useCase(+p[1], +p[3]); window.scrollTo(0, 0); document.title = (feats[p[1] - 1] ? feats[p[1] - 1].name : '') + ' · Redis design'; return; }
-    else if (p[0] === 'f') { html = feature(+p[1]); document.title = (feats[p[1] - 1] ? feats[p[1] - 1].name : 'Redis') + ' · Redis design'; }
-    else html = notFound();
-    app.innerHTML = html + foot; window.scrollTo(0, 0); draw(app);
+    route = p[0] === 'f' ? { n: +p[1] || 0, m: p[2] === 'u' ? +p[3] || 0 : 0 } : { n: 0, m: 0 };
+    const page = $('page'); let title = RD.spec.title;
+    const f = feats[route.n - 1], u = f && route.m ? ucs(f)[route.m - 1] : null;
+    if ((route.n && !f) || (route.m && !u)) { page.innerHTML = notFound(); route = { n: 0, m: 0 }; }
+    else if (u) { page.innerHTML = useCase(route.n, route.m); mountPlayer(u); title = u.title + ' · ' + f.name; }
+    else if (f) { page.innerHTML = feature(route.n); title = f.name; }
+    else page.innerHTML = overview();
+    document.title = title + ' · Redis design';
+    renderNav(); renderCrumb(); closeMenu(); window.scrollTo(0, 0); draw(page);
   }
+
+  $('menu-toggle').onclick = () => { const o = $('course-sidebar').classList.toggle('open'); $('sidebar-scrim').hidden = !o; $('menu-toggle').setAttribute('aria-expanded', String(o)); };
+  $('sidebar-scrim').onclick = closeMenu;
+  $('course-search').oninput = renderNav;
+  document.addEventListener('click', e => { const a = e.target.closest('a[data-jump]'); if (a) { e.preventDefault(); const t = document.getElementById(a.getAttribute('href').slice(1)); if (t) t.scrollIntoView({ behavior: 'smooth' }); } });
   window.addEventListener('hashchange', render);
   window.addEventListener('keydown', e => { if (player && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) player(e); });
   render();
