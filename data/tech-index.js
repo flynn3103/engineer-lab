@@ -479,183 +479,143 @@ window.SITE_TECH_INDEX = [
 {
 "type": "Tour",
 "system": "kafka",
-"title": "Apache Kafka internals, end to end",
-"summary": "Fan 50,000 order events a second out to twelve teams, in order, with no loss and no duplicates when a broker fails.",
-"body": "Log segments and offsets, crash recovery, partitioning, producer batching and idempotence, ISR, reassignment, consumer offsets and groups, retention, transactions, KRaft.",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html",
+"title": "Apache Kafka · Design a distributed event log",
+"summary": "Hand 50,000 order events a second to twelve teams, in order, with no loss and no duplicates when a broker fails: partitioned logs, an in-sync replica set, consumer groups, transactions and a KRaft metadata quorum.",
+"body": "Log segments and the sparse index, crash recovery, page cache durability, key partitioning with murmur2, key skew, partition count and parallelism, producer batching, idempotence, acks, ISR and high watermark, min.insync.replicas, reassignment throttling, committed offsets, offset out of range, fetch sizing, consumer group rebalance, heartbeat and poll clocks, static membership, retention, compaction, tiered storage, transactions, zombie fencing, read_committed, KRaft election, metadata log, broker fencing.",
+"url": "techstack/kafka/course.html",
 "tags": [
 "tour",
-"interactive"
+"system design",
+"use cases",
+"animations"
 ],
 "id": 35
 },
 {
 "type": "Chapter",
 "system": "kafka",
-"title": "Apache Kafka · 1. Log Segments and Offsets",
-"summary": "Reading must resume from any offset, but scanning a 1 TB partition for offset 9,000,000 is far too slow. How does Kafka find it?",
-"body": "Segment files: a partition is a directory of .log files named by the base offset of their first record. Only the newest (active) segment is written; it rolls at segment.bytes or segment.ms.",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch0",
+"title": "Apache Kafka · 1. Log segments, offsets and recovery",
+"summary": "A partition is a directory of segment files found by offset in a few steps, written to the page cache and repaired after a crash.",
+"body": "Find any offset without scanning, append fast, and recover to a consistent log after a crash. Locate a record by offset in a few lookups. Append to the active segment only. Recover a log after an unclean shutdown. A lookup does not scan the partition. Only the active segment is written. Durability does not depend on fsync per record. Finding offset 9,000,000 without a scan A consumer must resume from any offset, and scanning a 1 TB partition for one is far too slow. See the three small lookups that find it. A consumer asks for offset 9,000,000 of a partition that has four segment files (example offsets). The broker picks the segment by name, binary-searches a sparse index, and scans a few kilobytes of the log. A record is found by its offset with a segment-name lookup, a sparse-index search and a bounded scan, never a scan of the partition. A kill -9 and a 40-minute restart After an unclean shutdown a broker must prove each log is intact before it serves it. See what that check does and why it can take so long. A broker with 4,000 partition replicas is killed with kill -9. Its restart takes about 40 minutes (example). The broker re-checks every log segment after the last recovery point, one partition after another, then truncates damage and catches up from the leaders. After an unclean shutdown a log is served only after its tail has been verified and cut at the first corrupt record. What the page cache protects and what it does not Kafka writes to the operating system page cache and does not fsync every record. See which failures lose data on one broker, and what covers them. A leader acknowledges a record and fails a moment later. The question is which kind of failure that was (example scenarios). A killed process loses nothing, a machine crash loses the unflushed tail on that broker, and replicas on other machines cover it. Kafka's durability comes from the number and placement of in-sync replicas, not from flushing each write to disk.",
+"url": "techstack/kafka/course.html#/f/1",
 "tags": [
-"append",
-"segments",
-"sparse index"
+"log storage",
+"system design",
+"use cases"
 ],
 "id": 36
 },
 {
 "type": "Chapter",
 "system": "kafka",
-"title": "Apache Kafka · 2. Log Crash Recovery",
-"summary": "A broker with thousands of partitions was killed with kill -9. Why does the restart take 40 minutes, and what is it doing?",
-"body": "Clean shutdown marker: any clean shutdown flushes the logs and leaves a marker, so the next start skips recovery (a controlled shutdown also moves leadership off the broker first).",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch1",
+"title": "Apache Kafka · 2. Topics, partitions and keys",
+"summary": "Order exists only inside a partition, a key picks the partition, and the partition count is the limit on parallelism.",
+"body": "Keep records of one key in order and spread load across brokers and consumers. Map a key to a partition deterministically. Spread keyless records across partitions. Let at most one consumer of a group read a partition. One key always maps to one partition for a fixed partition count. Partition count caps group parallelism. Changing the count changes where keys go. A key picks the partition Produce records with your own keys and watch the partition each one lands in, and the offset it gets. Then grow the topic and see why the same key can end up in two partitions. After the team scaled a topic from 6 to 12 partitions, orders for one seller arrive out of order. Here the topic goes from 3 to 6 (example). For a fixed partition count one key always goes to one partition, so its records stay in order. After the count changes, the same key may go elsewhere. For a fixed partition count, murmur2(key) modulo the count always names the same partition, so records of one key are totally ordered. A celebrity key melts one partition A key sends all its records to one partition. When one key is far busier than the rest, one partition and one consumer carry most of the load. Orders are keyed by seller_id. During a flash sale seller 17 produces 20 MB/s into one partition while the others carry 3 MB/s each. A consumer handles about 10 MB/s per partition (example numbers). The hot partition's consumer cannot keep up and lag grows, while the other consumers idle. All records with one key go to one partition, and a partition is read by at most one consumer of a group. Partitions cap consumer parallelism In a group each partition is read by exactly one consumer, so the number of partitions is the most consumers that can work in parallel. A topic has 6 partitions and the team scales its consumers from 3 to 8 to clear a backlog (example). Up to 6 consumers each take a partition. The 7th and 8th get nothing and sit idle. Within one consumer group, a partition is assigned to at most one consumer, so parallelism cannot exceed the partition count.",
+"url": "techstack/kafka/course.html#/f/2",
 "tags": [
-"recovery point",
-"crc",
-"truncation"
+"partitioning",
+"system design",
+"use cases"
 ],
 "id": 37
 },
 {
 "type": "Chapter",
 "system": "kafka",
-"title": "Apache Kafka · 3. Partitioning and Keys",
-"summary": "After the team scaled a topic from 6 to 12 partitions, orders for one seller arrive out of order. What changed?",
-"body": "Default partitioner: with a key, partition = toPositive(murmur2(keyBytes)) % numPartitions. For a fixed partition count the same key always maps to the same partition.",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch2",
+"title": "Apache Kafka · 3. Producer batching and idempotence",
+"summary": "Batches amortise requests, and sequence numbers make retries safe.",
+"body": "Send at high throughput and survive lost acknowledgements without duplicates or reordering. Group records per partition into batches. Retry failed sends within a bounded time. Detect and drop duplicate batches at the broker. A batch is sent when full or after linger.ms. A retried batch is written once. Retries do not reorder within a partition. Batching: linger.ms and batch.size Sending one request per record wastes the broker on overhead. The producer groups records per partition and sends when a batch is full or has waited long enough. Brokers run at 90% CPU serving one request per event though bandwidth is low. Records of 1 KB arrive for one partition (example rates). At low rates, linger.ms turns many tiny requests into a few batches. At high rates the batch fills first and is sent at once. A batch is sent when it reaches batch.size or when linger.ms has passed since its first record, whichever comes first. A lost ack and a safe retry If an acknowledgement is lost, the producer cannot know whether the write happened and retries. Sequence numbers let the broker recognise the repeat. A lost ack made a producer retry, and finance sees one order twice (example). The broker writes the batch once, drops the repeat, and still acknowledges it. With idempotence a batch identified by producer id, partition and sequence number is written at most once, in order. Which settings give which guarantee Delivery guarantees come from a handful of producer settings that work together. See what each combination actually promises. A service writes orders with the defaults it inherited, and nobody knows whether it can lose or duplicate them (example). acks=all with idempotence and a sensible min.insync.replicas gives no loss on a single broker failure and no duplicates from retries. No loss on one broker failure needs acks=all with min.insync.replicas of at least 2, and no duplicate retries needs idempotence.",
+"url": "techstack/kafka/course.html#/f/3",
 "tags": [
-"key hash",
-"order per key",
-"stickiness"
+"producer",
+"system design",
+"use cases"
 ],
 "id": 38
 },
 {
 "type": "Chapter",
 "system": "kafka",
-"title": "Apache Kafka · 4. Producer Batching and Buffering",
-"summary": "Brokers run at 90% CPU serving one request per event though bandwidth is low. How do we do the same work with far fewer requests?",
-"body": "RecordAccumulator: keeps a queue of batches per partition and appends each record to the open batch. Batch close: a batch is sent when it holds batch.size bytes or linger.ms has passed since its first record, whichever comes first.",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch3",
+"title": "Apache Kafka · 4. Replication, ISR and placement",
+"summary": "A record is committed when every in-sync replica has it, and a new leader may come only from the ISR.",
+"body": "Survive broker failures without losing committed records. Copy the leader log to followers by fetch. Track the ISR and the high watermark. Move replicas between brokers without overload. A committed record is on every ISR member. A leader is elected from the ISR. Reassignment is throttled. ISR, high watermark and what survives a leader crash Produce with acks=all or acks=1, let followers fetch, drop one from the ISR, crash the leader, and see which acknowledged records survive. The high watermark is the line between committed and not yet committed. A broker acknowledged an order and died a moment later. Are the acknowledged events gone? Three replicas, min.insync.replicas=2 (example). With acks=all a record is acknowledged only when every ISR member has it, so any ISR member can lead without losing it. With acks=1 an acknowledged record can be lost. A record is committed when every ISR member has it, and a new leader is chosen only from the ISR, so committed records are never lost by a failover. min.insync.replicas: availability against durability With acks=all, the replication factor and min.insync.replicas together decide how many broker failures a topic survives and how many it can still write through. The team must pick RF and min.insync.replicas for the orders topic (example choices). RF 3 with min.insync.replicas 2 keeps writing through one broker failure and does not lose an acknowledged record to one failure. With acks=all, a write is accepted only while the ISR has at least min.insync.replicas brokers, and an acknowledged record is on at least that many. Moving partitions without saturating the network Reassigning a partition copies its whole log to a new broker. Unthrottled, that copy can take all the network and starve producers. Three brokers were added, and moving partitions onto them saturated the network so producers timed out (example sizes). The move runs at the throttle rate, producers keep their bandwidth, and the throttle is removed when the move is verified complete. A reassigned partition adds the new replicas, waits until they are in the ISR, and only then drops the old ones, so the replication factor never dips.",
+"url": "techstack/kafka/course.html#/f/4",
 "tags": [
-"linger",
-"batch.size",
-"buffer.memory"
+"replication",
+"system design",
+"use cases"
 ],
 "id": 39
 },
 {
 "type": "Chapter",
 "system": "kafka",
-"title": "Apache Kafka · 5. Idempotent Producer and Retries",
-"summary": "A lost ack made the producer retry, and finance sees one order twice and another out of order. How do retries become safe?",
-"body": "Producer ID and epoch: with enable.idempotence=true (the default since Kafka 3.0, KIP-679) the broker assigns the producer an ID. Sequence numbers: each batch carries a per-partition sequence.",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch4",
+"title": "Apache Kafka · 5. Consumer offsets and fetching",
+"summary": "A group's position is a committed offset per partition, and when to commit decides between duplicates and loss.",
+"body": "Resume exactly where a group left off and know the cost of each commit strategy. Store a committed offset per group and partition. Resume from it after a restart. Handle an offset that no longer exists. Commit after processing gives at-least-once. Commit before processing gives at-most-once. Reading never deletes data. When to commit decides duplicates or loss A group's restart position is its committed offset. Committing after processing risks duplicates, and committing before risks loss. After a crash, billing skipped some orders and replayed others (example offsets). Commit after processing and a crash replays the uncommitted records. Commit before processing and a crash skips records that were committed but not processed. A consumer group resumes from its committed offset, so committing after processing gives at-least-once and committing before gives at-most-once. Lag that outruns retention A slow consumer falls behind the end of the log. If the log's start moves past its position, the data it wanted is gone. A report job pauses for days. Meanwhile retention deletes old segments of a topic (example offsets in millions). When the committed offset falls below the log start, the consumer gets an offset-out-of-range error and auto.offset.reset decides what it does. A consumer can resume only at an offset that still exists; once retention moves the log start past its committed offset, those records are gone. Fetch sizing: wait for data or take what is there A consumer fetch can wait at the broker until enough data exists. See how that long poll trades latency against requests. Twelve consumers poll a quiet topic, and the brokers see a constant stream of tiny fetch requests (example). With defaults the broker answers a fetch as soon as one byte exists, or empty after 500 ms. Raising fetch.min.bytes trades latency for fewer, larger responses. A fetch is answered when fetch.min.bytes of data exist or fetch.max.wait.ms has passed, whichever comes first.",
+"url": "techstack/kafka/course.html#/f/5",
 "tags": [
-"producer id",
-"sequence",
-"delivery timeout"
+"consumer",
+"system design",
+"use cases"
 ],
 "id": 40
 },
 {
 "type": "Chapter",
 "system": "kafka",
-"title": "Apache Kafka · 6. Replication, ISR and High Watermark",
-"summary": "A broker acknowledged an order and died a moment later. Are the acknowledged events gone, and what decides that?",
-"body": "Leader and followers: clients talk to the partition leader; followers fetch from it like consumers and append to their own log. ISR: the leader plus the followers that caught up within replica.lag.time.max.ms (default 30 s). A follower that lags longer leaves the ISR and returns when it catches up.",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch5",
+"title": "Apache Kafka · 6. Consumer groups and rebalance",
+"summary": "The group coordinator splits partitions among members, and two clocks decide who is still a member.",
+"body": "Share a topic among consumers and keep rebalances short and rare. Assign each partition to one member. Detect dead members. Move partitions when membership changes. A partition has one reader per group. A member must heartbeat and must call poll in time. A rebalance moves as little as it can. A rebalance: who stops, who moves Add and remove consumers and compare the two rebalance protocols. See which partitions stop, which move, and how a seventh consumer on six partitions does nothing. Every few minutes all consumers stop for 30 seconds and lag climbs. A deploy adds and removes consumers (example). The eager protocol stops every partition on every membership change. The cooperative protocol stops only the partitions that change owner. Within a group a partition is owned by exactly one member at a time, and a rebalance reassigns ownership through the group coordinator. Two clocks decide who is still in the group A consumer must keep two promises: heartbeat to the coordinator, and call poll() often enough. Breaking either removes it from the group. A consumer processes a batch of 500 records for 6 minutes while its heartbeats keep flowing (example). Heartbeats show the process is alive, but a poll() gap over 5 minutes makes the consumer leave the group, and its commit then fails. A consumer stays in its group only while it heartbeats within session.timeout.ms and calls poll() within max.poll.interval.ms. Static membership and rolling restarts A restarted consumer normally leaves and rejoins, causing two rebalances. A stable instance id lets a quick restart reclaim its partitions with no rebalance at all. A deploy restarts all 12 consumers of a group one by one (example). A static member that returns within the session timeout keeps its partitions with no rebalance. A static member keeps its assignment while it is absent for less than the session timeout, so its restart causes no rebalance.",
+"url": "techstack/kafka/course.html#/f/6",
 "tags": [
-"isr",
-"high watermark",
-"acks"
+"consumer groups",
+"system design",
+"use cases"
 ],
 "id": 41
 },
 {
 "type": "Chapter",
 "system": "kafka",
-"title": "Apache Kafka · 7. Partition Reassignment and Placement",
-"summary": "New brokers were added, and moving partitions onto them saturated the network so producers timed out. How do we move data safely?",
-"body": "Add, catch up, remove: kafka-reassign-partitions.sh --execute adds the target replicas, they fetch the log, join the ISR, and then the old replicas are dropped.",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch6",
+"title": "Apache Kafka · 7. Retention and compaction",
+"summary": "Data leaves a log by segment, by time or size, by key, or by moving to remote storage.",
+"body": "Keep disk bounded and keep the data you need for as long as you need it. Delete whole segments past retention. Keep only the latest record per key on a compacted topic. Offload old segments to remote storage. The active segment is never deleted. A compacted topic always holds the latest record per key. Remote reads are slower than local reads. Retention deletes whole segments Kafka deletes data by closed segment, not by record. See which segments go when retention is 7 days, and which old data survives. Disks fill within days though retention.ms is 7 days. Some old records are still there (example segment ages). A closed segment is deleted only when its newest record is older than the retention time. The active segment is never deleted. Retention removes whole closed segments whose newest record is past the limit, and never touches the active segment. Log compaction keeps the latest value per key A compacted topic does not expire by time. It keeps at least the latest record for each key, which makes it a table of current values. A \"latest price per product\" topic must keep only the newest value per key, yet new consumers must be able to rebuild the whole table (example records). After cleaning only the newest record per key remains in the older part of the log, with offsets unchanged. A tombstone is kept for a while, then removed. A compacted log always keeps at least the latest record of every key, with its original offset. Tiered storage: recent data local, old data remote Keeping a month of data on broker disks is expensive. Tiered storage moves closed segments to remote storage and keeps only recent data local. The team wants 30 days of history at 4.3 TB a day, but local disks only fit a few days (example sizes). Local disks hold about a day, the remote tier holds the rest, and recent reads stay fast. A segment is deleted locally only after it has been copied to remote storage, and recent data is always served from local disks.",
+"url": "techstack/kafka/course.html#/f/7",
 "tags": [
-"reassign",
-"throttle",
-"rack"
+"retention",
+"system design",
+"use cases"
 ],
 "id": 42
 },
 {
 "type": "Chapter",
 "system": "kafka",
-"title": "Apache Kafka · 8. Consumer Offsets and Commits",
-"summary": "Twelve teams read the same topic. After a crash, billing skipped some orders and replayed others. Where is each reader’s position kept?",
-"body": "Reading does not delete: every group keeps its own committed offset per partition, so twelve teams read independently. Position and commit: the fetch position advances with poll(); the committed offset is what a restart resumes from.",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch7",
+"title": "Apache Kafka · 8. Transactions and exactly-once",
+"summary": "A transaction writes to several partitions and commits offsets together, and a fenced epoch stops zombies.",
+"body": "Make a read-process-write step atomic. Commit output records and input offsets atomically. Fence an older producer with the same id. Hide uncommitted records from read_committed consumers. All records of a transaction become visible together or never. An older epoch cannot write. An open transaction holds back read_committed readers. Read, process and write atomically A job reads orders, writes invoices and commits its offset. A crash between the writes causes duplicates. A transaction makes the writes and the offset commit succeed or fail together. A crash between writing invoices and committing the input offset causes duplicate invoices (example). The invoices and the consumer offset become visible together, or none of them does. All records and offsets of a transaction become visible together, once the commit markers are written, or none of them do. Fencing a zombie producer A paused or partitioned producer can come back after its work was taken over. The epoch on its transactional id stops it from writing. An instance pauses for a long garbage collection. The orchestrator starts a replacement with the same transactional id (example). The replacement bumps the epoch and aborts the old transaction. When the old instance wakes up its writes are rejected. A producer with an older epoch for a transactional id cannot write once a newer epoch has been issued. read_committed and the last stable offset A read_committed consumer must not see records of a transaction until it commits. One open transaction therefore holds the reader back, even from unrelated committed records after it. A producer opened a transaction and has not finished it. Other producers keep writing to the same partition (example). The reader stops at the last stable offset, the first offset of the oldest open transaction, until it commits or aborts. A read_committed consumer returns only records below the last stable offset, and never the records of an aborted transaction.",
+"url": "techstack/kafka/course.html#/f/8",
 "tags": [
-"position",
-"commit",
-"reset"
+"transactions",
+"system design",
+"use cases"
 ],
 "id": 43
 },
 {
 "type": "Chapter",
 "system": "kafka",
-"title": "Apache Kafka · 9. Consumer Groups and Rebalance",
-"summary": "Every few minutes all consumers in the group stop for 30 seconds and lag climbs. What makes the group reshuffle itself?",
-"body": "Group coordinator: one broker per group tracks the members, runs JoinGroup and SyncGroup, and increments the generation on every membership change. Two liveness clocks: heartbeats must reach the coordinator within session.timeout.ms (45 s by default), and poll() must be called within…",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch8",
+"title": "Apache Kafka · 9. KRaft metadata quorum",
+"summary": "Cluster metadata is a log replicated by a Raft quorum of controllers, and brokers follow it.",
+"body": "Decide who leads each partition, consistently, when brokers or controllers fail. Elect an active controller. Commit metadata changes by majority. Fence brokers that stop heartbeating. At most one active controller per epoch. A committed metadata change is never lost. Brokers converge on the metadata log. Electing the active controller In KRaft a quorum of controllers runs Raft. One is the active controller and the others are followers. Crash it, or cut it off, and see a new active controller take over with a higher epoch. Who decides which broker leads each partition, and what happens if that decider dies? Three controllers form the quorum (example). A controller needs votes from a majority (2 of 3) to be active. An isolated controller cannot become active, and one controller failure is survived. There is at most one active controller per epoch, and it needs votes from a majority of the quorum. A metadata change is a log entry Every change to cluster metadata (a topic, a partition leader, an ISR change) is a record in the metadata log. Send changes to the leader and watch when each is committed. An operator creates a topic while one controller is down. The change must be durable and the same on every controller (example). The change is committed when 2 of 3 controllers store it, and a controller that was down catches up from the leader when it returns. A metadata change takes effect only after a majority of controllers have stored it, so it is never lost by a controller failover. Brokers follow the metadata log and get fenced Brokers do not vote. They fetch the metadata log from the active controller, and heartbeat to it. A broker that goes silent is fenced and loses its leaderships. A broker stalls for a long garbage collection while a topic is created and leaders change (example offsets). After 9 seconds without heartbeats the broker is fenced and its partition leaders move to other ISR members. It returns after it catches up. Brokers apply the metadata log in order, and a broker without a recent heartbeat is fenced and cannot lead partitions.",
+"url": "techstack/kafka/course.html#/f/9",
 "tags": [
-"coordinator",
-"generation",
-"assignment"
+"control plane",
+"system design",
+"use cases"
 ],
 "id": 44
-},
-{
-"type": "Chapter",
-"system": "kafka",
-"title": "Apache Kafka · 10. Retention, Tiered Storage and Compaction",
-"summary": "Disks fill within days, yet a “latest price” topic must keep only the newest value per key. What decides what is deleted, and when?",
-"body": "Delete policy: the broker deletes closed segments whose newest record is older than retention.ms, or the oldest segments when a partition exceeds retention.bytes (a per-partition limit).",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch9",
-"tags": [
-"retention",
-"tiers",
-"compaction"
-],
-"id": 45
-},
-{
-"type": "Chapter",
-"system": "kafka",
-"title": "Apache Kafka · 11. Transactions and Exactly-Once",
-"summary": "A job reads orders, writes invoices and then commits its offset. A crash in between causes duplicate invoices. Can these steps be atomic?",
-"body": "transactional.id: initTransactions() registers it with the transaction coordinator, which returns a producer ID and bumps the epoch. An older producer with the same id is fenced (ProducerFencedException).",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch10",
-"tags": [
-"transactional.id",
-"markers",
-"lso"
-],
-"id": 46
-},
-{
-"type": "Chapter",
-"system": "kafka",
-"title": "Apache Kafka · 12. KRaft Control Plane",
-"summary": "Who decides which broker leads each partition, and what happens if that decider dies or is cut off from the rest?",
-"body": "Metadata is a log: the __cluster_metadata topic holds every change (topics, partition leaders, configs), replicated with a Raft-based protocol (KIP-500, KIP-595, KIP-631).",
-"url": "techstack/kafka/01-kafka-internals-end-to-end.html#ch11",
-"tags": [
-"metadata quorum",
-"epochs",
-"fencing"
-],
-"id": 47
 },
 {
 "type": "Tour",
