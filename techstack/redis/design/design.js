@@ -11,6 +11,54 @@
   const table = (head, rows) => '<table class="rd-t"><thead><tr>' + head.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>' +
     rows.map(r => '<tr>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
   const feats = RD.features;
+  const diagram = (d, hero) => '<figure class="diagram' + (hero ? ' diagram-hero' : '') + '"><figcaption><b>' + esc(d.kind) + '</b>' + (d.title ? ' · ' + esc(d.title) : '') +
+    '</figcaption><div class="diagram-body" data-mermaid><pre class="diagram-src">' + esc(d.src.trim()) + '</pre></div></figure>';
+  let loading;
+  function loadMermaid() {
+    if (window.mermaid) return Promise.resolve(window.mermaid);
+    if (loading) return loading;
+    loading = new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js';
+      el.onload = () => window.mermaid ? resolve(window.mermaid) : reject(new Error('mermaid missing'));
+      el.onerror = () => { loading = null; reject(new Error('mermaid failed to load')); };
+      document.head.appendChild(el);
+    });
+    return loading;
+  }
+  /* Mermaid cannot read CSS variables, so resolve the palette at draw time. */
+  function themeVars() {
+    const cs = getComputedStyle(document.documentElement), v = n => cs.getPropertyValue(n).trim();
+    const ink = v('--ink'), card = v('--card'), line = v('--line');
+    return { fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace', fontSize: '13px', background: card, primaryColor: v('--p0'), primaryBorderColor: ink, primaryTextColor: ink,
+      secondaryColor: v('--p1'), secondaryBorderColor: ink, secondaryTextColor: ink, tertiaryColor: v('--p2'), tertiaryBorderColor: ink, tertiaryTextColor: ink,
+      lineColor: ink, textColor: ink, mainBkg: v('--p0'), nodeBorder: ink, clusterBkg: v('--soft'), clusterBorder: line, edgeLabelBackground: card, titleColor: ink,
+      actorBkg: v('--p0'), actorBorder: ink, actorTextColor: ink, actorLineColor: line, signalColor: ink, signalTextColor: ink, labelBoxBkgColor: v('--p4'), labelBoxBorderColor: ink, labelTextColor: ink,
+      noteBkgColor: v('--p4'), noteBorderColor: ink, noteTextColor: ink, activationBkgColor: v('--p2'), activationBorderColor: ink, sequenceNumberColor: card,
+      stateBkg: v('--p2'), stateLabelColor: ink, altBackground: v('--soft') };
+  }
+  let counter = 0;
+  async function draw(container) {
+    const nodes = [...container.querySelectorAll('[data-mermaid]:not([data-drawn])')];
+    if (!nodes.length) return;
+    let m;
+    try { m = await loadMermaid(); } catch (e) {
+      nodes.forEach(n => n.insertAdjacentHTML('beforebegin', '<p class="diagram-offline">Diagram renderer unavailable offline. Showing the Mermaid source.</p>'));
+      return;
+    }
+    m.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'base', themeVariables: themeVars(), flowchart: { htmlLabels: true, curve: 'basis', padding: 8 }, sequence: { useMaxWidth: true, mirrorActors: false } });
+    for (const n of nodes) {
+      try {
+        const { svg } = await m.render('mmd-' + (++counter), n.querySelector('pre').textContent);
+        if (!n.isConnected) continue;
+        n.innerHTML = svg; n.setAttribute('data-drawn', '1');
+      } catch (e) {
+        n.setAttribute('data-drawn', 'error');
+        n.insertAdjacentHTML('beforebegin', '<p class="diagram-offline">This diagram could not be rendered. Showing its source.</p>');
+        const bad = document.getElementById('dmmd-' + counter); if (bad) bad.remove();
+      }
+    }
+  }
   const ucs = f => RD.uc[f.id] || [];
 
   function top(crumbs) {
@@ -46,7 +94,7 @@
       '<div class="rd-card" style="margin-top:12px"><b>Out of scope.</b> ' + s.out + '</div>' +
       '<h2>Estimation</h2><p class="rd-src">Assumptions, not measurements. Replace each number with one from your own system.</p>' +
       '<div class="rd-card">' + table(['Question', 'Calculation', 'Implication'], s.est) + '</div>' +
-      '<h2>High-level design</h2><div class="rd-card">' + hldFlow() + '<p class="rd-src" style="margin-top:10px">' + s.hldNote + '</p></div>' +
+      '<h2>High-level design</h2>' + diagram({ kind: 'Flow', title: 'The whole server', src: RD.hldOverall }, true) + '<div class="rd-card">' + hldFlow() + '<p class="rd-src" style="margin-top:10px">' + s.hldNote + '</p></div>' +
       '<div class="rd-card" style="margin-top:12px">' + table(['Decision', 'Choice', 'Trade-off'], s.decisions) + '</div>' +
       '<h2>Features</h2><div class="rd-grid">' + feats.map((f, i) =>
         '<a class="rd-card rd-fcard" href="#/f/' + (i + 1) + '"><b><span class="rd-num">' + (i + 1) + '</span>' + esc(f.name) + '</b><small>' + f.summary + '</small>' +
@@ -61,7 +109,7 @@
       '<div class="rd-kick">Feature ' + n + ' of ' + feats.length + '</div><h1>' + esc(f.name) + '</h1><p class="rd-lead">' + f.summary + '</p>' +
       '<div class="rd-two"><div class="rd-card"><h3>Goal</h3><p>' + f.goal + '</p><h3>In scope</h3>' + li(f.scope[0]) + '<h3>Out of scope</h3>' + li(f.scope[1]) + '</div>' +
       '<div class="rd-card"><h3>Functional requirements</h3>' + li(f.fr) + '<h3>Non-functional requirements</h3>' + li(f.nfr) + '</div></div>' +
-      '<h2>High-level design</h2><div class="rd-card"><pre>' + esc(f.hld) + '</pre>' + table(['Decision', 'Choice', 'Trade-off'], f.decisions) + '</div>' +
+      '<h2>High-level design</h2>' + diagram({ kind: 'Flow', title: esc(f.name), src: RD.hld[f.id] }, true) + '<div class="rd-card">' + table(['Decision', 'Choice', 'Trade-off'], f.decisions) + '</div>' +
       '<h2>Use cases</h2><div class="rd-grid">' + ucs(f).map((u, i) =>
         '<a class="rd-card rd-fcard" href="#/f/' + n + '/u/' + (i + 1) + '"><b>UC-' + (i + 1) + ' · ' + esc(u.title) + '</b><small>' + u.intro + '</small></a>').join('') + '</div>' +
       '<div class="rd-nav">' + (prev ? '<a href="#/f/' + (n - 1) + '">← ' + esc(prev.name) + '</a>' : '<span></span>') +
@@ -78,6 +126,7 @@
       '<div class="rd-kick">Feature ' + n + ' · use case ' + m + ' of ' + list.length + '</div><h1>' + esc(u.title) + '</h1><p class="rd-lead">' + u.intro + '</p>' +
       '<div class="rd-two"><div class="rd-card"><h3>Trigger</h3><p>' + u.trigger + '</p><h3>Expect</h3><p>' + u.expect + '</p></div>' +
       '<div class="rd-card"><h3>Run</h3><pre>' + esc(u.run) + '</pre></div></div>' +
+      '<h2>Diagrams</h2>' + (RD.diagrams[f.id + ':' + m] || []).map(d => diagram(d)).join('') +
       '<h2>Step by step</h2><div class="rd-card" id="rd-player"><div class="pv" id="rd-pic" aria-live="polite"></div>' +
       '<div class="rd-step" id="rd-txt"></div><div class="rd-stat" id="rd-stat"></div>' +
       '<div class="rd-btns"><button class="rd-btn" id="rd-back">← Back</button><button class="rd-btn pri" id="rd-next">Next →</button><button class="rd-btn" id="rd-reset">Restart</button><span class="rd-dots" id="rd-dots"></span></div></div>' +
@@ -88,6 +137,7 @@
       (nextHref ? '<a href="' + nextHref + '">Next use case →</a>' : '<a href="#/">Back to overview</a>') + '</div>';
     app.innerHTML = html + foot;
     mountPlayer(u);
+    draw(app);
   }
 
   function mountPlayer(u) {
@@ -124,7 +174,7 @@
     else if (p[0] === 'f' && p[2] === 'u') { useCase(+p[1], +p[3]); window.scrollTo(0, 0); document.title = (feats[p[1] - 1] ? feats[p[1] - 1].name : '') + ' · Redis design'; return; }
     else if (p[0] === 'f') { html = feature(+p[1]); document.title = (feats[p[1] - 1] ? feats[p[1] - 1].name : 'Redis') + ' · Redis design'; }
     else html = notFound();
-    app.innerHTML = html + foot; window.scrollTo(0, 0);
+    app.innerHTML = html + foot; window.scrollTo(0, 0); draw(app);
   }
   window.addEventListener('hashchange', render);
   window.addEventListener('keydown', e => { if (player && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) player(e); });

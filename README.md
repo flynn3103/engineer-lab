@@ -29,7 +29,7 @@ Each system has its own folder with an interactive course. Lessons follow a Prob
 | Distributed Systems | `techstack/distributed/` | 15 |
 | Database Systems | `techstack/database-systems/` | 16 |
 
-Redis also has a second, top-down course in `techstack/redis/design/` (`design.html`): overview, problem, requirements, estimates and high-level design, then 9 features and 25 use cases, each with a step-by-step picture. It was built with the `learn-technology-from-scratch` skill, targets Redis 7.2, and is not listed separately in `data/systems.js` (the Redis course page links to it; it is in the search index).
+Redis also has a second, top-down course in `techstack/redis/design/` (`design.html`): overview, problem, requirements, estimates and high-level design, then 9 features and 25 use cases. Each feature has a Mermaid high-level-design flowchart, and each use case has Mermaid sequence, state or flow diagrams plus its own step-by-step picture (diagrams load Mermaid from a CDN and fall back to their source offline). It was built with the `learn-technology-from-scratch` skill, targets Redis 7.2, and is not listed separately in `data/systems.js` (the Redis course page links to it; it is in the search index).
 
 An Operating Systems course also lives in `techstack/os/` but is not yet listed in `data/systems.js`, so it doesn't appear on the home or tech pages.
 

@@ -97,3 +97,14 @@ pre{max-width:100%}
 .pv{overflow-x:auto}
 .pv table{display:block;overflow-x:auto}
 @media(max-width:620px){.pv .tl .tick{font-size:10.5px}.rd-lead{font-size:16px}}
+/* diagrams (Mermaid), same idea as the Spark course */
+.diagram{margin:16px 0 22px;border:1px solid var(--line);border-radius:14px;background:var(--card);overflow:hidden;box-shadow:var(--shadow)}
+.diagram figcaption{font:600 12px ui-monospace,Menlo,monospace;color:var(--mut);padding:9px 16px;border-bottom:1px solid var(--line);background:var(--soft);letter-spacing:.04em}
+.diagram figcaption b{color:var(--ink);text-transform:uppercase;margin-right:2px}
+.diagram-body{padding:18px 16px;overflow-x:auto;display:flex;justify-content:center;background-image:radial-gradient(var(--line) 1px,transparent 1px);background-size:18px 18px}
+.diagram-body svg{max-width:100%;height:auto;max-height:620px;width:auto}.diagram-hero .diagram-body svg{max-height:none}
+.diagram-body .label,.diagram-body .nodeLabel,.diagram-body text{font-family:ui-monospace,Menlo,monospace!important}
+.diagram-src{margin:0;font:12px/1.6 ui-monospace,Menlo,monospace;white-space:pre;color:var(--mut);background:none;border:0}
+.diagram-body[data-drawn=\"1\"] .diagram-src{display:none}
+.diagram-offline{font-size:12.5px!important;color:var(--mut);padding:10px 16px 0;margin:0!important}
+.diagram,.diagram-body{min-width:0}
