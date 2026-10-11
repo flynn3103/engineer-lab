@@ -585,7 +585,28 @@
   Won --> Cancelled: other attempt killed
   Running --> Won: success
   Cancelled --> [*]
-  Won --> [*]` }] }
+  Won --> [*]` }] },
+      { title: 'UC-03 · Retry a fetch before reporting a failure', intro: 'A dropped connection does not always mean the executor is gone. The reducer retries the same fetch a few times, with a wait, before it reports the output as lost.', diagrams: [{ kind: SEQ, title: 'Retries inside one fetch', src: `sequenceDiagram
+  participant R as Reduce task
+  participant B as Executor B
+  R->>B: fetch range 3 of map 1
+  B--xR: connection drops
+  R->>R: wait retryWait (5 s)
+  R->>B: retry 1
+  B-->>R: range arrives` }] },
+      { title: 'UC-04 · Exclude an executor that keeps failing', intro: 'When one executor fails the same stage over and over, the scheduler stops giving it tasks for the rest of that stage. The other executors finish the work.', diagrams: [{ kind: FLOW, title: 'Exclusion for one stage', src: `flowchart TD
+  A["Task fails on executor E3"] --> B{"Failures on E3 in this stage at the limit?"}
+  B -- "no" --> C["Retry the task on another executor"]
+  B -- "yes" --> D["Exclude E3 for the rest of this stage"]
+  D --> E["Tasks go to E1, E2 and E4"]` }] },
+      { title: 'UC-05 · An external shuffle service outlives the executor', intro: 'With an external shuffle service on each node, map output files are served by that service rather than by the executor. Losing the executor no longer loses the output.', diagrams: [{ kind: SEQ, title: 'Executor lost, output still served', src: `sequenceDiagram
+  participant R as Reducer
+  participant S as Shuffle service (node)
+  participant E as Executor E2
+  E--xE: executor lost
+  R->>S: fetch map 2 output
+  S-->>R: bytes from the files on disk
+  Note over R,S: no map task reruns` }] }
     ],
     hard: { title: 'Which work is lost, and which is reused?', body: 'Kill an executor and watch outputs invalidate, producers replay, and reducers resume. Toggle the shuffle service.' }
   };

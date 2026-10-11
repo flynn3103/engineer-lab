@@ -463,12 +463,54 @@
     return `heap ${v.heap} GB · off-heap ${v.off} GB · pause ${v.pause} s`;
   }
 
+  /* recovery:3 · one fetch as a row of attempts. A gap between two attempts is the retry wait; a failed final attempt is reported to the driver. */
+  function paintBackoff(stage, sim, k) {
+    const v = sim.steps[k].v;
+    const label = { run: 'in progress', fail: 'connection lost', ok: 'range arrived' };
+    const parts = v.att.map((s, i) => `<div class="vz-try ${s}"><b>try ${i + 1}</b><small>${label[s]}</small></div>` +
+      (i < v.att.length - 1 || v.waiting ? `<div class="vz-gap${v.waiting && i === v.att.length - 1 ? ' on' : ''}"><span>5 s wait</span></div>` : '')).join('');
+    stage.innerHTML = `<div class="vz-tries">${parts}</div>${v.reported ? '<div class="vz-note warn">all retries used: the reducer reports a fetch failure to the driver</div>' : ''}`;
+    return `attempts: ${v.att.length} of 4 · retries left: ${4 - v.att.length}`;
+  }
+
+  /* recovery:4 · four executors on one stage. Failures count per executor; one that reaches the limit is excluded for the rest of the stage. */
+  function paintExclude(stage, sim, k) {
+    const v = sim.steps[k].v, LIMIT = 2;
+    const cards = Object.keys(v.nodes).map(id => {
+      const n = v.nodes[id];
+      const state = n.ex ? 'excluded' : n.f ? 'flaky' : '';
+      const txt = n.ex ? 'excluded for this stage' : n.f ? `${n.f} failure${n.f > 1 ? 's' : ''}` : 'healthy';
+      return `<div class="vz-exec ${state}"><b>${id}</b><small>${txt}</small><span class="vz-chip good">${n.done} done</span></div>`;
+    }).join('');
+    stage.innerHTML = `<div class="vz-execs">${cards}</div>
+      <div class="vz-row"><span class="vz-chip">${v.stage}</span><span class="vz-chip">exclude after ${LIMIT} failures on one executor</span></div>
+      <div class="vz-note">${esc(v.note)}</div>`;
+    return `excluded: ${Object.values(v.nodes).filter(n => n.ex).length} of 4 · failures on E3: ${v.nodes.E3.f}`;
+  }
+
+  /* recovery:5 · the executor and the node's shuffle service side by side. The reducer fetches from whichever still serves the files. */
+  function paintService(stage, sim, k) {
+    const v = sim.steps[k].v;
+    const execState = v.exec === 'alive' ? 'ok' : v.exec === 'dead' ? 'dead' : 'gone';
+    const execTxt = { alive: 'running', dead: 'lost', released: 'released (idle)' }[v.exec];
+    const svc = v.svc
+      ? `<div class="vz-svc ${v.svc === 'up' ? 'ok' : 'dead'}"><b>shuffle service</b><small>${v.svc === 'up' ? 'serving files' : 'process down'}</small><div class="vz-file">map output files</div></div>`
+      : '<div class="vz-svc none"><b>shuffle service</b><small>not running yet</small></div>';
+    const from = { exec: 'from executor E2', svc: 'from the service on the same node', fail: 'fetch failed: rerun needed' }[v.fetch] || 'waiting';
+    stage.innerHTML = `<div class="vz-svcs">
+        <div class="vz-svc ${execState}"><b>executor E2</b><small>${execTxt}</small><div class="vz-file">map output files</div></div>
+        ${svc}
+        <div class="vz-svc reducer"><b>reducer</b><small>${from}</small></div>
+      </div>${v.idle ? '<div class="vz-note good">dynamic allocation released the idle executor; its output stays served</div>' : ''}`;
+    return `fetch: ${from}`;
+  }
+
   const PAINT = {
     ticks: paintTicks, kanban: paintKanban, stacked: paintStacked, lanes: paintLanes,
     sawtooth: paintSawtooth, bullet: paintBullet, heatmap: paintHeat, strip: paintStrip,
     ledger: paintLedger, filetree: paintFileTree, flow: paintFlow, waterfall: paintWaterfall,
     fanout: paintFanout, scatter: paintScatter, histogram: paintHistogram, donut: paintDonut,
-    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores, paths: paintPaths, routes: paintRoutes, explode: paintExplode, pool: paintPool, shares: paintShares, heap: paintHeap
+    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores, paths: paintPaths, routes: paintRoutes, explode: paintExplode, backoff: paintBackoff, exclude: paintExclude, service: paintService, pool: paintPool, shares: paintShares, heap: paintHeap
   };
 
   /* Attach each picture to its use case. Narration (title, text) stays in engine-stories.js. */
@@ -650,6 +692,27 @@
       { heap: 2, off: 6, heapMax: 8, offMax: 6, pause: 1 },
       { heap: 2, off: 6, heapMax: 8, offMax: 6, pause: 0.4 },
       { heap: 2, off: 6, heapMax: 8, offMax: 6, pause: 0.4, full: true }] },
+    'recovery:3': { kind: 'backoff', steps: [
+      { att: ['run'] },
+      { att: ['fail'] },
+      { att: ['fail'], waiting: true },
+      { att: ['fail', 'fail'] },
+      { att: ['fail', 'fail', 'ok'] },
+      { att: ['fail', 'fail', 'fail', 'fail'], reported: true }] },
+    'recovery:4': { kind: 'exclude', steps: [
+      { stage: 'stage 1', nodes: { E1: { f: 0, done: 0 }, E2: { f: 0, done: 0 }, E3: { f: 0, done: 0 }, E4: { f: 0, done: 0 } }, note: 'E3 has a bad disk: tasks given to it fail' },
+      { stage: 'stage 1', nodes: { E1: { f: 0, done: 1 }, E2: { f: 0, done: 0 }, E3: { f: 1, done: 0 }, E4: { f: 0, done: 0 } }, note: 'task A failed on E3 and was retried on E1' },
+      { stage: 'stage 1', nodes: { E1: { f: 0, done: 1 }, E2: { f: 0, done: 1 }, E3: { f: 2, done: 0 }, E4: { f: 0, done: 0 } }, note: 'two failures on E3 reach the limit for this stage' },
+      { stage: 'stage 1', nodes: { E1: { f: 0, done: 2 }, E2: { f: 0, done: 1 }, E3: { f: 2, done: 0, ex: true }, E4: { f: 0, done: 1 } }, note: 'E3 is excluded: it gets no more tasks in this stage' },
+      { stage: 'stage 1', nodes: { E1: { f: 0, done: 3 }, E2: { f: 0, done: 2 }, E3: { f: 2, done: 0, ex: true }, E4: { f: 0, done: 2 } }, note: 'the remaining tasks finish on E1, E2 and E4' },
+      { stage: 'stage 2', nodes: { E1: { f: 0, done: 0 }, E2: { f: 0, done: 0 }, E3: { f: 0, done: 0 }, E4: { f: 0, done: 0 } }, note: 'a new stage starts with E3 available again' }] },
+    'recovery:5': { kind: 'service', steps: [
+      { exec: 'alive', svc: null, fetch: 'exec' },
+      { exec: 'dead', svc: null, fetch: null },
+      { exec: 'dead', svc: 'up', fetch: null },
+      { exec: 'dead', svc: 'up', fetch: 'svc' },
+      { exec: 'dead', svc: 'down', fetch: 'fail' },
+      { exec: 'released', svc: 'up', fetch: 'svc', idle: true }] }
   };
   const SD = root.SparkSystemDesign || (typeof require === "function" ? require("./engine-sysdesign.js") : null);
   for (const [key, spec] of Object.entries(DATA)) {

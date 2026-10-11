@@ -1131,6 +1131,69 @@
     ]
   };
 
+  ST['recovery:3'] = {
+    trigger: 'A reducer fetches a block from another executor, and the connection drops once while the executor is still alive.',
+    command: 'spark-submit --conf spark.shuffle.io.maxRetries=3 --conf spark.shuffle.io.retryWait=5s app.py  # both are the defaults',
+    expect: 'A short network drop is retried inside the fetch, so no map task reruns. Only a fetch that fails every retry is reported as lost output.',
+    sim: {
+      kind: 'backoff',
+      steps: [
+        { title: 'The fetch starts', text: 'The reducer opens a connection to executor B and asks for range 3 of map 1.' },
+        { title: 'The connection drops', text: 'The connection breaks in the middle of the transfer. The reducer does not report anything to the driver yet.' },
+        { title: 'Wait, then retry', text: 'The reducer waits spark.shuffle.io.retryWait, 5 seconds by default, and asks for the same range again.' },
+        { title: 'The retry fails too', text: 'The second attempt also fails, because executor B is briefly unreachable. One retry is still left.' },
+        { title: 'The third attempt succeeds', text: 'The network recovers. The last retry gets the range. The driver never hears about a failure, and no map task reruns.' },
+        { title: 'When the retries run out', text: 'If every retry fails, the reducer reports a fetch failure to the driver. Only then is the map output rerun.' }
+      ]
+    },
+    edges: [
+      E('The executor really is dead', 'Retries only delay the report.', 'Every retry fails the same way, so the reducer waits through all the retry waits before the driver hears about it.', 'The fetch failure then triggers the rerun of that map output, as in UC-02 of this feature.'),
+      E('Retries hide a slow network', 'The job is slower, not wrong.', 'Each retry adds the retry wait. Many fetches retrying at once can make a shuffle look stuck.', 'Check the network first; raise retryWait only if drops are short and frequent.')
+    ]
+  };
+
+  ST['recovery:4'] = {
+    trigger: 'One executor keeps failing the tasks it is given, while the other executors run theirs normally.',
+    command: 'spark-submit --conf spark.excludeOnFailure.enabled=true app.py  # off by default',
+    expect: 'After repeated failures on one executor, the scheduler stops giving it tasks for that stage, so the job finishes on the healthy executors.',
+    sim: {
+      kind: 'exclude',
+      steps: [
+        { title: 'Four executors, one flaky', text: 'Executor E3 has a bad disk. Tasks given to it fail, while E1, E2 and E4 run their tasks normally.' },
+        { title: 'Task A fails on E3', text: 'Task A fails on E3, and the scheduler retries it on another executor. E3 has one failure on record for this stage.' },
+        { title: 'Two failures on E3', text: 'Task B also fails on E3. Two failures on the same executor reach the limit for this stage.' },
+        { title: 'E3 is excluded for the stage', text: 'The scheduler excludes E3 from this stage, so it gets no more tasks until the stage ends. The other executors take its work.' },
+        { title: 'The stage finishes on healthy executors', text: 'The remaining tasks run on E1, E2 and E4. The stage completes without the bad disk being used again.' },
+        { title: 'Exclusion lasts for one stage only', text: 'The next stage starts with E3 available again. If the disk is still bad, it will fail again and be excluded again.' }
+      ]
+    },
+    edges: [
+      E('Every executor is flaky', 'Excluding them all stalls the stage.', 'If too many executors reach the limit, the stage has nowhere left to run its tasks.', 'Fix the shared cause, such as a bad network or a bad input. Exclusion is for one bad machine, not a whole cluster.'),
+      E('A genuinely bad task', 'The failures follow the task, not the executor.', 'The same task fails on every executor, so excluding machines does not help.', 'Treat it as an application error and fix the input or code. The retry limit then aborts the job.')
+    ]
+  };
+
+  ST['recovery:5'] = {
+    trigger: 'An executor is lost after it wrote map output, and the cluster runs an external shuffle service on every node.',
+    command: 'spark-submit --conf spark.shuffle.service.enabled=true app.py  # needs the service running on each node',
+    expect: 'Map output is served by the shuffle service, so losing the executor does not force its map tasks to run again.',
+    sim: {
+      kind: 'service',
+      steps: [
+        { title: 'Map output lives with the executor', text: 'Without a service, the executor serves its own map output files to the reducers.' },
+        { title: 'The executor dies', text: 'Executor E2 is lost. Without a service, its output files become unreachable with it.' },
+        { title: 'The shuffle service keeps serving', text: 'With an external shuffle service on each node, the files are served by that service, a separate process that keeps running after the executor exits.' },
+        { title: 'Reducers keep fetching', text: 'Reducers fetch the map output from the service on the same node. No fetch fails, so no map task reruns.' },
+        { title: 'The service process itself goes down', text: 'If the service on that node dies too, the files are unreachable, and the usual fetch-failure recovery applies.' },
+        { title: 'Idle executors can be released', text: 'Because the files survive executor removal, dynamic allocation can give back idle executors that hold no cached data.' }
+      ]
+    },
+    edges: [
+      E('The service is not running on that node', 'It is the same as no service.', 'Without the service process on the node, the files die with the executor, and recovery falls back to rerunning map tasks.', 'Start the service on every worker node before the job starts.'),
+      E('Cached data on the executor', 'The service serves shuffle files only.', 'Cached blocks live in executor memory, so losing the executor still loses them.', 'Recompute them from lineage, or persist them to disk or a reliable store.')
+    ]
+  };
+
   root.SparkStories = ST;
   if (typeof module === 'object' && module.exports) module.exports = ST;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

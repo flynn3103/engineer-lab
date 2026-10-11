@@ -281,3 +281,28 @@
 .vz-floorline{border-top-style:dashed}
 .vz-capline em,.vz-floorline em{position:absolute;right:8px;top:-17px;font:700 10.5px var(--mono);font-style:normal;color:var(--ink);background:var(--card);padding:0 4px;border-radius:4px}
 .vz-heapbox{display:grid;gap:10px;background:var(--card);border:var(--ink-line);border-radius:14px;padding:14px;box-shadow:var(--shadow)}
+
+/* UC: recovery:3 backoff, recovery:4 exclude, recovery:5 service */
+.vz-tries{display:flex;align-items:stretch;flex-wrap:wrap;gap:6px;background:var(--card);border:var(--ink-line);border-radius:14px;padding:16px;box-shadow:var(--shadow);min-height:90px}
+.vz-try{display:grid;gap:4px;align-content:start;min-width:110px;border:var(--ink-line);border-radius:12px;padding:10px;background:var(--soft);font:700 12px var(--mono);color:var(--ink);transition:background .3s}
+.vz-try small{font:600 10.5px var(--mono);color:var(--mut)}
+.vz-try.fail{background:var(--p5)}
+.vz-try.ok{background:var(--p2)}
+.vz-try.run{background:var(--p4)}
+.vz-gap{display:grid;place-items:center;min-width:70px;border-top:2px dashed var(--ink);align-self:center;font:600 10.5px var(--mono);color:var(--mut)}
+.vz-gap span{background:var(--card);padding:0 4px}
+.vz-gap.on{border-top-style:solid;color:var(--ink);font-weight:700}
+.vz-execs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.vz-exec{display:grid;gap:6px;align-content:start;border:var(--ink-line);border-radius:14px;padding:12px;background:var(--card);box-shadow:var(--shadow);font:700 13px var(--mono);color:var(--ink);transition:background .3s,opacity .3s}
+.vz-exec small{font:600 11px var(--mono);color:var(--mut)}
+.vz-exec.flaky{background:var(--p4)}
+.vz-exec.excluded{background:var(--p7);opacity:.75;border-style:dashed}
+.vz-svcs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.vz-svc{display:grid;gap:6px;align-content:start;border:var(--ink-line);border-radius:14px;padding:12px;background:var(--card);box-shadow:var(--shadow);font:700 13px var(--mono);color:var(--ink);transition:background .3s}
+.vz-svc small{font:600 11px var(--mono);color:var(--mut)}
+.vz-svc.ok{background:var(--p2)}
+.vz-svc.dead{background:var(--p5)}
+.vz-svc.gone{background:var(--p7);opacity:.7}
+.vz-svc.none{border-style:dashed;background:transparent}
+.vz-svc.reducer{background:var(--p0)}
+@media (max-width:760px){.vz-execs{grid-template-columns:repeat(2,minmax(0,1fr))}.vz-svcs{grid-template-columns:1fr}}
