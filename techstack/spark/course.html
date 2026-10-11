@@ -7,20 +7,21 @@
 <meta name="description" content="Learn Spark as a system design: an overview, then one page per feature and per use case, with spec, estimates, diagrams and animations for the hard parts.">
 <link rel="stylesheet" href="../../assets/lab.css">
 <link rel="stylesheet" href="../../assets/curriculum.css">
-<link rel="stylesheet" href="engine-course.css">
+<link rel="stylesheet" href="../../assets/course/course.css">
+<link rel="stylesheet" href="spark-sims.css">
 <link rel="stylesheet" href="engine-stagesim.css">
 <link rel="stylesheet" href="engine-visuals.css">
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="7"/><feDisplacementMap in="SourceGraphic" scale="2.2"/></filter></svg>
 <div id="app"></div>
-<script src="engine-model.js"></script>
-<script src="engine-traces.js"></script>
+<noscript><p>This course needs JavaScript for its diagrams and computed experiments.</p></noscript>
+<!-- framework -->
+<script src="../../assets/course/kit.js"></script>
+<script src="../../assets/course/contract.js"></script>
+<!-- Spark course data and simulations -->
 <script src="engine-curriculum.js"></script>
 <script src="engine-stories.js"></script>
 <script src="engine-sysdesign.js"></script>
-<script src="engine-pages.js"></script>
-<script src="engine-scenes.js"></script>
 <script src="engine-readsim.js"></script>
 <script src="engine-packsim.js"></script>
 <script src="engine-mapsim.js"></script>
@@ -30,7 +31,8 @@
 <script src="engine-lineagesim.js"></script>
 <script src="engine-stagesim.js"></script>
 <script src="engine-visuals.js"></script>
-<script src="engine-course.js"></script>
-<noscript><p>This course needs JavaScript for its diagrams and computed experiments. </p></noscript>
+<script src="spark-data.js"></script>
+<script src="../../assets/course/course.js"></script>
+<script>Course.mount(CourseData);</script>
 </body>
 </html>

@@ -87,6 +87,11 @@
   }
 
   /* ---------- page templates ---------- */
+  const scopeList = sc => Array.isArray(sc[0]) ? sc[0].map(x => 'In scope: ' + x).concat(sc[1].map(x => 'Out of scope: ' + x)) : sc;
+  const contractsTable = c => '<h3>Component contracts</h3>' + table(['Component', 'Interface', 'Guarantee'], c);
+  let secNo = 0;
+  const numbered = (id, title, body, sub) => section(id, ++secNo, title, body, sub);
+
   function featureCard(f, i) {
     return '<a class="ccard" href="' + href(i + 1) + '"><div class="art" style="--p:' + tone(i) + '"><svg viewBox="0 0 200 90" aria-hidden="true"><rect x="22" y="22" width="156" height="46" rx="10" fill="var(--card)" stroke="var(--ink)" stroke-width="2"/>' +
       '<text x="100" y="51" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="15" font-weight="700" fill="var(--ink)">' + esc(f.tag) + '</text></svg><span class="flag">' + pad(i + 1) + '</span></div>' +
@@ -94,75 +99,87 @@
   }
   function useCaseCards(f, n) {
     return '<div class="ucgrid">' + ucs(f).map((u, i) => {
-      const kinds = [...new Set((RD.diagrams[f.id + ':' + (i + 1)] || []).map(d => d.kind.toLowerCase()))].concat(['picture']);
-      return '<a class="uccard" href="' + href(n, i + 1) + '"><span class="ucn">UC-' + pad(i + 1) + '</span><h3>' + esc(u.title) + '</h3><p>' + firstSentence(u.intro) + '</p>' +
+      const kinds = [...new Set((RD.diagrams[f.id + ':' + (i + 1)] || []).map(d => d.kind.toLowerCase()))].concat([u.custom ? 'simulation' : 'picture']);
+      return '<a class="uccard" href="' + href(n, i + 1) + '"><span class="ucn">UC-' + pad(i + 1) + '</span><h3>' + esc(u.title) + '</h3><p>' + (u.blurb || firstSentence(u.intro)) + '</p>' +
         '<div class="chips">' + kinds.map(k => '<span>' + esc(k) + '</span>').join('') + '</div><b class="go">Go deeper →</b></a>';
     }).join('') + '</div>';
   }
 
   function overview() {
-    const s = RD.spec, total = feats.reduce((n, f) => n + ucs(f).length, 0);
-    const strip = t => t.replace(/^<b>[^<]*<\/b>\s*/, '');
-    const secs = [
-      ['overview', 'Overview', '<div class="two"><div><h3>What it is</h3><p>' + strip(s.overview[0]) + '</p></div><div><h3>Who does what</h3><p>' + strip(s.overview[1]) + '</p></div></div>'],
-      ['problem', 'Problem statement', '<p class="lead-problem">' + s.problem[0][1] + '</p><div class="two"><div><h3>Naive design</h3><p>' + s.problem[1][1] + '</p></div><div><h3>Fails when</h3><p>' + s.problem[2][1] + '</p></div></div><p class="note"><b>Principle.</b> ' + s.problem[3][1] + '</p>'],
-      ['spec', 'Functional and non-functional spec', '<div class="two"><div><h3>Functional requirements</h3>' + list(s.fr) + '</div><div><h3>Non-functional requirements</h3>' + list(s.nfr) + '</div></div><p class="note"><b>Out of scope.</b> ' + s.out + '</p>'],
-      ['estimate', 'Back-of-the-envelope estimation', '<p class="assume"><b>Assumptions.</b> These are assumptions, not measurements. Replace each number with one from your own system.</p>' + table(['Question', 'Calculation', 'Implication'], s.est)],
-      ['hld', 'High-level design', diagram({ kind: 'Flowchart', title: 'The whole server', src: RD.hldOverall }, true) + '<p class="caption">' + s.hldNote + '</p>' +
-        '<div class="c-hld-links">' + feats.map((f, i) => '<a href="' + href(i + 1) + '">' + pad(i + 1) + ' · ' + esc(f.tag) + '</a>').join('') + '</div>' + table(['Decision', 'Choice', 'Trade-off'], s.decisions)]
-    ];
-    const nav = [['overview', 'Overview'], ['problem', 'Problem'], ['spec', 'Spec'], ['estimate', 'Estimation'], ['hld', 'High-level design'], ['features', 'Features'], ['checks', 'Checks']];
+    const s = RD.spec, total = feats.reduce((n, f) => n + ucs(f).length, 0), strip = t => t.replace(/^<b>[^<]*<\/b>\s*/, '');
+    secNo = 0;
+    const nav = [], add = (id, label) => nav.push([id, label]);
+    let body = '';
+    if (s.overview) { add('overview', 'Overview'); body += numbered('overview', 'Overview', '<div class="two"><div><h3>What it is</h3><p>' + strip(s.overview[0]) + '</p></div><div><h3>Who does what</h3><p>' + strip(s.overview[1]) + '</p></div></div>'); }
+    add('problem', 'Problem');
+    if (s.problem) body += numbered('problem', 'Problem statement', '<p class="lead-problem">' + s.problem[0][1] + '</p><div class="two"><div><h3>Naive design</h3><p>' + s.problem[1][1] + '</p></div><div><h3>Fails when</h3><p>' + s.problem[2][1] + '</p></div></div><p class="note"><b>Principle.</b> ' + s.problem[3][1] + '</p>');
+    else body += numbered('problem', 'Problem statement', '<p class="lead-problem">' + s.problemLead + '</p>' + (s.inherited ? '<p><b>Starting point.</b> ' + s.inherited + '</p>' : '') +
+      (s.goal ? '<div class="two"><div><h3>Goal</h3><p>' + s.goal + '</p></div><div><h3>Scope</h3>' + list(scopeList(s.scope || [])) + '</div></div>' : ''));
+    add('spec', 'Spec');
+    body += numbered('spec', 'Functional and non-functional spec', '<div class="two"><div><h3>Functional requirements</h3>' + list(s.fr) + '</div><div><h3>Non-functional requirements</h3>' + list(s.nfr) + '</div></div>' +
+      (s.contracts ? contractsTable(s.contracts) : '') + (s.out ? '<p class="note"><b>Out of scope.</b> ' + s.out + '</p>' : ''));
+    add('estimate', 'Estimation');
+    body += numbered('estimate', 'Back-of-the-envelope estimation', '<p class="assume"><b>Assumptions.</b> ' + (s.estAssume || 'These are assumptions, not measurements. Replace each number with one from your own system.') + '</p>' +
+      table(['Question', 'Calculation', 'Implication'], s.est) + (s.estNote ? '<p class="note"><b>Reading the numbers.</b> ' + s.estNote + '</p>' : ''));
+    add('hld', 'High-level design');
+    body += numbered('hld', 'High-level design', diagram({ kind: 'Flowchart', title: 'Components and flows', src: RD.hldOverall }, true) + '<p class="caption">' + s.hldNote + '</p>' +
+      '<div class="c-hld-links">' + feats.map((f, i) => '<a href="' + href(i + 1) + '">' + pad(i + 1) + ' · ' + esc(f.tag) + '</a>').join('') + '</div>' + table(['Decision', 'Choice', 'Trade-off'], s.decisions));
+    add('features', 'Features');
+    body += numbered('features', 'Features', '<div class="cgrid">' + feats.map(featureCard).join('') + '</div>', 'Pick a feature to see its own spec, design and use cases.');
+    if (s.verify) { add('checks', 'Checks'); body += numbered('checks', 'How the facts were checked', '<div class="note">' + list(s.verify) + '</div>'); }
     return '<header class="page-head"><p class="kick">OVERVIEW · SYSTEM DESIGN</p><h1>' + esc(s.title) + '</h1><p class="lead">' + s.lead + '</p>' +
-      chips([feats.length + ' features', total + ' use cases', cfg.name + ' ' + cfg.version]) + '</header>' + jump(nav) +
-      secs.map((x, i) => section(x[0], i + 1, x[1], x[2])).join('') +
-      section('features', secs.length + 1, 'Features', '<div class="cgrid">' + feats.map(featureCard).join('') + '</div>', 'Pick a feature to see its own spec, design and use cases.') +
-      section('checks', secs.length + 2, 'How the facts were checked', '<div class="note">' + list(s.verify) + '</div>');
+      chips([feats.length + ' features', total + ' use cases', cfg.name + ' ' + cfg.version]) + '</header>' + jump(nav) + body;
   }
 
   function feature(n) {
-    const f = feats[n - 1];
-    const prev = feats[n - 2], next = feats[n];
-    return '<header class="page-head"><p class="kick">FEATURE ' + pad(n) + ' · ' + esc(f.tag.toUpperCase()) + '</p><h1>' + esc(f.name) + '</h1><p class="lead">' + f.summary + '</p></header>' +
-      section('goal', 1, 'Goal and scope', '<div class="two"><div><h3>Goal</h3><p>' + f.goal + '</p></div><div><h3>Scope</h3>' + list(f.scope[0].map(x => 'In scope: ' + x).concat(f.scope[1].map(x => 'Out of scope: ' + x))) + '</div></div>') +
-      section('spec', 2, 'Functional and non-functional spec', '<div class="two"><div><h3>Functional requirements</h3>' + list(f.fr) + '</div><div><h3>Non-functional requirements</h3>' + list(f.nfr) + '</div></div>') +
-      section('hld', 3, 'High-level design', diagram({ kind: 'Flowchart', title: 'Components and flows', src: RD.hld[f.id] }, true) + table(['Decision', 'Choice', 'Trade-off'], f.decisions)) +
-      section('usecases', 4, 'Use cases', useCaseCards(f, n), 'Pick one to see how it works, step by step.') +
+    const f = feats[n - 1], prev = feats[n - 2], next = feats[n];
+    secNo = 0;
+    const scopeCards = '<div class="two"><div><h3>Goal</h3><p>' + f.goal + '</p></div><div><h3>Scope</h3>' + list(scopeList(f.scope)) + '</div></div>';
+    return '<header class="page-head"><p class="kick">FEATURE ' + pad(n) + ' · ' + esc(f.tag.toUpperCase()) + '</p><h1>' + esc(f.name) + '</h1>' + (f.problem ? '' : '<p class="lead">' + f.summary + '</p>') + '</header>' +
+      (f.problem ? numbered('problem', 'Problem statement', '<p class="lead-problem">' + f.problem + '</p>' + (f.inherited ? '<p><b>Starting point.</b> ' + f.inherited + '</p>' : '') + scopeCards)
+        : numbered('goal', 'Goal and scope', scopeCards)) +
+      numbered('spec', 'Functional and non-functional spec', '<div class="two"><div><h3>Functional requirements</h3>' + list(f.fr) + '</div><div><h3>Non-functional requirements</h3>' + list(f.nfr) + '</div></div>' + (f.contracts ? contractsTable(f.contracts) : '')) +
+      numbered('hld', 'High-level design', diagram({ kind: 'Flowchart', title: 'Components and flows', src: RD.hld[f.id] }, true) + (f.hldCaption ? '<p class="caption">' + f.hldCaption + '</p>' : '') + table(['Decision', 'Choice', 'Trade-off'], f.decisions)) +
+      numbered('usecases', 'Use cases', useCaseCards(f, n), 'Pick one to see how it works, step by step.') +
       '<nav class="pager" aria-label="Previous and next feature"><a href="' + href(n > 1 ? n - 1 : 0) + '"><small>' + (prev ? 'PREVIOUS FEATURE' : 'BACK TO') + '</small><b>← ' + esc(prev ? prev.name : 'Overview') + '</b></a>' +
       (next ? '<a class="next" href="' + href(n + 1) + '"><small>NEXT FEATURE</small><b>' + esc(next.name) + ' →</b></a>' : '') + '</nav>';
   }
 
   function edgeCard(e, i) {
-    return '<details class="edgecard"><summary><span class="en">' + (i + 1) + '</span><span class="et"><b>' + esc(e.t) + '</b><small>' + firstSentence(e.ctx) + '</small></span><span class="ex" aria-hidden="true"></span></summary>' +
+    return '<details class="edgecard"><summary><span class="en">' + (i + 1) + '</span><span class="et"><b>' + esc(e.t) + '</b><small>' + (e.short || firstSentence(e.ctx)) + '</small></span><span class="ex" aria-hidden="true"></span></summary>' +
       '<div class="eb"><div><h4>Context</h4><p>' + e.ctx + '</p></div><div><h4>Solution</h4><p>' + e.fix + '</p></div></div></details>';
   }
 
   let player = null;
   function useCase(n, m) {
-    const f = feats[n - 1], L = ucs(f), u = L[m - 1];
-    const prev = L[m - 2], next = L[m];
-    return '<header class="page-head"><p class="kick">FEATURE ' + pad(n) + ' · USE CASE ' + pad(m) + '</p><h1>' + esc(u.title) + '</h1><p class="lead">' + u.intro + '</p></header>' +
-      section('trigger', 1, 'Trigger', '<p class="lead-problem">' + u.trigger + '</p><div class="cmd"><span>Run</span><code>' + esc(u.run) + '</code></div><p class="expect"><b>Expect.</b> ' + u.expect + '</p>') +
-      section('flow', 2, 'Diagrams', (RD.diagrams[f.id + ':' + m] || []).map(d => diagram(d, true)).join('')) +
-      section('steps', 3, 'Step by step', '<div class="c-player"><div class="pv-stage"><div class="pv" id="c-pic" aria-live="polite"></div></div>' +
+    const f = feats[n - 1], L = ucs(f), u = L[m - 1], prev = L[m - 2], next = L[m];
+    secNo = 0;
+    return '<header class="page-head"><p class="kick">FEATURE ' + pad(n) + ' · USE CASE ' + pad(m) + '</p><h1>' + esc(u.title) + '</h1></header>' +
+      numbered('trigger', 'Trigger', '<p class="lead-problem">' + u.trigger + '</p>' + (u.run ? '<div class="cmd"><span>Run</span><code>' + esc(u.run) + '</code></div>' : '') + (u.expect ? '<p class="expect"><b>Expect.</b> ' + u.expect + '</p>' : '')) +
+      numbered('flow', 'Diagrams', (RD.diagrams[f.id + ':' + m] || []).map(d => diagram(d, true)).join(''), u.intro) +
+      (u.custom ? numbered('steps', 'Step by step', u.custom, 'Press Next step to walk through it one move at a time.') :
+        numbered('steps', 'Step by step', '<div class="c-player"><div class="pv-stage" id="c-stage"><div class="pv" id="c-pic" aria-live="polite"></div></div>' +
         '<div class="c-inspector"><p class="kick" id="c-kick"></p><h3 id="c-title"></h3><p id="c-text"></p><div class="c-stat" id="c-stat"></div></div>' +
         '<div class="c-controls" role="group" aria-label="Step controls"><button id="c-reset" aria-label="Restart">↺</button><button id="c-back">← Back</button><button id="c-next" class="go">Next step →</button><span class="c-dots" id="c-dots"></span></div></div>',
-        'Press Next step to walk through it one move at a time. The arrow keys work too.') +
-      section('edges', 4, 'Edge cases and failure modes', '<div class="edges">' + u.edges.map(edgeCard).join('') + '</div>') +
-      section('rule', 5, 'Invariant', '<div class="invariant"><b>Must always hold</b><p>' + u.invariant + '</p></div><p class="sub" style="margin-top:14px">Sources: ' + u.src + '</p>') +
+        'Press Next step to walk through it one move at a time. The arrow keys work too.')) +
+      numbered('edges', 'Edge cases and failure modes', '<div class="edges">' + u.edges.map(edgeCard).join('') + '</div>') +
+      (u.invariant ? numbered('rule', 'Invariant', '<div class="invariant"><b>Must always hold</b><p>' + u.invariant + '</p></div>' + (u.src ? '<p class="sub" style="margin-top:14px">Sources: ' + u.src + '</p>' : '')) : '') +
       '<nav class="pager" aria-label="Use cases"><a href="' + (prev ? href(n, m - 1) : href(n)) + '"><small>' + (prev ? 'PREVIOUS USE CASE' : 'BACK TO') + '</small><b>← ' + esc(prev ? prev.title : f.name) + '</b></a>' +
       (next ? '<a class="next" href="' + href(n, m + 1) + '"><small>NEXT USE CASE</small><b>' + esc(next.title) + ' →</b></a>' : '<a class="next" href="' + href(n) + '"><small>BACK TO</small><b>' + esc(f.name) + ' →</b></a>') + '</nav>';
   }
 
+  /* A painter returns html, or { html, stat, bare } (bare drops the stage frame when the painter draws its own). */
   function mountPlayer(u) {
     const paint = RD.PAINT[u.kind] || (() => '<p class="faint">No painter named ' + esc(u.kind) + '.</p>'), $ = id => document.getElementById(id);
     let i = 0;
     function show() {
-      const st = u.steps[i];
-      $('c-pic').innerHTML = paint(st.s, st);
+      const st = u.steps[i], r = paint(st.s, st), o = typeof r === 'string' ? { html: r } : r;
+      $('c-pic').innerHTML = o.html;
+      $('c-stage').classList.toggle('bare', !!o.bare);
       $('c-kick').textContent = 'STEP ' + (i + 1) + ' OF ' + u.steps.length;
       $('c-title').textContent = st.t;
       $('c-text').innerHTML = st.x;
-      $('c-stat').innerHTML = st.stat || '&nbsp;';
+      $('c-stat').innerHTML = o.stat || st.stat || '&nbsp;';
       $('c-dots').innerHTML = u.steps.map((_, k) => '<i class="' + (k === i ? 'on' : k < i ? 'done' : '') + '"></i>').join('');
       $('c-back').disabled = i === 0; $('c-next').disabled = i === u.steps.length - 1;
     }
@@ -207,16 +224,20 @@
 
   function render() {
     player = null;
+    /* old links of the form #c=<featureId>&uc=<n> keep working */
+    if (/^#c=/.test(location.hash)) { const q = new URLSearchParams(location.hash.slice(1)), k = feats.findIndex(f => f.id === q.get('c')), uc = +q.get('uc') || 0;
+      history.replaceState(null, '', k < 0 ? '#/' : '#/f/' + (k + 1) + (uc && ucs(feats[k])[uc - 1] ? '/u/' + uc : '')); }
     const p = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
     route = p[0] === 'f' ? { n: +p[1] || 0, m: p[2] === 'u' ? +p[3] || 0 : 0 } : { n: 0, m: 0 };
     const page = $('page'); let title = RD.spec.title;
     const f = feats[route.n - 1], u = f && route.m ? ucs(f)[route.m - 1] : null;
     if ((route.n && !f) || (route.m && !u)) { page.innerHTML = notFound(); route = { n: 0, m: 0 }; }
-    else if (u) { page.innerHTML = useCase(route.n, route.m); mountPlayer(u); title = u.title + ' · ' + f.name; }
+    else if (u) { page.innerHTML = useCase(route.n, route.m); if (!u.custom) mountPlayer(u); title = u.title + ' · ' + f.name; }
     else if (f) { page.innerHTML = feature(route.n); title = f.name; }
     else page.innerHTML = overview();
     document.title = title + ' · ' + cfg.name + ' design';
     renderNav(); renderCrumb(); closeMenu(); window.scrollTo(0, 0); draw(page);
+    if (cfg.afterRender) cfg.afterRender(page);
   }
 
   $('menu-toggle').onclick = () => { const o = $('course-sidebar').classList.toggle('open'); $('sidebar-scrim').hidden = !o; $('menu-toggle').setAttribute('aria-expanded', String(o)); };

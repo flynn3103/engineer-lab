@@ -39,12 +39,22 @@ function mermaidFile() {
     for (const h of routes) {
       await p.goto(url + h); await p.reload(); pages++;
       if (/\/u\//.test(h)) {
-        await p.waitForSelector('#c-pic');
-        for (let k = 0; k < 9; k++) {
-          const len = await p.$eval('#c-pic', e => e.innerHTML.length); if (len < 30) errs.push(`${scheme} ${h} step ${k + 1}: empty picture`);
-          stepsShown++;
-          if (await p.$eval('#c-next', e => e.disabled)) break;
-          await p.click('#c-next');
+        if (await p.$('#c-pic')) {
+          for (let k = 0; k < 9; k++) {
+            const len = await p.$eval('#c-pic', e => e.innerHTML.length); if (len < 30) errs.push(`${scheme} ${h} step ${k + 1}: empty picture`);
+            stepsShown++;
+            if (await p.$eval('#c-next', e => e.disabled)) break;
+            await p.click('#c-next');
+          }
+        } else {
+          /* custom simulation: the host must have mounted, and pressing its Next buttons must not throw */
+          await p.waitForSelector('[data-sim]');
+          await p.waitForTimeout(150);
+          const len = await p.$eval('[data-sim]', e => e.innerHTML.length); if (len < 30) errs.push(`${scheme} ${h}: simulation did not mount`);
+          for (let k = 0; k < 30; k++) {
+            const btn = await p.$('[data-sim] button:not([disabled]):is([data-act=next],.rs-go,[data-a=next])'); if (!btn) break;
+            await btn.click().catch(() => {}); stepsShown++;
+          }
         }
       }
       if (wantDiagrams) {

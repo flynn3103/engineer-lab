@@ -36,9 +36,12 @@
     need(data, ['config', 'spec', 'features', 'uc', 'hld', 'hldOverall', 'diagrams', 'PAINT'], 'CourseData');
     if (errors.length) return { errors, warnings, stats: {} };
     need(data.config, ['id', 'name', 'version', 'root'], 'config');
-    need(data.spec, ['title', 'lead', 'overview', 'problem', 'fr', 'nfr', 'out', 'est', 'hldNote', 'decisions', 'verify'], 'spec');
+    need(data.spec, ['title', 'lead', 'fr', 'nfr', 'est', 'hldNote', 'decisions'], 'spec');
+    if (!data.spec.problem && !data.spec.problemLead) err('spec needs problem (4 rows) or problemLead (a paragraph)');
     if (data.spec.overview && data.spec.overview.length !== 2) err('spec.overview needs 2 paragraphs (what it is, who does what)');
     if (data.spec.problem && data.spec.problem.length !== 4) err('spec.problem needs 4 rows: scenario, naive design, fails when, principle');
+    if (!data.spec.verify) warn('spec.verify is missing: add how the facts were checked');
+    if (!data.spec.out && !data.spec.scope) warn('spec has no out-of-scope statement');
     (data.spec.est || []).forEach((r, i) => { if (!Array.isArray(r) || r.length !== 3) err('spec.est[' + i + '] must be [question, calculation, implication]'); });
     (data.spec.decisions || []).forEach((r, i) => { if (!Array.isArray(r) || r.length !== 3) err('spec.decisions[' + i + '] must be [decision, choice, trade-off]'); });
     if ((data.spec.decisions || []).length < 2 || (data.spec.decisions || []).length > 4) warn('spec.decisions: record 2 to 4 decisions');
@@ -46,13 +49,13 @@
     lintMermaid(data.hldOverall || '', 'hldOverall', errors);
 
     const kinds = {}, ids = new Set();
-    let ucTotal = 0, steps = 0, diagrams = 1;
+    let ucTotal = 0, steps = 0, diagrams = 1, customUc = 0;
     if (data.features.length < 8 || data.features.length > 15) warn('features: the method asks for 8 to 15, found ' + data.features.length);
     data.features.forEach((f, fi) => {
       const w = 'feature ' + (f && f.id);
       need(f, ['id', 'tag', 'name', 'summary', 'goal', 'scope', 'fr', 'nfr', 'decisions'], w);
       if (ids.has(f.id)) err(w + ' is duplicated'); ids.add(f.id);
-      if (!f.scope || f.scope.length !== 2) err(w + ': scope must be [[in scope], [out of scope]]');
+      if (!f.scope || (Array.isArray(f.scope[0]) && f.scope.length !== 2)) err(w + ': scope must be [[in scope], [out of scope]] or a list of strings');
       (f.decisions || []).forEach((r, i) => { if (!Array.isArray(r) || r.length !== 3) err(w + ' decisions[' + i + '] must have 3 columns'); });
       if (!data.hld[f.id]) err(w + ' has no high-level-design diagram in hld'); else { lintMermaid(data.hld[f.id], w + ' hld', errors); diagrams++; }
       const list = data.uc[f.id];
@@ -61,9 +64,17 @@
       list.forEach((u, i) => {
         const id = f.id + ':' + (i + 1);
         ucTotal++;
-        need(u, ['title', 'intro', 'trigger', 'run', 'expect', 'kind', 'steps', 'edges', 'invariant', 'src'], 'use case ' + id);
+        need(u, u.custom ? ['title', 'intro', 'trigger', 'custom', 'edges'] : ['title', 'intro', 'trigger', 'kind', 'steps', 'edges'], 'use case ' + id);
+        ['run', 'expect', 'invariant'].forEach(k => { if (!u.custom && !u[k]) warn('use case ' + id + ' has no "' + k + '" (the method asks for one)'); });
+        if (!u.src) warn('use case ' + id + ' has no sources line');
         if (u.edges && u.edges.length !== 2) warn('use case ' + id + ' has ' + u.edges.length + ' edge cases, the method asks for 2');
         (u.edges || []).forEach((x, k) => need(x, ['t', 'ctx', 'fix'], 'use case ' + id + ' edge ' + (k + 1)));
+        if (u.custom) {
+          const dsc = data.diagrams[id];
+          if (!dsc || !dsc.length) err('use case ' + id + ' has no diagram'); else dsc.forEach((d, k) => { diagrams++; need(d, ['kind', 'title', 'src'], 'diagram ' + id + '#' + (k + 1)); lintMermaid(d.src || '', 'diagram ' + id + '#' + (k + 1), errors); });
+          customUc++;
+          return;
+        }
         if (u.steps && (u.steps.length < 5 || u.steps.length > 7)) warn('use case ' + id + ' has ' + u.steps.length + ' steps, the method asks for 5 to 7');
         if (kinds[u.kind]) err('use case ' + id + ' repeats picture form "' + u.kind + '" (already used by ' + kinds[u.kind] + ')'); else kinds[u.kind] = id;
         const paint = data.PAINT[u.kind];
@@ -73,7 +84,7 @@
           if (!s.t || !s.x) err('use case ' + id + ' step ' + (k + 1) + ' needs a title (t) and text (x)');
           if (/\band then\b/i.test(s.x || '')) warn('use case ' + id + ' step ' + (k + 1) + ' says "and then": a step is one move, split it');
           try {
-            const html = paint(s.s, s);
+            const r = paint(s.s, s), html = r && typeof r === 'object' ? r.html : r;
             if (typeof html !== 'string' || html.length < 20) err('use case ' + id + ' step ' + (k + 1) + ' painted nothing');
             else if (/undefined|NaN|\[object/.test(html)) err('use case ' + id + ' step ' + (k + 1) + ' painted "' + (html.match(/.{0,30}(undefined|NaN|\[object).{0,30}/) || [''])[0] + '"');
           } catch (x) { err('use case ' + id + ' step ' + (k + 1) + ' threw: ' + x.message); }
@@ -88,7 +99,7 @@
     Object.keys(data.uc).forEach(k => { if (!ids.has(k)) err('uc has entries for unknown feature "' + k + '"'); });
     Object.keys(data.hld).forEach(k => { if (!ids.has(k)) err('hld has an entry for unknown feature "' + k + '"'); });
     Object.keys(data.diagrams).forEach(k => { const [f, n] = k.split(':'); if (!data.uc[f] || !data.uc[f][n - 1]) err('diagrams has an entry for unknown use case "' + k + '"'); });
-    return { errors, warnings, stats: { features: data.features.length, useCases: ucTotal, steps, forms: Object.keys(kinds).length, diagrams } };
+    return { errors, warnings, stats: { features: data.features.length, useCases: ucTotal, steps, forms: Object.keys(kinds).length, diagrams, custom: customUc } };
   }
 
   Course.validate = validate;

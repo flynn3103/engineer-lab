@@ -1,5 +1,5 @@
 /* Course framework stylesheet: the look of the Spark system-design course, scoped to .course so any course page can use it.
- * Rules were copied from techstack/spark/engine-course.css (shell, page head, sections, cards, tables, diagrams, edge cards, pager)
+ * Rules were copied from the Spark course's former engine-course.css (shell, page head, sections, cards, tables, diagrams, edge cards, pager)
  * and extended with the step player and the picture kit (.pv). Colours come only from the tokens in assets/lab.css, so light and dark work.
  * Load order on a page: lab.css, curriculum.css, course.css. Markup is produced by course.js and kit.js. */
 .course{--brand:var(--bad);--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--control:var(--acc);--data:var(--acc2);--ink-line:1.5px solid var(--ink)}
@@ -160,3 +160,6 @@
 .pv .stages b{display:block;font:700 13px var(--mono)}.pv .stages small{color:var(--mut)}
 @media(prefers-reduced-motion:no-preference){.pv .meter>i{transition:width .35s}}
 .sec .cmd{align-items:flex-start}.sec .cmd code{white-space:pre}
+.pv-stage.bare{border:0;background:none;padding:0;overflow-x:auto}
+.course code{overflow-wrap:anywhere}
+@media(max-width:550px){.c-player{padding:12px}.pv-stage{padding:10px}}

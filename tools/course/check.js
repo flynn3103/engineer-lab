@@ -18,5 +18,5 @@ if (!ctx.Course || !ctx.Course.validate) { console.log('FAIL: assets/course/cont
 const r = ctx.Course.validate(ctx.CourseData);
 r.errors.forEach(m => console.log('ERROR  ' + m));
 r.warnings.forEach(m => console.log('warn   ' + m));
-console.log(`features ${r.stats.features} · use cases ${r.stats.useCases} · steps ${r.stats.steps} · picture forms ${r.stats.forms} · diagrams ${r.stats.diagrams} · errors ${r.errors.length} · warnings ${r.warnings.length}`);
+console.log(`features ${r.stats.features} · use cases ${r.stats.useCases} · steps ${r.stats.steps} · picture forms ${r.stats.forms} · custom simulations ${r.stats.custom || 0} · diagrams ${r.stats.diagrams} · errors ${r.errors.length} · warnings ${r.warnings.length}`);
 process.exit(r.errors.length ? 1 : 0);

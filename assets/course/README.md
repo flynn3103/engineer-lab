@@ -1,7 +1,7 @@
 # Course framework
 
 One look, one data contract and one set of checks for every system-design course page on this site. The Redis course
-(`techstack/redis/design/`) is the reference implementation. The visual style is the Spark course's (`techstack/spark/`).
+(`techstack/redis/design/`) is the reference for a course written on the framework from scratch; the Spark course (`techstack/spark/`) is the style source and now runs on the framework too, through a converter (`spark-data.js`).
 
 ```
 assets/course/
@@ -50,6 +50,15 @@ One global, `CourseData`, assembled from the files. `Course.validate` enforces i
 | `uc` | `{ <featureId>: [ useCase ] }` where `useCase = { title, short, intro, trigger, run, expect, kind, steps, edges, invariant, src }` |
 | `diagrams` | `{ '<featureId>:<n>': [ { kind: 'Sequence'\|'State'\|'Flow', title, src } ] }`, `n` starts at 1 |
 | `PAINT` | `{ <kind>: (state, step) => html }`, one painter per use case `kind` |
+
+Optional parts, used when a course has them (Spark does): `spec.problemLead`, `spec.inherited`, `spec.goal`, `spec.scope` (a flat list), `spec.contracts`
+(a component table), `spec.estAssume`, `spec.estNote`; per feature `problem`, `inherited`, `contracts`, `hldCaption`; per use case `blurb` (card text), and
+edges with a `short` line. Without `spec.overview` the Overview section is skipped; without `spec.verify`, so is "How the facts were checked" (the validator warns).
+
+**Hosting things the kit does not draw.** (1) A painter may return `{ html, stat, bare }` instead of a string: `stat` fills the stat line and `bare` drops the
+stage frame when the painter draws its own. (2) A use case may set `custom` (an HTML string for the Step by step section) instead of `kind` and `steps`; the engine
+renders it as is and `config.afterRender(pageEl)` runs after every page render so the course can mount its own interactive code (Spark mounts its simulations there).
+(3) Old links of the form `#c=<featureId>&uc=<n>` are rewritten to the new routes, so published URLs keep working.
 
 `steps` is 5 to 7 entries of `{ t, x, s, stat }`: title, one-move text, the **whole scene state** for the picture, and a stat line.
 `edges` is 2 entries of `{ t, ctx, fix }`. Text fields may carry `<code>` and `<b>`; everything else is escaped.
