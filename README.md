@@ -2,7 +2,7 @@
 
 The public portfolio of **Linh Trần Nhật**, Data Platform Engineer, and the lab where I write up how the systems I work with actually behave inside.
 
-It is a static site with no build step for the pages themselves. It publishes to GitHub Pages from `main`.
+It is a static site with no build step for the pages themselves. Live site: **https://engineer-lab-snowy.vercel.app**, deployed by Vercel from `main` (config in `vercel.json`: no framework, no build, the repo root is served as-is).
 
 ## What's inside
 
@@ -76,7 +76,8 @@ Then open <http://localhost:8000>.
 
 ## Deployment
 
-- **Site:** `.github/workflows/pages.yml` runs on pushes to `main` that touch the top-level HTML, `assets/`, `data/`, or `techstack/`. It checks that the required files exist, copies them into `_site/`, and deploys. It needs **Settings → Pages → Source = GitHub Actions**.
+- **Site (Vercel):** every push to `main` deploys to <https://engineer-lab-snowy.vercel.app>; other branches get preview URLs. There is no build step. Vercel serves the repo root as configured in `vercel.json`.
+- **GitHub Pages (legacy):** `.github/workflows/pages.yml` runs on pushes to `main` that touch the top-level HTML, `assets/`, `data/`, or `techstack/`. It checks that the required files exist, copies them into `_site/`, and deploys. It needs **Settings → Pages → Source = GitHub Actions**.
 - **CV:** `.github/workflows/cv.yml` runs when `cv/**` changes. It compiles `cv/cv.tex` with LaTeX, replaces `assets/Linh-Tran-Nhat-CV.pdf`, commits the result to `main`, and then dispatches the Pages workflow.
 
 To rebuild the CV locally, install [tectonic](https://tectonic-typesetting.github.io/) and run:
