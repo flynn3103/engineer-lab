@@ -1425,6 +1425,69 @@
     ]
   };
 
+  ST['evidence:3'] = {
+    trigger: 'A job fires events faster than the listeners can consume them, for example when thousands of tasks start and finish in a short time.',
+    command: 'spark-submit --conf spark.scheduler.listenerbus.eventqueue.capacity=20000 app.py  # 10000 is the default',
+    expect: 'Events beyond the queue capacity are dropped, so the UI and the event log miss them. Size the queue for the peak event rate, or speed up the listener.',
+    sim: {
+      kind: 'dropqueue',
+      steps: [
+        { title: 'Events arrive from the scheduler', text: 'Each task start and end is an event. The scheduler puts them on the bus, a bounded queue of 10,000 events, and keeps scheduling.' },
+        { title: 'A slow listener falls behind', text: 'A listener that writes the event log consumes events more slowly than they arrive, so the queue begins to fill.' },
+        { title: 'The queue is nearly full', text: 'The queue holds 9,800 of its 10,000 places. The scheduler keeps working, because posting an event does not wait for the listeners.' },
+        { title: 'The queue is full: events are dropped', text: 'New events arrive when the queue is full. They are dropped, and a warning counts how many were lost.' },
+        { title: 'The UI and the log have gaps', text: 'The live pages and the event log are missing the dropped events. Totals and task lists can be incomplete.' },
+        { title: 'Enlarge the queue or speed up the listener', text: 'A larger capacity holds bursts, and a faster listener keeps up. The right fix depends on which one is the bottleneck.' }
+      ]
+    },
+    edges: [
+      E('A short burst, not a steady rate', 'A bigger queue absorbs it.', 'Many tasks finishing together can briefly outrun the listeners, then the rate drops again.', 'Raise the queue capacity so the burst fits; the listeners catch up afterwards.'),
+      E('A listener that is always slow', 'A bigger queue only delays the drops.', 'If a listener cannot keep up on average, the queue fills no matter how large it is.', 'Make the listener faster, for example by writing the log to faster storage.')
+    ]
+  };
+
+  ST['evidence:4'] = {
+    trigger: 'A long application has run thousands of stages, and someone opens its live UI to look for an early slow stage.',
+    command: 'spark-submit --conf spark.ui.retainedStages=1000 --conf spark.ui.retainedJobs=1000 app.py  # 1000 is the default for both',
+    expect: 'The live UI shows the most recent stages and jobs only. Older ones leave memory, but the event log still has every one of them.',
+    sim: {
+      kind: 'window',
+      steps: [
+        { title: 'Stages keep arriving', text: 'Each finished stage is added to the live UI. The UI keeps a window of the most recent ones, so driver memory stays bounded.' },
+        { title: 'The window is full', text: 'When the window holds its limit of stages, the oldest one is removed from the live pages to free memory.' },
+        { title: 'A removed stage is still in the log', text: 'The event log was written while the job ran, so every stage, including the removed ones, is in the file.' },
+        { title: 'The live UI is only a window', text: 'Opening the live UI shows the latest stages only. Looking for an early slow stage here finds nothing.' },
+        { title: 'The history server shows all of them', text: 'Replaying the event log rebuilds the complete list, from the first stage to the last.' },
+        { title: 'A bigger window has a cost', text: 'A bigger window keeps more in driver memory. For long applications the history server is the right tool, not a larger window.' }
+      ]
+    },
+    edges: [
+      E('The job is still running', 'The log is still being written.', 'The history server reads the log as it grows. A live job can show less than the event log holds until it is replayed.', 'Refresh the history server, or use the live UI for the current window.'),
+      E('The log was not enabled', 'Removed stages are lost for good.', 'Without an event log, the live window is the only record, so a removed stage cannot be looked at afterwards.', 'Turn the event log on for every application you may need to explain later.')
+    ]
+  };
+
+  ST['evidence:5'] = {
+    trigger: 'A stage looks slow, and you need to know whether every task is slow or only a few of them.',
+    command: 'Spark UI: Stages tab, then the stage page, then Summary Metrics (min, median and max task durations)',
+    expect: 'A tight spread means the whole stage is slow. A few tasks far above the median point to skew, and the input size of those tasks confirms it.',
+    sim: {
+      kind: 'box',
+      steps: [
+        { title: 'Look at the stage, not one task', text: 'A stage has 200 tasks. One slow task is easy to miss in a list of 200 rows.' },
+        { title: 'Summarise the durations', text: 'The summary shows the minimum, the 25th percentile, the median, the 75th percentile and the maximum duration of the tasks.' },
+        { title: 'Most tasks are alike', text: 'The box is tight, between 20 and 24 seconds, so most tasks cost about the same and the maximum is close to them.' },
+        { title: 'A few tasks sit far above', text: 'For a different stage, the maximum is 240 seconds, far above the box. Those few tasks are outliers, and the whiskers show how far they reach.' },
+        { title: 'Check the input size of the outliers', text: 'The slow tasks read far more input bytes than the rest. That points to a skewed key, not a slow machine.' },
+        { title: 'Decide the fix from the shape', text: 'A tight box with a long tail means skew: fix the key. A wide spread everywhere means the whole stage needs more resources.' }
+      ]
+    },
+    edges: [
+      E('Few tasks in the stage', 'The summary is not reliable.', 'With only a handful of tasks, one slow task can set the maximum and mislead the reading.', 'Look at the individual tasks in the stage page before deciding.'),
+      E('Slow tasks on one machine', 'The skew is in the cluster, not the data.', 'If the outlier tasks all ran on one executor, a bad disk or node is more likely than a skewed key.', 'Check the executor column for the slow tasks, and exclude the executor if it is the cause.')
+    ]
+  };
+
   root.SparkStories = ST;
   if (typeof module === 'object' && module.exports) module.exports = ST;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

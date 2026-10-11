@@ -639,12 +639,63 @@
     return `finished: ${v.done} of ${N} query stages · phase: ${v.phase}`;
   }
 
+  /* evidence:3 · the bounded queue as a bar with its capacity, the number of dropped events and whether the event log kept them. */
+  function paintDropQueue(stage, sim, k) {
+    const v = sim.steps[k].v, pct = v.fill / v.cap * 100;
+    stage.innerHTML = `<div class="vz-dq">
+        <div class="vz-dqtrack"><span class="vz-dqfill${v.fill >= v.cap ? ' full' : ''}" style="width:${pct}%"></span><em>${v.fill.toLocaleString('en-US')} of ${v.cap.toLocaleString('en-US')} places</em></div>
+        <div class="vz-dqkeys">
+          <div class="vz-dqcell"><b>listener</b><small>${v.slow ? 'slow: writing the log' : 'keeping up'}</small></div>
+          <div class="vz-dqcell${v.dropped ? ' bad' : ''}"><b>dropped</b><small>${v.dropped}</small></div>
+          <div class="vz-dqcell${v.logged ? ' good' : ' bad'}"><b>event log</b><small>${v.logged ? 'complete so far' : 'gaps: dropped events missing'}</small></div>
+        </div>
+      </div>`;
+    return `queue ${v.fill.toLocaleString('en-US')} of ${v.cap.toLocaleString('en-US')} · dropped ${v.dropped}`;
+  }
+
+  /* evidence:4 · the stages as cells. Old ones leave the live window, the log keeps them, and the history view shows all. */
+  function paintWindow(stage, sim, k) {
+    const v = sim.steps[k].v;
+    const cells = Array.from({ length: v.total }, (_, i) => {
+      const evicted = v.evicted && i < v.total - v.window;
+      return `<div class="vz-wcell ${evicted ? 'gone' : 'live'}"><span>${i + 1}</span></div>`;
+    }).join('');
+    stage.innerHTML = `<div class="vz-wstages">${cells}</div>
+      <div class="vz-wrows">
+        <div class="vz-wrow"><span class="vz-lab">live UI</span><span class="vz-chip ${v.live ? 'good' : ''}">${v.window} most recent stages</span></div>
+        <div class="vz-wrow"><span class="vz-lab">event log</span><span class="vz-chip ${v.log ? 'good' : ''}">${v.log ? 'all ' + v.total + ' stages' : 'not enabled'}</span></div>
+        <div class="vz-wrow"><span class="vz-lab">history server</span><span class="vz-chip ${v.history ? 'good' : ''}">${v.history ? 'rebuilt: all ' + v.total : 'waiting for replay'}</span></div>
+      </div>${v.bigger ? '<div class="vz-note warn">a bigger live window keeps more objects in driver memory</div>' : ''}`;
+    return `live window: ${v.window} of ${v.total} stages${v.evicted ? ' · older removed from memory' : ''}`;
+  }
+
+  /* evidence:5 · a box plot of task durations. The box is the middle half; the whiskers reach the min and max; dots are outliers. */
+  function paintBox(stage, sim, k) {
+    const v = sim.steps[k].v, W = 560, H = 150, L = 40, R = 20, MAX = 260;
+    const X = s => L + s / MAX * (W - L - R), cy = 70;
+    if (!v.stats) { stage.innerHTML = `<p class="vz-empty">select a stage to see its task durations</p>`; return 'no stage selected'; }
+    const s = v.stats, boxW = X(s.q3) - X(s.q1);
+    const ticks = [0, 60, 120, 180, 240].map(t => `<text class="vz-tick" x="${X(t)}" y="${H - 6}" text-anchor="middle">${t}s</text>`).join('');
+    const out = (v.outliers || []).map(o => `<circle class="vz-dot hot" cx="${X(o)}" cy="${cy}" r="6"/>`).join('');
+    const body = `<line class="vz-grid" x1="${L}" x2="${W - R}" y1="${cy}" y2="${cy}"/>
+      <line class="vz-line" x1="${X(s.min)}" x2="${X(s.q1)}" y1="${cy}" y2="${cy}"/>
+      <line class="vz-line" x1="${X(s.q3)}" x2="${X(s.max)}" y1="${cy}" y2="${cy}"/>
+      <line class="vz-line" x1="${X(s.min)}" x2="${X(s.min)}" y1="${cy - 12}" y2="${cy + 12}"/>
+      <line class="vz-line" x1="${X(s.max)}" x2="${X(s.max)}" y1="${cy - 12}" y2="${cy + 12}"/>
+      <rect class="vz-bx${v.tight ? ' tight' : ''}" x="${X(s.q1)}" y="${cy - 22}" width="${boxW}" height="44"/>
+      <line class="vz-line" x1="${X(s.med)}" x2="${X(s.med)}" y1="${cy - 22}" y2="${cy + 22}"/>${out}${ticks}`;
+    const inputs = v.inputs ? `<div class="vz-row"><span class="vz-chip good">typical task: 0.2 GB input</span><span class="vz-chip bad">outlier tasks: 4 GB input each</span></div>` : '';
+    const note = v.skew ? '<div class="vz-note warn">tight box, long tail: skewed key, so fix the key rather than add machines</div>' : '';
+    stage.innerHTML = `${svg(W, H, body, 'Task duration box plot')}${inputs}${note}`;
+    return `median ${s.med} s · max ${s.max} s${v.outliers && v.outliers.length ? ' · outliers ' + v.outliers.length : ''}`;
+  }
+
   const PAINT = {
     ticks: paintTicks, kanban: paintKanban, stacked: paintStacked, lanes: paintLanes,
     sawtooth: paintSawtooth, bullet: paintBullet, heatmap: paintHeat, strip: paintStrip,
     ledger: paintLedger, filetree: paintFileTree, flow: paintFlow, waterfall: paintWaterfall,
     fanout: paintFanout, scatter: paintScatter, histogram: paintHistogram, donut: paintDonut,
-    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores, paths: paintPaths, routes: paintRoutes, explode: paintExplode, switch: paintSwitch, localread: paintLocalRead, loop: paintLoop, merge: paintMerge, pairs: paintPairs, venn: paintVenn, rewrite: paintRewrite, expand: paintExpand, swarm: paintSwarm, renames: paintRenames, overwrite: paintOverwrite, backoff: paintBackoff, exclude: paintExclude, service: paintService, pool: paintPool, shares: paintShares, heap: paintHeap
+    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores, paths: paintPaths, routes: paintRoutes, explode: paintExplode, dropqueue: paintDropQueue, window: paintWindow, box: paintBox, switch: paintSwitch, localread: paintLocalRead, loop: paintLoop, merge: paintMerge, pairs: paintPairs, venn: paintVenn, rewrite: paintRewrite, expand: paintExpand, swarm: paintSwarm, renames: paintRenames, overwrite: paintOverwrite, backoff: paintBackoff, exclude: paintExclude, service: paintService, pool: paintPool, shares: paintShares, heap: paintHeap
   };
 
   /* Attach each picture to its use case. Narration (title, text) stays in engine-stories.js. */
@@ -918,7 +969,28 @@
       { stage: 1, phase: 'replan', done: 1 },
       { stage: 2, phase: 'run', done: 1 },
       { stage: 3, phase: 'replan', done: 2 },
-      { stage: 3, phase: 'final', done: 3 }] }
+      { stage: 3, phase: 'final', done: 3 }] },
+    'evidence:3': { kind: 'dropqueue', steps: [
+      { cap: 10000, fill: 2000, dropped: 0, logged: true },
+      { cap: 10000, fill: 6000, dropped: 0, logged: true, slow: true },
+      { cap: 10000, fill: 9800, dropped: 0, logged: true, slow: true },
+      { cap: 10000, fill: 10000, dropped: 250, logged: true, slow: true },
+      { cap: 10000, fill: 10000, dropped: 250, logged: false, slow: true },
+      { cap: 20000, fill: 12000, dropped: 0, logged: true }] },
+    'evidence:4': { kind: 'window', steps: [
+      { total: 10, window: 10, log: false },
+      { total: 14, window: 10, log: true },
+      { total: 14, window: 10, log: true, evicted: true },
+      { total: 14, window: 10, log: true, evicted: true, live: true },
+      { total: 14, window: 10, log: true, evicted: true, history: true },
+      { total: 14, window: 10, log: true, evicted: true, history: true, bigger: true }] },
+    'evidence:5': { kind: 'box', steps: [
+      { stats: null },
+      { stats: { min: 18, q1: 20, med: 22, q3: 24, max: 26 }, outliers: [] },
+      { stats: { min: 18, q1: 20, med: 22, q3: 24, max: 26 }, outliers: [], tight: true },
+      { stats: { min: 18, q1: 20, med: 22, q3: 24, max: 240 }, outliers: [120, 180, 240] },
+      { stats: { min: 18, q1: 20, med: 22, q3: 24, max: 240 }, outliers: [120, 180, 240], inputs: true },
+      { stats: { min: 18, q1: 20, med: 22, q3: 24, max: 240 }, outliers: [120, 180, 240], inputs: true, skew: true }] }
   };
   const SD = root.SparkSystemDesign || (typeof require === "function" ? require("./engine-sysdesign.js") : null);
   for (const [key, spec] of Object.entries(DATA)) {

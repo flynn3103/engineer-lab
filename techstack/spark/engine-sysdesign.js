@@ -844,7 +844,19 @@
   Complete --> Compacted: rolled up
   Complete --> Expired: retention
   Incomplete --> Expired: retention
-  Expired --> [*]` }] }
+  Expired --> [*]` }] },
+      { title: 'UC-03 · A full event queue drops events', intro: 'Events go onto a bounded queue, and listeners consume them. If events arrive faster than they are consumed, the queue fills and new events are dropped. Dropped events never reach the live UI or the log.', diagrams: [{ kind: FLOW, title: 'Bounded listener queue', src: `flowchart LR
+  S["Scheduler posts event"] --> Q["Bounded queue: capacity 10,000"]
+  Q --> L["Listener consumes"]
+  S -. "queue full" .-> D["Event dropped, counted in a warning"]` }] },
+      { title: 'UC-04 · The live UI keeps a window, the log keeps all', intro: 'The live pages keep only the most recent jobs and stages, so memory stays bounded. The event log still holds every event, so the history view can show what the live view forgot.', diagrams: [{ kind: FLOW, title: 'Live window versus the log', src: `flowchart LR
+  T["Every stage"] --> W["Live UI: latest 1000 stages"]
+  T --> G["Event log: every stage"]
+  G --> H["History server: all stages"]` }] },
+      { title: 'UC-05 · The spread of task durations shows skew', intro: 'For one stage, the spread of task durations separates a slow cluster from a skewed key. A tight spread with a far maximum points to a few heavy tasks.', diagrams: [{ kind: FLOW, title: 'Reading the summary', src: `flowchart TD
+  A["Stage summary: min, median, max duration"] --> B{"Max far above the median?"}
+  B -- "no" --> C["Whole stage is uniformly slow: add resources"]
+  B -- "yes" --> D["A few heavy tasks: check input size, then fix the key"]` }] }
     ],
     hard: null
   };

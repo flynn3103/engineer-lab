@@ -396,3 +396,23 @@
 .vz-phase.on{background:var(--p4)}
 .vz-arrow{font:700 14px var(--mono);color:var(--mut)}
 @media (max-width:760px){.vz-lblocks{grid-template-columns:repeat(2,minmax(0,1fr))}.vz-qstages{grid-template-columns:1fr}}
+
+/* UC: evidence:3 dropqueue, evidence:4 window, evidence:5 box */
+.vz-dq{display:grid;gap:12px;background:var(--card);border:var(--ink-line);border-radius:14px;padding:16px;box-shadow:var(--shadow)}
+.vz-dqtrack{position:relative;height:40px;border:var(--ink-line);border-radius:10px;background:var(--soft);overflow:hidden}
+.vz-dqfill{position:absolute;left:0;top:0;bottom:0;background:var(--p0);transition:width .4s}
+.vz-dqfill.full{background:var(--p5)}
+.vz-dqtrack em{position:absolute;right:10px;top:50%;transform:translateY(-50%);font:700 12px var(--mono);font-style:normal;color:var(--ink)}
+.vz-dqkeys{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.vz-dqcell{display:grid;gap:4px;border:var(--ink-line);border-radius:12px;padding:10px;background:var(--soft);font:700 12.5px var(--mono);color:var(--ink);transition:background .3s}
+.vz-dqcell small{font:600 11px var(--mono);color:var(--mut)}
+.vz-dqcell.bad{background:var(--p5)}
+.vz-dqcell.good{background:var(--p2)}
+.vz-wstages{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;background:var(--card);border:var(--ink-line);border-radius:14px;padding:14px;box-shadow:var(--shadow)}
+.vz-wcell{display:grid;place-items:center;height:40px;border:var(--ink-line);border-radius:8px;font:700 12px var(--mono);color:var(--ink);background:var(--p0);transition:background .3s,opacity .3s}
+.vz-wcell.gone{background:var(--p7);opacity:.45;border-style:dashed;text-decoration:line-through}
+.vz-wrows{display:grid;gap:6px}
+.vz-wrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.vz-bx{fill:var(--p0);stroke:var(--ink);stroke-width:1.5;transition:width .4s}
+.vz-bx.tight{fill:var(--p2)}
+@media (max-width:760px){.vz-wstages{grid-template-columns:repeat(5,minmax(0,1fr))}.vz-dqkeys{grid-template-columns:1fr}}
