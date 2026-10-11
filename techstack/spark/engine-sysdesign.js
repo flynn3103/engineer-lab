@@ -744,7 +744,22 @@
   F["Fact partitions"] -->|"hash(key)"| X["Exchange"]
   D["Dimension partitions"] -->|"hash(key)"| X
   X --> R0["Reducer 0<br/>build + probe"]
-  X --> R1["Reducer 1<br/>build + probe"]` }] }
+  X --> R1["Reducer 1<br/>build + probe"]` }] },
+      { title: 'UC-03 · Sort-merge join walks two sorted lists', intro: 'When neither table is small, both sides are sorted by key within each partition, then walked together in one pass. Equal keys are paired as the walk meets them.', diagrams: [{ kind: FLOW, title: 'Sort-merge steps', src: `flowchart LR
+  A["Both sides partitioned by key"] --> S["Sort each side by key"]
+  S --> M{"Left key vs right key"}
+  M -- "smaller" --> N["Advance that side"]
+  N --> M
+  M -- "equal" --> O["Output all pairs with that key"]` }] },
+      { title: 'UC-04 · A join with no equal key compares every pair', intro: 'A cross join, or a join on a range, has no key to split the work by. Every row of one side is compared with every row of the other, so the cost is the product of the two sizes.', diagrams: [{ kind: FLOW, title: 'Cost of a pair comparison', src: `flowchart TD
+  Q["Join condition has no equal key"] --> P["Compare every pair of rows"]
+  P --> C["Work = rows of A times rows of B"]
+  C --> F["Fix: broadcast the small side, or add an equal key"]` }] },
+      { title: 'UC-05 · Outer and anti joins keep the unmatched rows', intro: 'A left join keeps every left row, with nulls where no right row matches. An anti join keeps only the unmatched left rows. A filter placed in the wrong spot can undo a left join.', diagrams: [{ kind: FLOW, title: 'What each join keeps', src: `flowchart LR
+  L["Left row"] --> J{"Matched on the key?"}
+  J -- "yes" --> I["inner and left: output with right columns"]
+  J -- "no" --> N["left: output with nulls on the right"]
+  J -- "no" --> X["anti: output only, no right columns"]` }] }
     ],
     hard: { title: 'Where do matching records meet?', body: 'Compare broadcast, aligned and shuffled placement, and see m×n multiplicity preserved.' }
   };

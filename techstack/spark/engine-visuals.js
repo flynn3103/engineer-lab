@@ -560,12 +560,55 @@
     return N ? `reduce tasks: ${N} · per task about ${perTxt}` : 'no shuffle yet';
   }
 
+  /* joins:3 · two key lists, sorted after step 2. Pointers mark the current row on each side; a shaded group is the run of equal keys. */
+  const MJ = { LU: [4, 2, 6, 1, 2], RU: [3, 4, 2, 4, 2], LS: [1, 2, 2, 4, 6], RS: [2, 2, 3, 4, 4] };
+  function paintMerge(stage, sim, k) {
+    const v = sim.steps[k].v, L = v.sorted ? MJ.LS : MJ.LU, R = v.sorted ? MJ.RS : MJ.RU;
+    const col = (arr, p, g, name, ptr) => `<div class="vz-mcol"><b>${name}</b>${arr.map((x, i) => `<div class="vz-mcell${p === i ? ' now' : ''}${g && i >= g[0] && i <= g[1] ? ' grp' : ''}">${x}${p === i ? `<em>${ptr}</em>` : ''}</div>`).join('')}</div>`;
+    const lgrp = v.group ? v.group.l : null, rgrp = v.group ? v.group.r : null;
+    stage.innerHTML = `<div class="vz-merge">${col(L, v.li, lgrp, 'left keys', '◂')}${col(R, v.ri, rgrp, 'right keys', '◂')}
+        <div class="vz-mout"><b>output pairs</b><span class="vz-chip ${v.out ? 'good' : ''}">${v.out}</span>${v.buffered ? '<small>group of equal keys buffered</small>' : ''}</div></div>
+      ${v.lt ? '<div class="vz-note">left key is smaller: the left pointer moves on</div>' : ''}${v.match ? '<div class="vz-note good">keys equal: the matching pairs come next</div>' : ''}`;
+    return v.sorted ? `pairs output: ${v.out}` : 'partitions not sorted yet';
+  }
+
+  /* joins:4 · the grid of comparisons, filled row by row; a big row count shows the pair count instead. */
+  function paintPairs(stage, sim, k) {
+    const v = sim.steps[k].v;
+    if (v.big) {
+      stage.innerHTML = `<div class="vz-bignum"><b>${(v.a * v.b).toExponential(0).replace('e+', ' × 10^')}</b><small>pairs to compare: a million rows times a million</small></div>
+        <div class="vz-note warn">at a billion comparisons a second: about 1000 seconds, before any real work</div>`;
+      return 'pairs: 10^12';
+    }
+    const bc = v.broadcast ? '<div class="vz-row"><span class="vz-chip good">B is broadcast: each worker compares locally</span></div>' : '';
+    stage.innerHTML = `<div class="vz-pgrid">
+        <div class="vz-pheadrow"><span></span>${Array.from({ length: v.b }, (_, j) => `<span class="vz-ph">B${j + 1}</span>`).join('')}</div>
+        ${Array.from({ length: v.a }, (_, i) => `<div class="vz-prow"><span class="vz-ph">A${i + 1}</span>${Array.from({ length: v.b }, (_, j) => `<span class="vz-pc${i * v.b + j < v.done ? ' on' : ''}"></span>`).join('')}</div>`).join('')}
+      </div>${bc}`;
+    return `comparisons: ${v.done} of ${v.a * v.b}`;
+  }
+
+  /* joins:5 · two overlapping circles of ids. The result list shows which ids each join keeps. */
+  function paintVenn(stage, sim, k) {
+    const v = sim.steps[k].v, Lo = [1, 2, 3, 4, 5], Ro = [3, 4, 5, 6, 7];
+    const inR = x => Ro.includes(x), inL = x => Lo.includes(x);
+    const mark = x => v.result && v.result.includes(x);
+    const sets = `<div class="vz-venn2">
+        <div class="vz-lcirc${v.mode === 'anti' || v.mode === 'left' || v.mode === 'full' || v.mode === 'filter' ? ' lit' : ''}"><b>orders</b>${Lo.map(x => `<span class="vz-id ${inR(x) ? 'both' : 'only'}${mark(x) ? ' keep' : ''}">${x}</span>`).join('')}</div>
+        <div class="vz-rcirc${v.mode === 'full' ? ' lit' : ''}"><b>customers</b>${Ro.map(x => `<span class="vz-id ${inL(x) ? 'both' : 'only'}${mark(x) ? ' keep' : ''}">${x}</span>`).join('')}</div>
+      </div>`;
+    const keep = v.result ? `<div class="vz-row"><span class="vz-lab">output ids</span>${v.result.map(x => `<span class="vz-chip good">${x}</span>`).join('')}</div>` : '';
+    const note = { sets: 'two tables, ids 3 to 5 in both', inner: 'inner join: the overlap only', left: 'left join: all orders, nulls where no customer matches', anti: 'left anti join: unmatched orders only, no customer columns', full: 'full outer join: every id from both tables', filter: 'the filter removed the unmatched orders' }[v.mode];
+    stage.innerHTML = `${sets}${keep}<div class="vz-note${v.mode === 'filter' ? ' warn' : ''}">${note}</div>`;
+    return v.result ? `output rows: ${v.result.length}` : 'no join yet';
+  }
+
   const PAINT = {
     ticks: paintTicks, kanban: paintKanban, stacked: paintStacked, lanes: paintLanes,
     sawtooth: paintSawtooth, bullet: paintBullet, heatmap: paintHeat, strip: paintStrip,
     ledger: paintLedger, filetree: paintFileTree, flow: paintFlow, waterfall: paintWaterfall,
     fanout: paintFanout, scatter: paintScatter, histogram: paintHistogram, donut: paintDonut,
-    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores, paths: paintPaths, routes: paintRoutes, explode: paintExplode, rewrite: paintRewrite, expand: paintExpand, swarm: paintSwarm, renames: paintRenames, overwrite: paintOverwrite, backoff: paintBackoff, exclude: paintExclude, service: paintService, pool: paintPool, shares: paintShares, heap: paintHeap
+    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores, paths: paintPaths, routes: paintRoutes, explode: paintExplode, merge: paintMerge, pairs: paintPairs, venn: paintVenn, rewrite: paintRewrite, expand: paintExpand, swarm: paintSwarm, renames: paintRenames, overwrite: paintOverwrite, backoff: paintBackoff, exclude: paintExclude, service: paintService, pool: paintPool, shares: paintShares, heap: paintHeap
   };
 
   /* Attach each picture to its use case. Narration (title, text) stays in engine-stories.js. */
@@ -797,7 +840,28 @@
       { tasks: 200, mb: 10, tiny: true },
       { tasks: 200, mb: 10, overhead: true },
       { tasks: 8, mb: 10, merged: true },
-      { tasks: 200, mb: 2000, big: true }] }
+      { tasks: 200, mb: 2000, big: true }] },
+    'joins:3': { kind: 'merge', steps: [
+      { sorted: false, li: -1, ri: -1, out: 0 },
+      { sorted: true, li: -1, ri: -1, out: 0 },
+      { sorted: true, li: 1, ri: 0, out: 0, match: true },
+      { sorted: true, li: 0, ri: 0, out: 0, lt: 'L' },
+      { sorted: true, li: 1, ri: 0, out: 4, group: { l: [1, 2], r: [0, 1] } },
+      { sorted: true, li: 3, ri: 3, out: 6, group: { l: [3, 3], r: [3, 4] }, buffered: true }] },
+    'joins:4': { kind: 'pairs', steps: [
+      { a: 4, b: 5, done: 0 },
+      { a: 4, b: 5, done: 5 },
+      { a: 4, b: 5, done: 15 },
+      { a: 4, b: 5, done: 20 },
+      { a: 1000000, b: 1000000, big: true },
+      { a: 4, b: 5, done: 20, broadcast: true }] },
+    'joins:5': { kind: 'venn', steps: [
+      { mode: 'sets' },
+      { mode: 'inner', result: [3, 4, 5] },
+      { mode: 'left', result: [1, 2, 3, 4, 5] },
+      { mode: 'anti', result: [1, 2] },
+      { mode: 'full', result: [1, 2, 3, 4, 5, 6, 7] },
+      { mode: 'filter', result: [3, 4, 5] }] }
   };
   const SD = root.SparkSystemDesign || (typeof require === "function" ? require("./engine-sysdesign.js") : null);
   for (const [key, spec] of Object.entries(DATA)) {

@@ -1299,6 +1299,69 @@
     ]
   };
 
+  ST['joins:3'] = {
+    trigger: 'Two large tables join on a key, and neither is small enough to broadcast to every worker.',
+    command: 'spark.conf.set("spark.sql.join.preferSortMergeJoin", "true")  # true by default',
+    expect: 'Both sides are sorted by key within each partition, then merged in one pass. Sorting costs time, but memory stays bounded.',
+    sim: {
+      kind: 'merge',
+      steps: [
+        { title: 'Both sides arrive in partitions', text: 'After the exchange by key, the same key values sit in the same partition on both sides. The rows inside each partition are not in order yet.' },
+        { title: 'Sort each side by key', text: 'Each partition sorts its left rows and its right rows by key. Sorting is the main cost of this join.' },
+        { title: 'Walk both lists together', text: 'Two pointers move forward through the sorted lists. When the keys match, the matching rows are output.' },
+        { title: 'Advance the smaller key', text: 'Here the left key 1 is smaller than the right key 2. No right row can match key 1, so the left pointer moves on.' },
+        { title: 'Equal keys produce all pairs', text: 'Key 2 appears twice on each side, so every pair of them is output: four pairs. The pointers then move past both groups.' },
+        { title: 'Memory stays bounded', text: 'Only the current group of equal keys has to be held in memory, so the join works on data far larger than memory. Key 4 adds its two pairs, six in total.' }
+      ]
+    },
+    edges: [
+      E('One key has very many rows', 'The buffered group gets large.', 'A single key with millions of rows on both sides must be buffered, which can spill heavily or run out of memory.', 'Fix the skew, for example with the skew handling in the adaptive feature, or filter the key out.'),
+      E('Input already sorted on the key', 'The sort can be skipped.', 'If the data is already sorted and partitioned by the key, the sort step has nothing to do.', 'Save the data bucketed and sorted by the join key, as in the co-partitioned stage case.')
+    ]
+  };
+
+  ST['joins:4'] = {
+    trigger: 'A join has no equal key, only a range condition or nothing at all, such as a cross join between two lists.',
+    command: 'a.crossJoin(b)  # or a.join(b, a.x < b.y); the work is the number of rows in a times the number in b',
+    expect: 'Every pair must be compared, so the work grows with the product of the two sizes. Keep one side small, or add an equal key.',
+    sim: {
+      kind: 'pairs',
+      steps: [
+        { title: 'Two lists with no shared key', text: 'The query pairs each row of A with each row of B, or joins on a range. No equal key lets the engine split the work by key.' },
+        { title: 'Compare the first row of A with all of B', text: 'Each row of A is compared with every row of B. The first row of A is paired with all five rows of B.' },
+        { title: 'Continue down A', text: 'The same happens for the next rows of A. Every cell of the grid is one comparison.' },
+        { title: 'The grid is 4 by 5', text: 'A has 4 rows and B has 5. That is 20 comparisons, and the output can hold up to 20 rows.' },
+        { title: 'Scale it up: a million by a million', text: 'With a million rows on each side there are a trillion pairs. Even at a billion comparisons a second, that is over 15 minutes of pure comparisons, before any real work.' },
+        { title: 'Broadcast the small side, or add a key', text: 'If one side is small, broadcast it so each worker compares its own rows locally. Otherwise, an equal key lets the join split the work.' }
+      ]
+    },
+    edges: [
+      E('Accidental cross join', 'A missing join condition multiplies the rows.', 'A join written without an equal key, or with a condition that is always true, quietly becomes a cross join.', 'Check the join condition, and read the plan for a cartesian or nested-loop operator.'),
+      E('Both sides are large', 'Broadcasting is not an option.', 'With neither side small, no worker can hold the other side, so the full pair grid is unavoidable.', 'Narrow both sides first with filters, or rewrite the range join as an equal key with buckets.')
+    ]
+  };
+
+  ST['joins:5'] = {
+    trigger: 'A left join keeps every row of the left table, even when no right row matches it.',
+    command: 'orders.join(customers, "id", "left")  # unmatched orders get nulls for the customer columns',
+    expect: 'Unmatched left rows are kept with nulls on the right. An anti join keeps only those unmatched rows.',
+    sim: {
+      kind: 'venn',
+      steps: [
+        { title: 'Two tables, some ids overlap', text: 'Orders has ids 1 to 5. Customers has ids 3 to 7. Ids 3, 4 and 5 appear in both.' },
+        { title: 'An inner join keeps the overlap', text: 'An inner join outputs only the matching ids: 3, 4 and 5.' },
+        { title: 'A left join keeps every left row', text: 'A left join keeps all of orders. Ids 1 and 2 have no customer, so their customer columns are null.' },
+        { title: 'An anti join keeps only the unmatched', text: 'A left anti join returns just the orders with no customer: ids 1 and 2. Its output has no customer columns at all.' },
+        { title: 'A full outer join keeps both sides', text: 'A full outer join keeps every row of both tables. Ids 6 and 7 appear too, with nulls on the orders side.' },
+        { title: 'A filter after a left join undoes it', text: 'A filter on customers placed after a left join removes the unmatched orders, which makes the result an inner join again. Put that condition inside the join instead.' }
+      ]
+    },
+    edges: [
+      E('A WHERE filter on the right table', 'It silently becomes an inner join.', 'Rows with null right columns fail the filter, so the unmatched left rows disappear.', 'Move the condition into the ON clause of the left join.'),
+      E('Duplicate keys on the right', 'The left row repeats.', 'A left row with two matches on the right is output twice, once for each match.', 'Deduplicate the right side on the key, if one match per left row is what you want.')
+    ]
+  };
+
   root.SparkStories = ST;
   if (typeof module === 'object' && module.exports) module.exports = ST;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
