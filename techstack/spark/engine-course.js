@@ -112,7 +112,6 @@
       renderNav(); renderCrumb(); closeMenu(); save();
       SD.draw($('page'));
       if (window.SparkReadSim) window.SparkReadSim.mount($('page'));
-      if (window.SparkStory) window.SparkStory.mount($('page'));
       if (window.SparkPack) window.SparkPack.mount($('page'));
       if (window.SparkMap) window.SparkMap.mount($('page'));
       if (window.SparkTree) window.SparkTree.mount($('page'));
@@ -120,6 +119,7 @@
       if (window.SparkPipe) window.SparkPipe.mount($('page'));
       if (window.SparkLineage) window.SparkLineage.mount($('page'));
       if (window.SparkStageSim) window.SparkStageSim.mount($('page'));
+      if (window.SparkVisuals) window.SparkVisuals.mount($('page'));
     }
     function renderStep() {
       const phaseFocus = $('phase-nav').contains(document.activeElement);

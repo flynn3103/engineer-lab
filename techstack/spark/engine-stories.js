@@ -1,10 +1,6 @@
-/* Story-board content for every use case (except read:1, which has its own CSV animation).
+/* Narration for every use case: trigger, steps (title and text), edge cases and invariants.
    Key "feature:n" patches the n-th use case of that feature in engine-sysdesign.js.
-   sim.actors  : boxes shown on the stage, in order.
-   sim.steps   : [title, plain sentence, message [from, to, label] or null, chips {actor: [...]}, badges {actor: 'TEXT'}]
-                 Chips replace the actor's list. A chip starting with + is good, ! is bad, ~ is faded.
-   edges       : cards that open to show Context and Solution.
-   diagrams    : only where the old one was a flowchart. Sequence and state diagrams are kept as they were. */
+   The picture for each step is attached by the module named in that feature (engine-visuals.js, engine-stagesim.js, engine-pipesim.js, engine-lineagesim.js). */
 (function (root) {
   'use strict';
   const E = (title, short, context, solution) => ({ title, short, context, solution });
