@@ -6,7 +6,7 @@
   const O3 = own(11, 22);               // 32 cells of 512 slots, split roughly in thirds (schematic)
   const hole = O3.map((v, i) => (v === 2 ? -1 : v));
 
-  RD.uc.cluster = [
+  CourseData.uc.cluster = [
     {
       title: 'Key to slot, and hash tags', short: 'key to slot', kind: 'hash',
       intro: 'A key\'s slot is a pure function of its bytes: CRC16 modulo 16384. A hash tag lets related keys share a slot.',
@@ -71,7 +71,7 @@
     }
   ];
 
-  RD.uc.msg = [
+  CourseData.uc.msg = [
     {
       title: 'MULTI has no rollback; WATCH is optimistic', short: 'MULTI and WATCH', kind: 'diff',
       intro: 'A transaction runs its queued commands back to back, but a failing command does not undo the others.',
@@ -137,7 +137,7 @@
     }
   ];
 
-  RD.uc.e2e = [
+  CourseData.uc.e2e = [
     {
       title: 'One write, end to end', short: 'SET cart:42', kind: 'flow',
       intro: 'Follow one command through every earlier feature and mark where it can be lost.',

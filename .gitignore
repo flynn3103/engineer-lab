@@ -4,5 +4,6 @@ node_modules/
 cv/*.aux
 cv/*.log
 cv/*.out
-tools/
+tools/*
+!tools/course/
 output/

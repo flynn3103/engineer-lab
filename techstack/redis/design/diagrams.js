@@ -1,13 +1,13 @@
 /* Mermaid diagrams for the Redis system-design course, in the same layout as the Spark course:
- *   RD.hldOverall            one flowchart for the whole server
- *   RD.hld[featureId]        one flowchart per feature (high-level design)
- *   RD.diagrams['id:n']      one or two sequence, state or flow diagrams per use case (n starts at 1)
+ *   CourseData.hldOverall            one flowchart for the whole server
+ *   CourseData.hld[featureId]        one flowchart per feature (high-level design)
+ *   CourseData.diagrams['id:n']      one or two sequence, state or flow diagrams per use case (n starts at 1)
  * Mermaid syntax notes: no semicolons or hash signs in labels (they end a statement or start a comment). */
 (function () {
   const SEQ = 'Sequence', STATE = 'State', FLOW = 'Flow';
   const D = (kind, title, src) => ({ kind, title, src });
 
-  RD.hldOverall = `flowchart LR
+  CourseData.hldOverall = `flowchart LR
   C["Clients<br/>RESP over TCP"] --> EL["Event loop<br/>read, parse, write"]
   EL --> EX["Executor<br/>one command at a time"]
   EX --> KS["Keyspace<br/>dict + encodings"]
@@ -20,7 +20,7 @@
   S -. promotes .-> R
   CL["Cluster<br/>16384 slots"] -. routes keys .-> C`;
 
-  RD.hld = {
+  CourseData.hld = {
     proto: `flowchart LR
   SK["Socket"] -->|"read"| QB["Query buffer<br/>per client"]
   QB --> PA["RESP parser<br/>complete frames only"]
@@ -43,7 +43,7 @@
   P -->|"noeviction"| ERR["Growing command<br/>gets -OOM"]
   P -->|"allkeys-lru etc."| EV["Sample keys,<br/>evict the best victim"]
   EV --> O
-  RD["Key read"] --> LZ["Lazy expire check"]
+  CourseData["Key read"] --> LZ["Lazy expire check"]
   CR["Cron 10 times a second"] --> AX["Sample TTL keys,<br/>delete expired"]`,
     persist: `flowchart LR
   W["Write command"] --> AB["AOF buffer"]
@@ -88,7 +88,7 @@
   RS -. async .-> RE["Replica applies"]`
   };
 
-  RD.diagrams = {
+  CourseData.diagrams = {
     'proto:1': [D(SEQ, 'One command, three reads', `sequenceDiagram
   participant P as Proxy
   participant B as Query buffer

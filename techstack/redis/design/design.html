@@ -7,18 +7,21 @@
 <meta name="description" content="Learn Redis as a system design: problem, requirements, estimates and high-level design, then 9 features and 25 use cases, each with diagrams and a step-by-step picture.">
 <link rel="stylesheet" href="../../../assets/lab.css">
 <link rel="stylesheet" href="../../../assets/curriculum.css">
-<link rel="stylesheet" href="design.css">
+<link rel="stylesheet" href="../../../assets/course/course.css">
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="7"/><feDisplacementMap in="SourceGraphic" scale="2.2"/></filter></svg>
 <div id="app"></div>
 <noscript><p>This course needs JavaScript for its diagrams and pictures.</p></noscript>
+<!-- framework: kit and contract first, then the course data and painters, then the engine -->
+<script src="../../../assets/course/kit.js"></script>
+<script src="../../../assets/course/contract.js"></script>
 <script src="spec.js"></script>
 <script src="uc-a.js"></script>
 <script src="uc-b.js"></script>
 <script src="uc-c.js"></script>
 <script src="diagrams.js"></script>
 <script src="paint.js"></script>
-<script src="design.js"></script>
+<script src="../../../assets/course/course.js"></script>
+<script>Course.mount(CourseData);</script>
 </body>
 </html>

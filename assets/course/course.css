@@ -1,6 +1,9 @@
-/* Redis system-design course, styled to match the Spark course (rules copied from techstack/spark/engine-course.css). Same look as the Tech Stack catalog: mono headings, ink outlines, pastel fills, pill chips, sketchy art. Tokens come from assets/lab.css. */
-.rd-course{--brand:var(--bad);--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--control:var(--acc);--data:var(--acc2);--ink-line:1.5px solid var(--ink)}
-.rd-course [hidden]{display:none!important}.rd-course a{text-underline-offset:4px}.rd-course button,.rd-course select,.rd-course input{font-family:inherit}
+/* Course framework stylesheet: the look of the Spark system-design course, scoped to .course so any course page can use it.
+ * Rules were copied from techstack/spark/engine-course.css (shell, page head, sections, cards, tables, diagrams, edge cards, pager)
+ * and extended with the step player and the picture kit (.pv). Colours come only from the tokens in assets/lab.css, so light and dark work.
+ * Load order on a page: lab.css, curriculum.css, course.css. Markup is produced by course.js and kit.js. */
+.course{--brand:var(--bad);--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--control:var(--acc);--data:var(--acc2);--ink-line:1.5px solid var(--ink)}
+.course [hidden]{display:none!important}.course a{text-underline-offset:4px}.course button,.course select,.course input{font-family:inherit}
 .skip-link{position:fixed;left:16px;top:-100px;z-index:30;background:var(--card);padding:10px 16px;border:var(--ink-line);border-radius:10px}.skip-link:focus{top:12px}
 
 /* shell */
@@ -35,8 +38,8 @@
 .two{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:14px 0}.two>div{background:var(--card);border:var(--ink-line);border-radius:14px;padding:6px 20px 16px;box-shadow:var(--shadow);min-width:0}.two h3{margin-top:14px}
 .assume{background:var(--p4);border:var(--ink-line);border-radius:12px;padding:10px 16px;color:var(--ink)!important}.note{background:var(--soft);border-left:4px solid var(--brand);border-radius:0 10px 10px 0;padding:10px 16px;max-width:90ch}.caption{margin-top:10px;font-size:13.5px!important}
 .table-scroll{overflow:auto;max-width:100%;margin:12px 0 18px;border:var(--ink-line);border-radius:14px;background:var(--card);box-shadow:var(--shadow)}
-.rd-course table{border-collapse:collapse;width:100%;text-align:left}.rd-course th{font:700 12px/1.6 var(--mono);color:var(--ink);background:var(--p0);text-transform:uppercase;letter-spacing:.05em;padding:10px 14px;border-bottom:var(--ink-line)}
-.rd-course td{padding:11px 14px;border-bottom:1px solid var(--line);font-size:14px;line-height:1.6;color:var(--mut);vertical-align:top;min-width:150px}.rd-course td:first-child{font-weight:600;color:var(--ink);width:24%}.rd-course tbody tr:last-child td{border-bottom:0}
+.course table{border-collapse:collapse;width:100%;text-align:left}.course th{font:700 12px/1.6 var(--mono);color:var(--ink);background:var(--p0);text-transform:uppercase;letter-spacing:.05em;padding:10px 14px;border-bottom:var(--ink-line)}
+.course td{padding:11px 14px;border-bottom:1px solid var(--line);font-size:14px;line-height:1.6;color:var(--mut);vertical-align:top;min-width:150px}.course td:first-child{font-weight:600;color:var(--ink);width:24%}.course tbody tr:last-child td{border-bottom:0}
 
 /* diagrams: pastel fills, ink outlines, hand-drawn box edges, in the catalog's style */
 .diagram{margin:16px 0 22px;border:var(--ink-line);border-radius:14px;background:var(--card);overflow:hidden;box-shadow:var(--shadow)}
@@ -97,24 +100,24 @@
 @media(max-width:850px){.course-top{padding:8px 14px}#menu-toggle{display:block;min-height:36px;min-width:36px;padding:4px;border:1.5px solid var(--ink);border-radius:10px;background:var(--card)}.course-version{display:none}.course-layout{grid-template-columns:minmax(0,1fr)}
   .course-sidebar{position:fixed;left:0;top:56px;width:min(310px,86vw);z-index:14;transform:translateX(-100%);transition:transform .2s;box-shadow:var(--shadow)}.course-sidebar.open{transform:translateX(0)}.sidebar-scrim{position:fixed;inset:56px 0 0 0;z-index:13;background:#0006;border:0}
   #course-main{padding:22px 16px 44px}.two{grid-template-columns:1fr}.pager a{max-width:none}.jump{position:static}}
-@media(max-width:550px){.course-top nav{font-size:12px;gap:6px}.course-top nav b{max-width:150px}.course-top nav>a:first-child,.course-top nav>span:first-of-type{display:none}.rd-course td{min-width:130px}}
-@media(prefers-reduced-motion:reduce){.rd-course *{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+@media(max-width:550px){.course-top nav{font-size:12px;gap:6px}.course-top nav b{max-width:150px}.course-top nav>a:first-child,.course-top nav>span:first-of-type{display:none}.course td{min-width:130px}}
+@media(prefers-reduced-motion:reduce){.course *{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 
 /* step player: same card and inspector look as the Spark lab */
-.rd-player{background:var(--card);border:var(--ink-line);border-radius:16px;padding:18px;box-shadow:var(--shadow)}
-.rd-player .pv-stage{border:var(--ink-line);border-radius:14px;background:var(--card);background-image:radial-gradient(var(--line) 1px,transparent 1px);background-size:18px 18px;padding:16px;overflow-x:auto;min-height:150px}
-.rd-player .pv-stage .pv{margin:0;min-height:0}
-.rd-inspector{margin-top:14px;border:var(--ink-line);border-top:6px solid var(--brand);border-radius:14px;background:var(--p4);padding:14px 18px}
-.rd-inspector .kick{margin:0 0 4px}.rd-inspector h3{font:700 16px/1.5 var(--mono);margin:0 0 6px;color:var(--ink)}.rd-inspector p{margin:0;font-size:14.5px;line-height:1.65;color:var(--ink)}
-.rd-inspector .rd-stat{margin-top:10px;padding-top:8px;border-top:1px dashed var(--ink);font:600 13px var(--mono);color:var(--ink)}
-.rd-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 0 0}
-.rd-controls button{font:600 13px var(--mono);color:var(--ink);background:var(--card);border:1.5px solid var(--ink);border-radius:999px;padding:6px 16px;min-height:36px;cursor:pointer}
-.rd-controls button:hover:not(:disabled){background:var(--p4)}.rd-controls button:disabled{opacity:.4;cursor:default}
-.rd-controls .go{background:var(--brand);border-color:var(--brand);color:var(--on-brand,#fff)}.rd-controls .go:hover:not(:disabled){background:var(--brand);filter:brightness(1.08)}
-.rd-dots{display:flex;gap:6px;margin-left:auto}.rd-dots i{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--ink);background:var(--card);display:block}.rd-dots i.done{background:var(--p2)}.rd-dots i.on{background:var(--brand)}
-.sec pre.rd-run{margin:0}.sec .rd-src{font-size:13px}
-.rd-sentence{color:var(--mut)}
-.rd-hld-links{margin-top:12px}.rd-hld-links a{font:600 12.5px var(--mono);text-decoration:none;color:var(--ink);border:1.5px solid var(--ink);border-radius:999px;padding:3px 12px;background:var(--card);display:inline-block;margin:0 6px 6px 0}.rd-hld-links a:hover{background:var(--p4)}
+.c-player{background:var(--card);border:var(--ink-line);border-radius:16px;padding:18px;box-shadow:var(--shadow)}
+.c-player .pv-stage{border:var(--ink-line);border-radius:14px;background:var(--card);background-image:radial-gradient(var(--line) 1px,transparent 1px);background-size:18px 18px;padding:16px;overflow-x:auto;min-height:150px}
+.c-player .pv-stage .pv{margin:0;min-height:0}
+.c-inspector{margin-top:14px;border:var(--ink-line);border-top:6px solid var(--brand);border-radius:14px;background:var(--p4);padding:14px 18px}
+.c-inspector .kick{margin:0 0 4px}.c-inspector h3{font:700 16px/1.5 var(--mono);margin:0 0 6px;color:var(--ink)}.c-inspector p{margin:0;font-size:14.5px;line-height:1.65;color:var(--ink)}
+.c-inspector .c-stat{margin-top:10px;padding-top:8px;border-top:1px dashed var(--ink);font:600 13px var(--mono);color:var(--ink)}
+.c-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 0 0}
+.c-controls button{font:600 13px var(--mono);color:var(--ink);background:var(--card);border:1.5px solid var(--ink);border-radius:999px;padding:6px 16px;min-height:36px;cursor:pointer}
+.c-controls button:hover:not(:disabled){background:var(--p4)}.c-controls button:disabled{opacity:.4;cursor:default}
+.c-controls .go{background:var(--brand);border-color:var(--brand);color:var(--on-brand,#fff)}.c-controls .go:hover:not(:disabled){background:var(--brand);filter:brightness(1.08)}
+.c-dots{display:flex;gap:6px;margin-left:auto}.c-dots i{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--ink);background:var(--card);display:block}.c-dots i.done{background:var(--p2)}.c-dots i.on{background:var(--brand)}
+.sec pre.c-run{margin:0}.sec .c-src{font-size:13px}
+.c-sentence{color:var(--mut)}
+.c-hld-links{margin-top:12px}.c-hld-links a{font:600 12.5px var(--mono);text-decoration:none;color:var(--ink);border:1.5px solid var(--ink);border-radius:999px;padding:3px 12px;background:var(--card);display:inline-block;margin:0 6px 6px 0}.c-hld-links a:hover{background:var(--p4)}
 
 /* pictures: pastel fills, ink outlines, mono labels (same vocabulary as the Spark scenes) */
 .pv{font:13.5px/1.5 var(--mono);color:var(--ink)}
@@ -138,7 +141,7 @@
 .pv .cols{display:grid;gap:12px;grid-template-columns:repeat(var(--n,3),1fr)}
 @media(max-width:620px){.pv .cols.wide{grid-template-columns:1fr}}
 .pv .tl{position:relative;height:74px;border-bottom:2px solid var(--ink);margin:10px 28px 28px}
-.pv .tl .tick{position:absolute;bottom:-22px;font:11.5px var(--mono);color:var(--mut);transform:translateX(-50%);white-space:nowrap}
+.pv .tl .tick{position:absolute;bottom:-22px;font:11.5px var(--mono);color:var(--mut);transform:translateX(-50%);white-space:nowrap;background:var(--card);padding:0 4px;border-radius:4px}
 .pv .tl .pt{position:absolute;width:13px;height:13px;border-radius:50%;border:1.5px solid var(--ink);transform:translate(-50%,0)}
 .pv .tl .fs{position:absolute;top:0;bottom:0;width:0;border-left:2px dashed var(--ink)}
 .pv .tl .cr{position:absolute;top:0;bottom:0;width:0;border-left:3px solid var(--bad)}
@@ -152,8 +155,8 @@
 .pv tr:last-child td{border-bottom:0}.pv td:first-child{width:auto;font-weight:400}
 .pv .sk{display:grid;gap:5px;font:12.5px var(--mono)}
 .pv code{background:var(--soft);padding:1px 6px;border-radius:6px;font:12px var(--mono)}
-.pv .rd-flow{display:flex;gap:7px;flex-wrap:wrap}
-.pv .rd-flow>div{flex:1 1 128px;min-width:120px;border:1.5px solid var(--ink);border-radius:12px;background:var(--card);padding:8px 10px;font:12.5px var(--mono)}
-.pv .rd-flow b{display:block;font:700 13px var(--mono)}.pv .rd-flow small{color:var(--mut)}
+.pv .stages{display:flex;gap:7px;flex-wrap:wrap}
+.pv .stages>div{flex:1 1 128px;min-width:120px;border:1.5px solid var(--ink);border-radius:12px;background:var(--card);padding:8px 10px;font:12.5px var(--mono)}
+.pv .stages b{display:block;font:700 13px var(--mono)}.pv .stages small{color:var(--mut)}
 @media(prefers-reduced-motion:no-preference){.pv .meter>i{transition:width .35s}}
 .sec .cmd{align-items:flex-start}.sec .cmd code{white-space:pre}

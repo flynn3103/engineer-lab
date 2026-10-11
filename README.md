@@ -29,7 +29,11 @@ Each system has its own folder with an interactive course. Lessons follow a Prob
 | Distributed Systems | `techstack/distributed/` | 15 |
 | Database Systems | `techstack/database-systems/` | 16 |
 
-Redis also has a second, top-down course in `techstack/redis/design/` (`design.html`): overview, problem, requirements, estimates and high-level design, then 9 features and 25 use cases. Each feature has a Mermaid high-level-design flowchart, and each use case has Mermaid sequence, state or flow diagrams plus its own step-by-step picture (diagrams load Mermaid from a CDN and fall back to their source offline). It was built with the `learn-technology-from-scratch` skill, targets Redis 7.2, and is not listed separately in `data/systems.js` (the Redis course page links to it; it is in the search index).
+Redis also has a second, top-down course in `techstack/redis/design/` (`design.html`): overview, problem, requirements, estimates and high-level design, then 9 features and 25 use cases. Each feature has a Mermaid high-level-design flowchart, and each use case has Mermaid sequence, state or flow diagrams plus its own step-by-step picture (Mermaid loads from a CDN and falls back to its source offline). It targets Redis 7.2, is linked from the Redis course page, and is in the search index but not listed in `data/systems.js`.
+
+### Course framework (`assets/course/`)
+
+System-design courses share one framework so their style, diagrams and data layout stay consistent. The look is the Spark course's. A course page is a thin `design.html` plus five data files (`spec.js`, `uc-*.js`, `diagrams.js`, `paint.js`) and ends with `Course.mount(CourseData)`. See `assets/course/README.md` for the data contract, the picture kit and the checks, and `tools/course/` for the scaffold, validator and browser checker. The Redis course is the reference implementation; the Spark course predates the framework and keeps its own engine. Courses are built with the `learn-technology-from-scratch` skill, which ships the same framework.
 
 An Operating Systems course also lives in `techstack/os/` but is not yet listed in `data/systems.js`, so it doesn't appear on the home or tech pages.
 
@@ -42,10 +46,11 @@ Some courses also keep a single-file, read-only archive of the original version,
 ```
 index.html, tech.html, skills.html, blog.html   Top-level pages
 assets/        Shared CSS and JS (site, lab, lesson, scene kit, thumbnails)
+  course/      Course framework: style, page engine, picture kit, data contract
 data/          Plain-JS content: profile, systems, tech index, skills, posts
 techstack/     One folder per deep-dive tour
 cv/cv.tex      Source for the CV (LaTeX)
-tools/         Local helper scripts (e.g. build_cv.sh)
+tools/         Local helper scripts (e.g. build_cv.sh); tools/course/ holds the course scaffold, validator and browser checker
 .github/workflows/
   pages.yml    Deploys the site to GitHub Pages
   cv.yml       Recompiles the CV PDF when cv/ changes

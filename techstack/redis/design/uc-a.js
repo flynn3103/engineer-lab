@@ -3,7 +3,7 @@
 (function () {
   const S = (t, x, s, stat) => ({ t, x, s, stat });
   const E = (t, ctx, fix) => ({ t, ctx, fix });
-  RD.uc.proto = [
+  CourseData.uc.proto = [
     {
       title: 'A command split across TCP reads', short: 'split frame', kind: 'tape',
       intro: 'A TCP read can end halfway through a command. See when Redis actually runs it.',
@@ -69,7 +69,7 @@
     }
   ];
 
-  RD.uc.data = [
+  CourseData.uc.data = [
     {
       title: 'A hash outgrows its compact encoding', short: 'listpack to hashtable', kind: 'gauge',
       intro: 'Small hashes are stored as a flat listpack. Cross a limit and Redis converts to a real hash table.',
@@ -144,7 +144,7 @@
   const K3 = K2.map((v, i) => (v === 1 ? 2 : v));
   const K4 = K3.map((v, i) => (i === 30 ? 1 : v));
   const K5 = K4.map((v, i) => (i === 30 ? 2 : v));
-  RD.uc.mem = [
+  CourseData.uc.mem = [
     {
       title: 'Lazy and active expiry together', short: 'expiry', kind: 'sweep',
       intro: 'A key past its TTL is hidden at once, but is deleted by two different paths: when touched, and by a sampling sweep.',

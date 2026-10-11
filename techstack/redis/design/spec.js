@@ -1,9 +1,14 @@
 /* Spec for the Redis system-design course: overview, problem, requirements, estimates, high-level design, and the per-feature specs.
  * Facts target Redis 7.2. Defaults were read from redis.conf, sentinel.conf and src/config.c on the 7.2 branch. */
-window.RD = window.RD || { uc: {} };
-RD.spec = {
+window.CourseData = window.CourseData || { uc: {} };
+CourseData.config = {
+  id: 'redis', name: 'Redis', version: '7.2', root: '../../../',
+  related: [{ href: '../course.html', title: 'Problem-based course', sub: '11 chapters that start from incidents' }]
+};
+CourseData.spec = {
   version: '7.2',
   title: 'Design an in-memory data server',
+  navTitle: 'In-memory data server',
   lead: 'Start from a marketplace that needs sessions, carts and a leaderboard answered in under a millisecond. Work out what the server must do, how it is built, then walk each feature through the use cases that decide whether it behaves in production.',
   overview: [
     '<b>What it is.</b> Redis is a server that keeps typed values (strings, hashes, lists, sets, sorted sets, streams) in RAM and runs commands against them. Disk, replicas and shards exist to survive loss and to grow past one machine, not to serve the common read.',
@@ -57,7 +62,7 @@ RD.spec = {
   ]
 };
 
-RD.features = [
+CourseData.features = [
   {
     id: 'proto', tag: 'event loop', name: 'Protocol and event loop',
     summary: 'How bytes become commands, why one executor makes every command atomic, and what one slow command costs everyone.',

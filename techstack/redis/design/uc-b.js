@@ -4,7 +4,7 @@
   const E = (t, ctx, fix) => ({ t, ctx, fix });
   const P16 = n => Array.from({ length: 16 }, (_, i) => (n.includes(i) ? 1 : 0));
 
-  RD.uc.persist = [
+  CourseData.uc.persist = [
     {
       title: 'A snapshot by fork and copy-on-write', short: 'RDB fork', kind: 'pages',
       intro: 'BGSAVE forks a child that sees the data as of that instant while the parent keeps taking writes.',
@@ -69,7 +69,7 @@
     }
   ];
 
-  RD.uc.repl = [
+  CourseData.uc.repl = [
     {
       title: 'Partial resync from the backlog', short: 'PSYNC backlog', kind: 'ring',
       intro: 'A replica that reconnects sends its last offset. If the primary still has that part of the stream, only the gap is sent.',
@@ -133,7 +133,7 @@
     }
   ];
 
-  RD.uc.ha = [
+  CourseData.uc.ha = [
     {
       title: 'From SDOWN to ODOWN by quorum', short: 'SDOWN to ODOWN', kind: 'votes',
       intro: 'One Sentinel thinking the primary is down is just an opinion. A quorum of opinions makes it official.',

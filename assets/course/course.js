@@ -1,12 +1,17 @@
-/* Shell, router and page templates for the Redis system-design course.
- * Layout follows the Spark course (techstack/spark): sticky top bar, left navigation with nested use cases, page head,
- * jump bar, numbered sections, feature and use-case cards, pager.
+/* Course engine: shell, router and page templates for a system-design course page.
+ * Layout is the Spark course's: sticky top bar, left navigation with nested use cases, page head, jump bar,
+ * numbered sections, feature and use-case cards, pager. Diagrams are Mermaid, loaded on demand.
+ * Usage (after the data files, kit.js and contract.js):   Course.mount(CourseData)
  * Routes: #/ (overview) · #/f/N (feature) · #/f/N/u/M (use case). N and M start at 1.
- * Content lives in spec.js, uc-*.js and diagrams.js; pictures in paint.js. */
-(function () {
+ * The data contract is documented in contract.js and assets/course/README.md. */
+(function (root) {
   'use strict';
-  const RD = window.RD;
-  const app = document.getElementById('app');
+  const Course = root.Course = root.Course || {};
+  const MERMAID = 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js';
+  Course.mount = function (RD, opts) {
+  opts = opts || {};
+  const cfg = RD.config;
+  const app = opts.el || document.getElementById('app');
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   // Narration and spec text carry a little inline markup (<code>, <b>) written by the author, so it is passed through.
   const list = a => '<ul>' + a.map(x => '<li>' + x + '</li>').join('') + '</ul>';
@@ -32,7 +37,7 @@
     if (loading) return loading;
     loading = new Promise((resolve, reject) => {
       const el = document.createElement('script');
-      el.src = 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js';
+      el.src = MERMAID;
       el.onload = () => window.mermaid ? resolve(window.mermaid) : reject(new Error('mermaid missing'));
       el.onerror = () => { loading = null; reject(new Error('mermaid failed to load')); };
       document.head.appendChild(el);
@@ -104,11 +109,11 @@
       ['spec', 'Functional and non-functional spec', '<div class="two"><div><h3>Functional requirements</h3>' + list(s.fr) + '</div><div><h3>Non-functional requirements</h3>' + list(s.nfr) + '</div></div><p class="note"><b>Out of scope.</b> ' + s.out + '</p>'],
       ['estimate', 'Back-of-the-envelope estimation', '<p class="assume"><b>Assumptions.</b> These are assumptions, not measurements. Replace each number with one from your own system.</p>' + table(['Question', 'Calculation', 'Implication'], s.est)],
       ['hld', 'High-level design', diagram({ kind: 'Flowchart', title: 'The whole server', src: RD.hldOverall }, true) + '<p class="caption">' + s.hldNote + '</p>' +
-        '<div class="rd-hld-links">' + feats.map((f, i) => '<a href="' + href(i + 1) + '">' + pad(i + 1) + ' · ' + esc(f.tag) + '</a>').join('') + '</div>' + table(['Decision', 'Choice', 'Trade-off'], s.decisions)]
+        '<div class="c-hld-links">' + feats.map((f, i) => '<a href="' + href(i + 1) + '">' + pad(i + 1) + ' · ' + esc(f.tag) + '</a>').join('') + '</div>' + table(['Decision', 'Choice', 'Trade-off'], s.decisions)]
     ];
     const nav = [['overview', 'Overview'], ['problem', 'Problem'], ['spec', 'Spec'], ['estimate', 'Estimation'], ['hld', 'High-level design'], ['features', 'Features'], ['checks', 'Checks']];
     return '<header class="page-head"><p class="kick">OVERVIEW · SYSTEM DESIGN</p><h1>' + esc(s.title) + '</h1><p class="lead">' + s.lead + '</p>' +
-      chips([feats.length + ' features', total + ' use cases', 'Redis ' + s.version]) + '</header>' + jump(nav) +
+      chips([feats.length + ' features', total + ' use cases', cfg.name + ' ' + cfg.version]) + '</header>' + jump(nav) +
       secs.map((x, i) => section(x[0], i + 1, x[1], x[2])).join('') +
       section('features', secs.length + 1, 'Features', '<div class="cgrid">' + feats.map(featureCard).join('') + '</div>', 'Pick a feature to see its own spec, design and use cases.') +
       section('checks', secs.length + 2, 'How the facts were checked', '<div class="note">' + list(s.verify) + '</div>');
@@ -138,9 +143,9 @@
     return '<header class="page-head"><p class="kick">FEATURE ' + pad(n) + ' · USE CASE ' + pad(m) + '</p><h1>' + esc(u.title) + '</h1><p class="lead">' + u.intro + '</p></header>' +
       section('trigger', 1, 'Trigger', '<p class="lead-problem">' + u.trigger + '</p><div class="cmd"><span>Run</span><code>' + esc(u.run) + '</code></div><p class="expect"><b>Expect.</b> ' + u.expect + '</p>') +
       section('flow', 2, 'Diagrams', (RD.diagrams[f.id + ':' + m] || []).map(d => diagram(d, true)).join('')) +
-      section('steps', 3, 'Step by step', '<div class="rd-player"><div class="pv-stage"><div class="pv" id="rd-pic" aria-live="polite"></div></div>' +
-        '<div class="rd-inspector"><p class="kick" id="rd-kick"></p><h3 id="rd-title"></h3><p id="rd-text"></p><div class="rd-stat" id="rd-stat"></div></div>' +
-        '<div class="rd-controls" role="group" aria-label="Step controls"><button id="rd-reset" aria-label="Restart">↺</button><button id="rd-back">← Back</button><button id="rd-next" class="go">Next step →</button><span class="rd-dots" id="rd-dots"></span></div></div>',
+      section('steps', 3, 'Step by step', '<div class="c-player"><div class="pv-stage"><div class="pv" id="c-pic" aria-live="polite"></div></div>' +
+        '<div class="c-inspector"><p class="kick" id="c-kick"></p><h3 id="c-title"></h3><p id="c-text"></p><div class="c-stat" id="c-stat"></div></div>' +
+        '<div class="c-controls" role="group" aria-label="Step controls"><button id="c-reset" aria-label="Restart">↺</button><button id="c-back">← Back</button><button id="c-next" class="go">Next step →</button><span class="c-dots" id="c-dots"></span></div></div>',
         'Press Next step to walk through it one move at a time. The arrow keys work too.') +
       section('edges', 4, 'Edge cases and failure modes', '<div class="edges">' + u.edges.map(edgeCard).join('') + '</div>') +
       section('rule', 5, 'Invariant', '<div class="invariant"><b>Must always hold</b><p>' + u.invariant + '</p></div><p class="sub" style="margin-top:14px">Sources: ' + u.src + '</p>') +
@@ -149,33 +154,35 @@
   }
 
   function mountPlayer(u) {
-    const paint = RD.PAINT[u.kind], $ = id => document.getElementById(id);
+    const paint = RD.PAINT[u.kind] || (() => '<p class="faint">No painter named ' + esc(u.kind) + '.</p>'), $ = id => document.getElementById(id);
     let i = 0;
     function show() {
       const st = u.steps[i];
-      $('rd-pic').innerHTML = paint(st.s, st);
-      $('rd-kick').textContent = 'STEP ' + (i + 1) + ' OF ' + u.steps.length;
-      $('rd-title').textContent = st.t;
-      $('rd-text').innerHTML = st.x;
-      $('rd-stat').innerHTML = st.stat || '&nbsp;';
-      $('rd-dots').innerHTML = u.steps.map((_, k) => '<i class="' + (k === i ? 'on' : k < i ? 'done' : '') + '"></i>').join('');
-      $('rd-back').disabled = i === 0; $('rd-next').disabled = i === u.steps.length - 1;
+      $('c-pic').innerHTML = paint(st.s, st);
+      $('c-kick').textContent = 'STEP ' + (i + 1) + ' OF ' + u.steps.length;
+      $('c-title').textContent = st.t;
+      $('c-text').innerHTML = st.x;
+      $('c-stat').innerHTML = st.stat || '&nbsp;';
+      $('c-dots').innerHTML = u.steps.map((_, k) => '<i class="' + (k === i ? 'on' : k < i ? 'done' : '') + '"></i>').join('');
+      $('c-back').disabled = i === 0; $('c-next').disabled = i === u.steps.length - 1;
     }
-    $('rd-back').onclick = () => { if (i > 0) { i--; show(); } };
-    $('rd-next').onclick = () => { if (i < u.steps.length - 1) { i++; show(); } };
-    $('rd-reset').onclick = () => { i = 0; show(); };
-    player = e => { if (e.key === 'ArrowRight') $('rd-next').click(); else if (e.key === 'ArrowLeft') $('rd-back').click(); };
+    $('c-back').onclick = () => { if (i > 0) { i--; show(); } };
+    $('c-next').onclick = () => { if (i < u.steps.length - 1) { i++; show(); } };
+    $('c-reset').onclick = () => { i = 0; show(); };
+    player = e => { if (e.key === 'ArrowRight') $('c-next').click(); else if (e.key === 'ArrowLeft') $('c-back').click(); };
     show();
   }
 
   const notFound = () => '<header class="page-head"><p class="kick">NOT FOUND</p><h1>No such page</h1></header><p><a href="#/">Back to the overview</a></p>';
 
   /* ---------- shell ---------- */
-  app.className = 'rd-course';
+  if (!document.getElementById('rough')) document.body.insertAdjacentHTML('afterbegin', '<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="7"/><feDisplacementMap in="SourceGraphic" scale="2.2"/></filter></svg>');
+  if (cfg.brand) app.style.setProperty('--brand', cfg.brand);
+  app.className = 'course';
   app.innerHTML = '<a class="skip-link" href="#course-main">Skip to content</a>' +
-    '<header class="course-top"><button id="menu-toggle" aria-label="Show navigation" aria-controls="course-sidebar" aria-expanded="false">☰</button><nav aria-label="Breadcrumb" id="breadcrumb"></nav><span class="course-version">SYSTEM DESIGN · REDIS ' + esc(RD.spec.version) + '</span></header>' +
+    '<header class="course-top"><button id="menu-toggle" aria-label="Show navigation" aria-controls="course-sidebar" aria-expanded="false">☰</button><nav aria-label="Breadcrumb" id="breadcrumb"></nav><span class="course-version">SYSTEM DESIGN · ' + esc((cfg.name + ' ' + cfg.version).toUpperCase()) + '</span></header>' +
     '<div class="course-layout"><aside class="course-sidebar" id="course-sidebar"><label class="search-label" for="course-search">Find a feature</label><input id="course-search" type="search" placeholder="Search features…"><nav id="chapter-nav" aria-label="Pages"></nav></aside>' +
-    '<main id="course-main" tabindex="-1"><article id="page"></article><footer class="course-foot">A model of Redis ' + esc(RD.spec.version) + ' for learning. Numbers marked as examples are assumptions, not measurements. This course was built with the <a href="../../../skills.html?q=learn-technology-from-scratch">learn-technology-from-scratch</a> skill.</footer></main></div>' +
+    '<main id="course-main" tabindex="-1"><article id="page"></article><footer class="course-foot">' + (cfg.footer || 'A model of ' + esc(cfg.name) + ' ' + esc(cfg.version) + ' for learning. Numbers marked as examples are assumptions, not measurements.') + ' This course was built with the <a href="' + esc(cfg.root) + 'skills.html?q=learn-technology-from-scratch">learn-technology-from-scratch</a> skill.</footer></main></div>' +
     '<button id="sidebar-scrim" class="sidebar-scrim" aria-label="Close navigation" hidden></button>';
   const $ = id => document.getElementById(id);
   let route = { n: 0, m: 0 };
@@ -184,13 +191,13 @@
     const q = $('course-search').value.trim().toLowerCase();
     const link = (h, text, cls, cur) => '<a href="' + h + '"' + (cur ? ' aria-current="page"' : '') + ' class="' + (cls || '') + '">' + text + '</a>';
     const shown = feats.map((f, i) => [f, i]).filter(([f]) => !q || [f.name, f.summary, f.tag].some(x => x.toLowerCase().includes(q)));
-    $('chapter-nav').innerHTML = (q ? '' : '<p class="nav-group">Overview</p>' + link(href(0), '<span>◆</span><div><b>In-memory data server</b><small>The whole system on one page</small></div>', 'nav-item', !route.n)) +
+    $('chapter-nav').innerHTML = (q ? '' : '<p class="nav-group">Overview</p>' + link(href(0), '<span>◆</span><div><b>' + esc(RD.spec.navTitle || RD.spec.title) + '</b><small>The whole system on one page</small></div>', 'nav-item', !route.n)) +
       '<p class="nav-group">Features</p>' + (shown.map(([f, i]) => link(href(i + 1), '<span>' + pad(i + 1) + '</span><div><b>' + esc(f.name) + '</b><small>' + f.summary + '</small></div>', 'nav-item', route.n === i + 1 && !route.m) +
         (route.n === i + 1 ? '<div class="nav-uc">' + ucs(f).map((u, k) => link(href(i + 1, k + 1), esc(u.title), '', route.m === k + 1)).join('') + '</div>' : '')).join('') || '<p class="empty-state">No matching feature.</p>') +
-      '<p class="nav-group">Related</p>' + link('../course.html', '<span>↗</span><div><b>Problem-based course</b><small>11 chapters that start from incidents</small></div>', 'nav-item', false);
+      ((cfg.related || []).length ? '<p class="nav-group">Related</p>' + cfg.related.map(r => link(r.href, '<span>↗</span><div><b>' + esc(r.title) + '</b><small>' + esc(r.sub || '') + '</small></div>', 'nav-item', false)).join('') : '');
   }
   function renderCrumb() {
-    const parts = ['<a href="../../../tech.html">Tech Stack</a>', '<a href="' + href(0) + '">Redis</a>'];
+    const parts = ['<a href="' + esc(cfg.root) + 'tech.html">Tech Stack</a>', '<a href="' + href(0) + '">' + esc(cfg.name) + '</a>'];
     const f = feats[route.n - 1];
     if (f) parts.push(route.m ? '<a href="' + href(route.n) + '">' + esc(f.name) + '</a>' : '<b>' + esc(f.name) + '</b>');
     if (f && route.m && ucs(f)[route.m - 1]) parts.push('<b>' + esc(ucs(f)[route.m - 1].title) + '</b>');
@@ -208,7 +215,7 @@
     else if (u) { page.innerHTML = useCase(route.n, route.m); mountPlayer(u); title = u.title + ' · ' + f.name; }
     else if (f) { page.innerHTML = feature(route.n); title = f.name; }
     else page.innerHTML = overview();
-    document.title = title + ' · Redis design';
+    document.title = title + ' · ' + cfg.name + ' design';
     renderNav(); renderCrumb(); closeMenu(); window.scrollTo(0, 0); draw(page);
   }
 
@@ -219,4 +226,5 @@
   window.addEventListener('hashchange', render);
   window.addEventListener('keydown', e => { if (player && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) player(e); });
   render();
-})();
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
