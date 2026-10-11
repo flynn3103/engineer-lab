@@ -1,6 +1,6 @@
 name: Deploy to GitHub Pages
 
-# Publishes the portfolio (top-level *.html, assets/, data/, techstack/) on every push to main that touches them,
+# Publishes the portfolio (top-level *.html, assets/, data/, techstack/, and the CV PDF) on every push to main that touches them,
 # and when cv.yml dispatches it after rebuilding the CV PDF.
 # Requires Settings -> Pages -> Source = "GitHub Actions".
 on:
@@ -11,6 +11,7 @@ on:
       - 'assets/**'
       - 'data/**'
       - 'techstack/**'
+      - 'cv/Linh-Tran-Nhat-CV.pdf'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -36,7 +37,7 @@ jobs:
         run: |
           missing=0
           for f in index.html tech.html skills.html blog.html assets/lab.css assets/lab.js assets/site.css assets/site.js \
-                   data/profile.js data/systems.js data/tech-index.js data/skills.js data/posts.js assets/Linh-Tran-Nhat-CV.pdf; do
+                   data/profile.js data/systems.js data/tech-index.js data/skills.js data/posts.js cv/Linh-Tran-Nhat-CV.pdf; do
             [ -f "$f" ] || { echo "::error::$f is not on this branch, so the site would be incomplete"; missing=1; }
           done
           # every tour listed in data/systems.js must exist
@@ -47,6 +48,8 @@ jobs:
           mkdir -p _site
           cp ./*.html _site/
           cp -r assets data techstack _site/
+          mkdir -p _site/cv
+          cp cv/Linh-Tran-Nhat-CV.pdf _site/cv/
           touch _site/.nojekyll
 
       - uses: actions/configure-pages@v5

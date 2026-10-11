@@ -1,6 +1,0 @@
-flowchart LR
-  L[Lock] --> R[Read]
-  subgraph Critical section
-    R --> M[Modify] --> W[Write]
-  end
-  W --> U[Unlock] --> N[Next caller]

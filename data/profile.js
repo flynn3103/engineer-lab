@@ -8,6 +8,6 @@ window.SITE_PROFILE = {
     github: 'https://github.com/flynn3103',
     linkedin: 'https://www.linkedin.com/in/linh-tr%E1%BA%A7n-25744419a/',
     email: 'mailto:trannhatlinh3103@gmail.com',
-    cv: 'assets/Linh-Tran-Nhat-CV.pdf'
+    cv: 'cv/Linh-Tran-Nhat-CV.pdf'
   }
 };

@@ -1,4 +1,0 @@
-flowchart LR
-  L["Durable log<br/>after crash"] --> C{"Durable<br/>COMMIT?"}
-  C -->|"No"| U["Undo incomplete<br/>effects"]
-  C -->|"Yes"| R["Redo committed<br/>effects"]

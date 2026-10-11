@@ -25,17 +25,12 @@ Each system has its own folder with an interactive course. Lessons follow a Prob
 | Apache Kafka | `techstack/kafka/` | 12 |
 | PostgreSQL | `techstack/postgres/` | 12 |
 | Kubernetes | `techstack/k8s/` | 11 |
-| Concurrency | `techstack/concurrency/` | 13 |
-| Distributed Systems | `techstack/distributed/` | 15 |
-| Database Systems | `techstack/database-systems/` | 16 |
 
 Redis’s course at `techstack/redis/course.html` follows a top-down system design: overview, problem, requirements, estimates and high-level design, then 9 features and 25 use cases. Each feature has a Mermaid high-level-design flowchart, and each use case has Mermaid sequence, state or flow diagrams plus its own step-by-step picture (Mermaid loads from a CDN and falls back to its source offline). It targets Redis 7.2 and is listed in `data/systems.js` and the search index.
 
 ### Course framework (`assets/course/`)
 
 System-design courses share one framework so their style, diagrams and data layout stay consistent. The look is the Spark course's. A course page is a thin `course.html` plus five data files (`spec.js`, `uc-*.js`, `diagrams.js`, `paint.js`) and ends with `Course.mount(CourseData)`. See `assets/course/README.md` for the data contract, the picture kit and the checks, and `tools/course/` for the scaffold, validator and browser checker. The Spark and Redis courses both run on it. Spark keeps its content in the original data files (`engine-curriculum.js`, `engine-sysdesign.js`, `engine-stories.js`, `engine-visuals.js`) and `techstack/spark/spark-data.js` maps them onto the framework; its 19 interactive simulations keep their own modules and are mounted by the framework's `afterRender` hook. Courses are built with the `learn-technology-from-scratch` skill, which ships the same framework.
-
-An Operating Systems course also lives in `techstack/os/` but is not yet listed in `data/systems.js`, so it doesn't appear on the home or tech pages.
 
 Each course's entry point is `course.html`. Legacy lesson content lives in `course.js` and per-chapter files in `chapters/chNN.js`; Redis uses `spec.js`, `uc-*.js`, `diagrams.js` and `paint.js` with the shared course framework. Chapter numbers are zero-based in code and URLs; lessons are displayed starting at 1.
 
@@ -76,8 +71,8 @@ Then open <http://localhost:8000>.
 
 ## Deployment
 
-- **Site:** `.github/workflows/pages.yml` runs on pushes to `main` that touch the top-level HTML, `assets/`, `data/`, or `techstack/`. It checks that the required files exist, copies them into `_site/`, and deploys. It needs **Settings → Pages → Source = GitHub Actions**.
-- **CV:** `.github/workflows/cv.yml` runs when `cv/**` changes. It compiles `cv/cv.tex` with LaTeX, replaces `assets/Linh-Tran-Nhat-CV.pdf`, commits the result to `main`, and then dispatches the Pages workflow.
+- **Site:** `.github/workflows/pages.yml` runs on pushes to `main` that touch the top-level HTML, `assets/`, `data/`, `techstack/`, or `cv/Linh-Tran-Nhat-CV.pdf`. It checks that the required files exist, copies them into `_site/`, and deploys. It publishes the CV under `cv/`. It needs **Settings → Pages → Source = GitHub Actions**.
+- **CV:** `.github/workflows/cv.yml` runs when `cv/**` changes. It compiles `cv/cv.tex` with LaTeX, replaces `cv/Linh-Tran-Nhat-CV.pdf`, commits the result to `main`, and then dispatches the Pages workflow.
 
 To rebuild the CV locally, install [tectonic](https://tectonic-typesetting.github.io/) and run:
 
@@ -90,4 +85,4 @@ sh tools/build_cv.sh
 - GitHub: [flynn3103](https://github.com/flynn3103)
 - LinkedIn: [Linh Trần Nhật](https://www.linkedin.com/in/linh-tr%E1%BA%A7n-25744419a/)
 - Email: trannhatlinh3103@gmail.com
-- CV: [`assets/Linh-Tran-Nhat-CV.pdf`](assets/Linh-Tran-Nhat-CV.pdf)
+- CV: [`cv/Linh-Tran-Nhat-CV.pdf`](cv/Linh-Tran-Nhat-CV.pdf)

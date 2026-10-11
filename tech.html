@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tech Stack · Linh Trần Nhật</title>
-<meta name="description" content="Deep-dive research on the internals of Spark, ScyllaDB, Redis, Kafka, PostgreSQL, Kubernetes, concurrency, distributed systems and databases: lessons you can trace step by step, all searchable.">
+<meta name="description" content="Deep-dive research on the internals of Spark, ScyllaDB, Redis, Kafka, PostgreSQL, and Kubernetes: lessons you can trace step by step, all searchable.">
 <link rel="stylesheet" href="assets/lab.css">
 <link rel="stylesheet" href="assets/site.css">
 <link rel="stylesheet" href="assets/curriculum.css">
@@ -32,11 +32,6 @@
         <p class="sub">Each system is a problem-based course: a production problem, the mechanism behind it, and the failure modes to diagnose.</p>
         <div class="cgrid" id="g-internals"></div>
       </section>
-      <section class="cur-sec" id="courses">
-        <h2>Courses <a class="anchor" href="#courses" aria-label="Link to Courses">⌁</a></h2>
-        <p class="sub">Longer courses, one chapter at a time, each chapter problem-based and step-by-step.</p>
-        <div class="cgrid" id="g-courses"></div>
-      </section>
     </div>
   </main>
 </div>
@@ -53,21 +48,17 @@
   $('ico').innerHTML=Site.ICON;
 
   /* Use each system's configured destination. Old per-chapter links open the course page. */
-  const ART={'database-systems':'database'};
   const toCourse=u=>String(u).replace(/^techstack\/([^/]+)\/01-[^#]*/,'techstack/$1/course.html');
   const cards={};
-  SYS.forEach((s,i)=>{
-    cards[s.id]=[{url:toCourse(s.url),thumb:ART[s.id]||s.id,title:s.name,
+  SYS.forEach(s=>{
+    cards[s.id]=[{url:toCourse(s.url),thumb:s.id,title:s.name,
       desc:s.topics,chips:[s.kind.replace(/^Course: /,''),s.chapters+' chapters']}];
   });
   const cardHTML=(c,i)=>`<a class="ccard" href="${esc(c.url)}" style="--p:var(--p${i%8})">
       <div class="art">${window.Thumbs.svg(c.thumb)}</div>
       <div class="body"><h3>${esc(c.title)}</h3><p>${esc(c.desc)}</p>
       <div class="chips">${c.chips.map(t=>`<span>${esc(t)}</span>`).join('')}</div></div></a>`;
-  const GROUPS={'g-internals':SYS.filter(s=>!/^Course:/.test(s.kind)).map(s=>s.id),'g-courses':SYS.filter(s=>/^Course:/.test(s.kind)).map(s=>s.id)};
-  Object.entries(GROUPS).forEach(([gid,ids])=>{
-    $(gid).innerHTML=ids.flatMap(id=>cards[id]).map((c,i)=>cardHTML(c,i)).join('');
-  });
+  $('g-internals').innerHTML=SYS.flatMap(s=>cards[s.id]).map((c,i)=>cardHTML(c,i)).join('');
 
   function render(){
     const text=q.value.trim(), active=!!text;
