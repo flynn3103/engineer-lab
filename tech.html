@@ -52,12 +52,12 @@
   const $=id=>document.getElementById(id), q=$('q'), res=$('results'), cat=$('catalog'), st=$('status');
   $('ico').innerHTML=Site.ICON;
 
-  /* Every system opens its problem-based course. Old per-chapter links are rewritten to the course page. */
+  /* Use each system's configured destination. Old per-chapter links open the course page. */
   const ART={'database-systems':'database'};
   const toCourse=u=>String(u).replace(/^techstack\/([^/]+)\/01-[^#]*/,'techstack/$1/course.html');
   const cards={};
   SYS.forEach((s,i)=>{
-    cards[s.id]=[{url:`techstack/${s.id}/course.html`,thumb:ART[s.id]||s.id,title:s.name,
+    cards[s.id]=[{url:toCourse(s.url),thumb:ART[s.id]||s.id,title:s.name,
       desc:s.topics,chips:[s.kind.replace(/^Course: /,''),s.chapters+' chapters']}];
   });
   const cardHTML=(c,i)=>`<a class="ccard" href="${esc(c.url)}" style="--p:var(--p${i%8})">
@@ -72,7 +72,7 @@
   function render(){
     const text=q.value.trim(), active=!!text;
     cat.hidden=active; res.hidden=!active;
-    if(!active){st.textContent=`${LESSONS.length} lesson · ${SYS.length} systems · ${IDX.length} tour pages and chapters indexed. Type to search, or press /.`;return}
+    if(!active){st.textContent=`${SYS.length} systems · ${IDX.length} tour pages and chapters indexed. Type to search, or press /.`;return}
     const pool=IDX.map(e=>({...e,url:toCourse(e.url)}));
     const hits=search(pool,text,[['title',6],['tags',4],['system',3],['type',2],['summary',2],['body',1]]);
     st.textContent=hits.length?`${hits.length} result${hits.length>1?'s':''}`:'';

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* Browser pass over a whole course page with Playwright and the pre-installed Chromium.
- *   node tools/course/browse.js techstack/redis/design/design.html [--shots dir] [--no-diagrams]
+ *   node tools/course/browse.js techstack/redis/course.html [--shots dir] [--no-diagrams]
  * Visits the overview, every feature and every use case in light and dark themes (desktop and phone width), presses Next to the
  * end of each player, and fails on page errors, empty pictures, horizontal overflow, or a Mermaid diagram that did not draw.
  * Mermaid: uses MERMAID_JS if set, else installs mermaid@10.9.1 once into a temp cache (the CDN may be blocked in a sandbox). */

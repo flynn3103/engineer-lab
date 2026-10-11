@@ -2,8 +2,7 @@
  * Facts target Redis 7.2. Defaults were read from redis.conf, sentinel.conf and src/config.c on the 7.2 branch. */
 window.CourseData = window.CourseData || { uc: {} };
 CourseData.config = {
-  id: 'redis', name: 'Redis', version: '7.2', root: '../../../',
-  related: [{ href: '../course.html', title: 'Problem-based course', sub: '11 chapters that start from incidents' }]
+  id: 'redis', name: 'Redis', version: '7.2', root: '../../'
 };
 CourseData.spec = {
   version: '7.2',

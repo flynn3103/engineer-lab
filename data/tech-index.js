@@ -364,171 +364,130 @@ window.SITE_TECH_INDEX = [
 "id": 22
 },
 {
-"type": "Tour",
-"system": "redis",
-"title": "Redis internals, end to end",
-"summary": "Answer 50,000 requests a second (sessions, counters, leaderboards, job queues) in microseconds, and recover cleanly after a crash or a failover.",
-"body": "RESP and event loop, command cost, typed keyspace, expiry, eviction, AOF and RDB, replication, pipelining, Sentinel, cluster slots, streams.",
-"url": "techstack/redis/01-redis-internals-end-to-end.html",
-"tags": [
-"tour",
-"interactive"
-],
-"id": 23
-},
-{
 "type": "Chapter",
 "system": "redis",
-"title": "Redis · 1. RESP and the Event Loop",
-"summary": "A request arrives split across three TCP reads. When does Redis run it, and why is every command atomic?",
-"body": "RESP is length-prefixed: arrays (*2\\r\\n) of bulk strings ($4\\r\\nINCR\\r\\n). Binary data is safe because the length is known first. Query buffer: each client has its own input buffer; processInputBuffer consumes only complete frames and leaves the rest for the next read.",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch0",
+"title": "Redis · 1. Protocol and event loop",
+"summary": "How bytes become commands, why one executor makes every command atomic, and what one slow command costs everyone.",
+"body": "Turn a TCP byte stream into complete commands and run them in order with low latency. Parse length-prefixed RESP frames from partial reads. Run commands from all clients one at a time. Queue replies per client and write when the socket is ready. A command runs at most once, and only when its frame is complete. Per-client buffers are bounded ( client-query-buffer-limit 1gb by default). Latency of a command = queue wait + its own run time. A command split across TCP reads A TCP read can end halfway through a command. See when Redis actually runs it. A metrics proxy forwards INCR hits . The 24-byte RESP frame reaches Redis as three reads of 10, 10 and 4 bytes. Redis runs INCR once, after the 24th byte arrives, and replies :1 . A command runs at most once, and only when its whole frame has arrived. Pipelining removes round trips Sending five commands back to back costs one network round trip, not five. A product page needs 5 lookups. The round trip to Redis is 0.5 ms (assumption: same availability zone); each command runs in microseconds. About 0.5 ms for five pipelined commands, against about 2.5 ms one by one (example numbers). Replies on one connection come back in the order the requests were sent. One slow command stalls every client Commands run one at a time, so a long one adds its whole duration to every request waiting behind it. An operator runs KEYS cart:* on a database with millions of keys. Suppose it takes 80 ms (example) while checkout reads arrive. Two GET s sent during the scan answer after about 80 ms; SLOWLOG lists the KEYS . A request's latency is its time in the queue plus its own run time.",
+"url": "techstack/redis/course.html#/f/1",
 "tags": [
-"resp",
 "event loop",
-"one executor"
+"system design",
+"use cases"
 ],
 "id": 24
 },
 {
 "type": "Chapter",
 "system": "redis",
-"title": "Redis · 2. Command Cost and the Single Thread",
-"summary": "With one executor, one slow command stalls every client. How do you keep each command cheap?",
-"body": "Time complexity is a latency budget: the docs list it for every command. O(N) commands over large collections are the usual cause of stalls. SCAN, HSCAN, SSCAN and ZSCAN walk the keyspace in small cursor steps (COUNT is a hint), so other commands interleave between steps.",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch1",
+"title": "Redis · 2. Data structures and encodings",
+"summary": "Typed values with compact encodings that switch to bigger ones at set thresholds, and a hash table that grows without a pause.",
+"body": "Give O(1) or O(log N) operations per type while keeping small values cheap in memory. Pick an encoding per value from its size. Look up a key in O(1). Rank and range a sorted set in O(log N). Encoding is invisible to commands. Resizing the key table adds no long pause. Small collections use less memory than the large form. A hash outgrows its compact encoding Small hashes are stored as a flat listpack. Cross a limit and Redis converts to a real hash table. A profile hash grows as users add fields. You want to know when memory use per field jumps. listpack at 512 fields or fewer with values up to 64 bytes; hashtable above either limit. Encoding never changes what a command returns, only memory and CPU. A leaderboard in a sorted set A sorted set keeps a skip list for order and a dict for member lookup. See how a range query finds its start. The marketplace asks \"who has a score of at least 250?\" and also \"what is cho's score?\". cho dan eve in O(log N + M) time; 250 in O(1). The skip list and the dict always contain exactly the same members. Incremental rehash keeps latency flat When the key table is full Redis grows it, but moves one bucket per command instead of everything at once. The keyspace dict has 4 buckets and 4 keys. A fifth key is added. A second table of 8 buckets appears; each following command moves one bucket; then the old table is freed. Every key is in exactly one of the two tables, and a lookup checks both while rehashing.",
+"url": "techstack/redis/course.html#/f/2",
 "tags": [
-"o(1) vs o(n)",
-"slowlog",
-"lazyfree"
+"encodings",
+"system design",
+"use cases"
 ],
 "id": 25
 },
 {
 "type": "Chapter",
 "system": "redis",
-"title": "Redis · 3. Typed Keyspace and Encodings",
-"summary": "Every key holds a typed value with its own encoding. What happens when a client or a size limit breaks that contract?",
-"body": "redisObject: every value has a type (string, list, hash, set, zset, stream) and an encoding. Commands check the type first and fail with WRONGTYPE. Compact encodings: small hashes and sorted sets use a listpack (a flat, contiguous array); sets of integers use intset;",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch2",
+"title": "Redis · 3. Expiry, eviction and the memory bound",
+"summary": "How keys leave: by TTL, by eviction under pressure, or by the server refusing writes.",
+"body": "Keep memory at or under a limit without a global scan or a per-key list. Hide and delete keys past their TTL. Evict keys when over maxmemory if a policy allows. Refuse growing commands when it does not. An expired key is never returned. Expiry work is capped per cycle (about 25% of CPU). Default policy is noeviction . Lazy and active expiry together A key past its TTL is hidden at once, but is deleted by two different paths: when touched, and by a sampling sweep. Sessions expire after 30 minutes. Many keys expired in the same minute; memory still looks high. Reads never return an expired key; expired_keys rises as the sweep and lazy deletes remove them. A key past its TTL is never returned to a client, even if its bytes are still in memory. Eviction by sampled LRU Redis does not track exact recency. It samples a few keys and evicts the oldest of those. Memory reaches maxmemory with policy allkeys-lru . The next write needs space. The victim is the most idle key among 5 sampled, not necessarily the globally oldest. Evictions continue until used memory is back at or under maxmemory, or no candidate exists. noeviction: the server says no With the default policy nothing is evicted. Once full, commands that would grow memory are refused. A cart service writes to a Redis whose maxmemory is 4 GB and policy is the default noeviction . Writes return -OOM once over the limit; reads and DEL still work. Under noeviction, no existing key is removed by memory pressure; only new growth is refused.",
+"url": "techstack/redis/course.html#/f/3",
 "tags": [
-"types",
-"listpack",
-"wrongtype"
+"eviction",
+"system design",
+"use cases"
 ],
 "id": 26
 },
 {
 "type": "Chapter",
 "system": "redis",
-"title": "Redis · 4. Key Expiration",
-"summary": "A million sessions share a 30-minute TTL. How does Redis delete them without a pause, and when is memory really freed?",
-"body": "Absolute deadline: EXPIRE stores a unix time in the separate expires dictionary, so checking is a cheap lookup. Lazy expiry: every access calls expireIfNeeded; if the deadline passed, the key is deleted and treated as missing.",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch3",
+"title": "Redis · 4. Persistence: RDB and AOF",
+"summary": "Snapshots by fork and an append-only log, and the exact loss window each leaves.",
+"body": "Recover the dataset after a restart with a bounded, known loss. Write a point-in-time snapshot without stopping service. Append every write to a log and fsync on a policy. Compact the log without losing writes. Snapshot is consistent as of the fork. Loss on crash is bounded by the fsync policy. A crash during rewrite leaves a loadable AOF. A snapshot by fork and copy-on-write BGSAVE forks a child that sees the data as of that instant while the parent keeps taking writes. The save rule 300 100 fires: 100 changes in 300 s. Redis starts a background save while traffic continues. A consistent dump.rdb , at the cost of extra memory equal to the pages the parent changed meanwhile. The snapshot reflects the dataset exactly as of the fork, no matter what the parent writes after. AOF everysec: the loss window With the default policy a write is acknowledged before it reaches the disk. A crash can lose the writes since the last fsync. The server runs with appendonly yes and appendfsync everysec . It loses power 2.6 s after start. Writes up to the last whole-second fsync survive; later acknowledged writes are lost. Under everysec, only writes newer than the last completed fsync can be lost. AOF rewrite with multi-part files The log grows forever. A rewrite compacts it into a new base file while writes continue into a fresh incremental file. The AOF is over auto-aof-rewrite-min-size (64mb) and has grown 100% since the last rewrite. A new base and incremental pair replaces the old files, and the manifest changes at the end. The manifest always names a complete set, so a crash at any moment leaves a loadable AOF.",
+"url": "techstack/redis/course.html#/f/4",
 "tags": [
-"ttl",
-"lazy",
-"active cycle"
+"persistence",
+"system design",
+"use cases"
 ],
 "id": 27
 },
 {
 "type": "Chapter",
 "system": "redis",
-"title": "Redis · 5. Memory and Eviction",
-"summary": "The memory budget is full and a new key arrives. What do you throw away, and what if you throw away the wrong thing?",
-"body": "maxmemory is the byte budget. When used memory exceeds it, the next command that may add data triggers the policy. Policies: noeviction, allkeys-lru, allkeys-lfu, allkeys-random and the volatile-* variants that only consider keys with a TTL. Sampled LRU (evict.c): no global list.",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch4",
+"title": "Redis · 5. Replication",
+"summary": "A replica applies the primary write stream; a backlog lets it catch up after a gap, and acknowledged writes can still be lost.",
+"body": "Keep copies for failover and read scale with a cheap catch-up path. Stream every write to replicas. Resume after a gap without a full copy when possible. Report replica progress as offsets. Replica lag is observable. The primary never waits for replicas unless asked. A full resync is rare and costly. Partial resync from the backlog A replica that reconnects sends its last offset. If the primary still has that part of the stream, only the gap is sent. A replica loses its link for a short time, then reconnects. Later it is away for much longer. Short gap: +CONTINUE . Gap older than the backlog: +FULLRESYNC with a new RDB. A partial resync is only granted when every missing byte is still in the backlog. An acknowledged write is lost on failover Replication is asynchronous. The primary replies before the replica has the write. A client stores a paid order, gets +OK , and then the primary crashes before the replication packet is delivered. After promotion the order key is missing, even though the client was told it was saved. With asynchronous replication, a write can be acknowledged and still absent from the replica that becomes primary. Replica lag and WAIT Each replica reports the offset it has applied. Comparing offsets shows lag, and WAIT lets one client wait for them. A burst of writes raises the primary's offset. Replicas confirm progress on a heartbeat. WAIT 1 100 returns 1 once one replica reaches the client's offset, or after 100 ms with the count it has. A replica's offset never passes the primary's; lag is the difference between them.",
+"url": "techstack/redis/course.html#/f/5",
 "tags": [
-"maxmemory",
-"sampled lru/lfu"
+"replication",
+"system design",
+"use cases"
 ],
 "id": 28
 },
 {
 "type": "Chapter",
 "system": "redis",
-"title": "Redis · 6. Persistence: AOF and RDB",
-"summary": "The machine loses power right after Redis replied OK. What survives the restart, and what does that choice cost?",
-"body": "AOF: every write command is appended to a log. appendfsync sets when it is forced to disk: always, everysec (default) or no (the OS decides). AOF rewrite: a background child compacts the log; in Redis 7 the AOF is multi-part (a base file plus incremental files in appendonlydir).",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch5",
+"title": "Redis · 6. High availability with Sentinel",
+"summary": "Several Sentinels agree a primary is down, elect a leader, and promote a replica.",
+"body": "Replace a failed primary without a human, and avoid two primaries. Monitor a primary and its replicas. Decide failure by quorum. Elect one leader and promote the best replica. One leader per epoch. Failover needs a majority of Sentinels. Detection delay = down-after-milliseconds (30 s default). From SDOWN to ODOWN by quorum One Sentinel thinking the primary is down is just an opinion. A quorum of opinions makes it official. The primary stops answering PING. Three Sentinels watch it with quorum 2. After 30 s each Sentinel marks the primary SDOWN. Two agreeing reports make it ODOWN and start a failover. One Sentinel's view alone never triggers a failover. Elect a leader, promote the best replica Sentinels vote for one leader per epoch. The leader picks the replica to promote and re-points the rest. The primary is ODOWN. There are three replicas with different priorities and offsets. The replica with the best (priority, offset, run id) becomes primary; others replicate from it. At most one Sentinel leads a given epoch, and a higher epoch overrides a lower one. Split brain and min-replicas If the old primary is cut off but alive, clients on its side keep writing to it while a new primary is chosen elsewhere. A network partition isolates the old primary and one client from the Sentinels and the replicas. Without a limit, writes on the isolated side are lost at heal; with it, the old primary refuses writes after 10 s. Two nodes may both believe they are primary during a partition; only one history survives the heal.",
+"url": "techstack/redis/course.html#/f/6",
 "tags": [
-"aof",
-"rdb",
-"fork",
-"fsync"
+"sentinel",
+"system design",
+"use cases"
 ],
 "id": 29
 },
 {
 "type": "Chapter",
 "system": "redis",
-"title": "Redis · 7. Replication",
-"summary": "A replica on a flaky link keeps doing full resyncs. How does a replica catch up, and when can it only start over?",
-"body": "Replication ID and offset: the primary numbers its write stream by bytes. INFO replication shows master_repl_offset and each replica offset. Backlog: a ring buffer of recent writes sized by repl-backlog-size (1 MB default). It lets a returning replica resume with PSYNC.",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch6",
+"title": "Redis · 7. Sharding with Redis Cluster",
+"summary": "Every key maps to one of 16384 slots; nodes own slot ranges and redirect clients that ask the wrong one.",
+"body": "Scale writes and memory by splitting the keyspace, with online resharding. Map a key to a slot by a pure function. Redirect a client that asks the wrong node. Move slots between nodes while serving. Exactly one owner per slot. Multi-key commands work only inside one slot. By default the cluster stops if a slot has no owner. Key to slot, and hash tags A key's slot is a pure function of its bytes: CRC16 modulo 16384. A hash tag lets related keys share a slot. A shop keeps user:1000 , its cart and its profile. They should live on one node so a single command can touch them. Plain keys scatter across slots. Keys sharing the same {tag} land in one slot. The slot of a key depends only on the key's bytes, so every node and client computes the same slot. MOVED versus ASK during resharding A permanent change of owner is MOVED. A slot that is half moved is ASK, for one request. Slot 7638 is moved from node A to node B while clients keep reading keys in it. MOVED updates the client's map. ASK sends one request to the importing node with ASKING and changes nothing else. At any moment exactly one node answers a slot as owner; a client reading the wrong side is always redirected. CROSSSLOT and slot coverage A multi-key command only works inside one slot, and by default the whole cluster stops if any slot has no owner. Checkout runs MSET a 1 b 2 , and later a primary with no replica fails. The first command fails; with a tag it works. A lost shard makes the cluster refuse queries unless coverage is relaxed. A command is served only if all its keys are in one slot that a reachable node owns.",
+"url": "techstack/redis/course.html#/f/7",
 "tags": [
-"replication offset",
-"backlog",
-"resync"
+"cluster",
+"system design",
+"use cases"
 ],
 "id": 30
 },
 {
 "type": "Chapter",
 "system": "redis",
-"title": "Redis · 8. Pipelining and Transactions",
-"summary": "Moving credit between two balances takes several commands. How do you keep another client from seeing or changing the halfway state?",
-"body": "Pipelining sends many commands without waiting for replies. It saves round trips but gives no atomicity or isolation. MULTI/EXEC queues commands and runs them back to back with nothing in between. A command with a queue-time error makes EXEC fail with EXECABORT;",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch7",
+"title": "Redis · 8. Transactions, streams and messaging",
+"summary": "What MULTI really guarantees, how a stream keeps a durable work queue, and why Pub/Sub can lose messages.",
+"body": "Give clients atomic grouping and two ways to move messages between processes. Run a group of commands without interleaving. Detect a concurrent change (WATCH). Track delivered but unacknowledged messages. Fan out a message to current subscribers. No rollback on a runtime error. Stream entries survive until trimmed. Pub/Sub is at-most-once. MULTI has no rollback; WATCH is optimistic A transaction runs its queued commands back to back, but a failing command does not undo the others. A stock counter is decremented in a transaction while another client changes it. A runtime error leaves earlier commands applied. A change to a watched key makes EXEC return nil and run nothing. No other client's command runs between the first and last command of one EXEC. Streams and consumer groups A stream keeps entries. A consumer group tracks which are delivered but not acknowledged, so a crashed worker's tasks can be taken over. Orders are queued for a shipping group of workers. One worker crashes with an order in hand. An entry is pending for exactly one consumer until acknowledged; XAUTOCLAIM moves stale ones to a live consumer. Each entry is undelivered, pending for exactly one consumer, or acknowledged. Pub/Sub versus a stream for fan-out Pub/Sub delivers only to who is connected right now. A stream keeps the message until it is trimmed. A notification service publishes events. Subscriber B restarts for a few seconds. PUBLISH returns 1 while B is away and B never sees m2. With a stream, B reads m2 after it returns. Pub/Sub delivers only to subscribers connected at the moment of the publish.",
+"url": "techstack/redis/course.html#/f/8",
 "tags": [
-"pipeline",
-"multi/exec",
-"watch"
+"messaging",
+"system design",
+"use cases"
 ],
 "id": 31
 },
 {
 "type": "Chapter",
 "system": "redis",
-"title": "Redis · 9. Sentinel Failover",
-"summary": "At 3 a.m. the primary stops answering. Who decides it is dead, who takes over, and what happens to writes it accepted meanwhile?",
-"body": "SDOWN: one Sentinel sees the primary unreachable for down-after-milliseconds. ODOWN: at least quorum Sentinels agree. Leader election: Sentinels vote for one leader per failover epoch; the leader needs a majority of all known Sentinels, not just the quorum.",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch8",
+"title": "Redis · 9. End to end",
+"summary": "One write, followed through every layer, with the places it can be lost marked.",
+"body": "Prove the parts fit by following a single SET cart:42 from client to replica and disk. Route, parse, run, log, replicate and reply to one write. Each step is one of the earlier features; none is new. One write, end to end Follow one command through every earlier feature and mark where it can be lost. A cart service sends SET cart:42 {...} to a cluster with appendfsync everysec and one replica per primary. +OK returns after the command runs and the AOF is written to the OS, not after fsync or replica apply. The reply is sent after the command ran and the AOF was written, never after fsync or replica apply by default.",
+"url": "techstack/redis/course.html#/f/9",
 "tags": [
-"sdown",
-"odown",
-"promotion"
+"end to end",
+"system design",
+"use cases"
 ],
 "id": 32
-},
-{
-"type": "Chapter",
-"system": "redis",
-"title": "Redis · 10. Cluster Slots",
-"summary": "The data no longer fits one machine. How does Redis Cluster decide which node owns a key, and what breaks when a command touches two keys?",
-"body": "Key to slot: CRC16(key) mod 16384. If the key has a hash tag {...}, only the tag is hashed. CLUSTER KEYSLOT key shows it. Slot map: every primary owns slot ranges and every node knows the whole map (CLUSTER SHARDS shows it in 7.x). Multi-key commands require all keys in one slot, else CROSSSLOT.",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch9",
-"tags": [
-"crc16",
-"moved/ask",
-"resharding"
-],
-"id": 33
-},
-{
-"type": "Chapter",
-"system": "redis",
-"title": "Redis · 11. Streams and Consumer Groups",
-"summary": "A worker crashes halfway through an order event. Is the event lost, or processed twice, and how do you get the message back?",
-"body": "Entry IDs are ms-seq and grow monotonically. XADD appends; the stream is a log. Consumer group: stores the last-delivered-id. XREADGROUP with > delivers only new entries. PEL: per consumer, the entries delivered but not acknowledged, with idle time and delivery count (see XPENDING).",
-"url": "techstack/redis/01-redis-internals-end-to-end.html#ch10",
-"tags": [
-"entry ids",
-"pel",
-"xack"
-],
-"id": 34
 },
 {
 "type": "Tour",
@@ -1750,7 +1709,7 @@ window.SITE_TECH_INDEX = [
   "title": "Redis as a system design: 9 features, 25 use cases",
   "summary": "Design an in-memory data server: problem, requirements, estimates and high-level design, then each feature walked through use cases with a step-by-step picture.",
   "body": "RESP framing, pipelining, slow commands, listpack encodings, skip list, incremental rehash, TTL expiry, sampled LRU, noeviction, RDB fork copy-on-write, AOF everysec, AOF rewrite, PSYNC backlog, async replication loss, WAIT, Sentinel quorum and election, split brain, hash slots, MOVED and ASK, CROSSSLOT, MULTI and WATCH, streams consumer groups, Pub/Sub.",
-  "url": "techstack/redis/design/design.html",
+  "url": "techstack/redis/course.html",
   "tags": ["tour", "system design", "use cases"],
   "id": 122
 }

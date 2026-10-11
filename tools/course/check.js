@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* Validate a course page without a browser.
- *   node tools/course/check.js techstack/redis/design/design.html
+ *   node tools/course/check.js techstack/redis/course.html
  * Loads the page's <script src> files in order inside a sandbox (no DOM), then runs Course.validate(CourseData):
  * required fields, 5 to 7 steps, 2 edge cases, unique picture forms, a painter for every form, every step painted
  * without "undefined", "NaN" or "[object", Mermaid sources linted. Exit code 1 when there are errors. */

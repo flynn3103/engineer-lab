@@ -1,7 +1,7 @@
 # Course framework
 
 One look, one data contract and one set of checks for every system-design course page on this site. The Redis course
-(`techstack/redis/design/`) is the reference for a course written on the framework from scratch; the Spark course (`techstack/spark/`) is the style source and now runs on the framework too, through a converter (`spark-data.js`).
+(`techstack/redis/`) is the reference for a course written on the framework from scratch; the Spark course (`techstack/spark/`) is the style source and now runs on the framework too, through a converter (`spark-data.js`).
 
 ```
 assets/course/
@@ -17,14 +17,14 @@ tools/course/
 
 ## What a course page looks like
 
-A page is a thin `design.html` plus five small data files. It loads `lab.css`, `curriculum.css` and `course.css`, then the
+A page is a thin `course.html` plus five small data files. It loads `lab.css`, `curriculum.css` and `course.css`, then the
 scripts in this order, and ends with `Course.mount(CourseData)`:
 
 ```html
-<script src="../../../assets/course/kit.js"></script>
-<script src="../../../assets/course/contract.js"></script>
+<script src="../../assets/course/kit.js"></script>
+<script src="../../assets/course/contract.js"></script>
 <script src="spec.js"></script>  <script src="uc-1.js"></script>  <script src="diagrams.js"></script>  <script src="paint.js"></script>
-<script src="../../../assets/course/course.js"></script>
+<script src="../../assets/course/course.js"></script>
 <script>Course.mount(CourseData);</script>
 ```
 
@@ -42,7 +42,7 @@ One global, `CourseData`, assembled from the files. `Course.validate` enforces i
 
 | Key | Shape |
 | --- | --- |
-| `config` | `{ id, name, version, root, brand?, footer?, related?: [{href, title, sub}] }`. `root` is the relative path to the site root (`'../../../'`). `brand` is a CSS colour, default red. |
+| `config` | `{ id, name, version, root, brand?, footer?, related?: [{href, title, sub}] }`. `root` is the relative path to the site root (`'../../'`). `brand` is a CSS colour, default red. |
 | `spec` | `{ title, navTitle, lead, overview[2], problem[4], fr[], nfr[], out, est[][3], hldNote, decisions[][3], verify[] }`. `problem` rows are scenario, naive design, fails when, principle. |
 | `hldOverall` | Mermaid source for the whole system. |
 | `features` | `[{ id, tag, name, summary, goal, scope:[[in],[out]], fr[], nfr[], decisions[][3] }]` |
@@ -91,8 +91,8 @@ flow for a decision). Keep labels free of semicolons and hash signs (the validat
 ## Checks
 
 ```
-node tools/course/check.js techstack/<id>/design/design.html     # contract, painting, Mermaid lint
-node tools/course/browse.js techstack/<id>/design/design.html    # every page, both themes, phone width, every diagram drawn
+node tools/course/check.js techstack/<id>/course.html     # contract, painting, Mermaid lint
+node tools/course/browse.js techstack/<id>/course.html    # every page, both themes, phone width, every diagram drawn
 ```
 
 `browse.js` needs Playwright and Chromium (pre-installed in the cloud session). Where the CDN is blocked it installs
