@@ -1,4 +1,4 @@
-/* Step-by-step pictures for the Spark use cases (engine-visuals.js). Colours come from the course tokens, so light and dark themes both work. */
+/* Step-by-step pictures for the Spark use cases (animations/scenes.js). Colours come from the course tokens, so light and dark themes both work. */
 .vz-stage{display:grid;gap:12px;min-width:0}
 .vz-svg{display:block;width:100%;height:auto;max-width:600px;margin:0 auto;background:var(--card);border:var(--ink-line);border-radius:14px;box-shadow:var(--shadow)}
 .vz-empty{margin:0;font:600 12px var(--mono);color:var(--mut)}

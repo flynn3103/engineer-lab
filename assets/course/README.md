@@ -1,12 +1,15 @@
 # Course framework
 
 One look, one data contract and one set of checks for every system-design course page on this site. The Redis course
-(`techstack/redis/`) is the reference for a course written on the framework from scratch; the Spark course (`techstack/spark/`) is the style source and now runs on the framework too, through a converter (`spark-data.js`).
+(`techstack/redis/`) is the reference for a course written on the framework from scratch; the Spark course (`techstack/spark/`) uses the same data-file layout and adds reusable animation forms to the framework.
 
 ```
 assets/course/
   course.css     the style: shell, page head, numbered sections, cards, tables, diagrams, edge cards, pager, player, pictures
   kit.js         picture helpers and reusable forms          -> Course.kit
+  animations.js  optional renderer registry and narrated animation player
+  animations/    reusable scene painters and computed simulation renderers
+  animations.css, scenes.css, stages.css  optional styles for these animation forms
   contract.js    data contract and validator                  -> Course.validate(CourseData)
   course.js      shell, router, page templates, Mermaid, player -> Course.mount(CourseData)
 tools/course/
@@ -17,7 +20,7 @@ tools/course/
 
 ## What a course page looks like
 
-A page is a thin `course.html` plus five small data files. It loads `lab.css`, `curriculum.css` and `course.css`, then the
+A page is a thin `course.html` plus course data files. It loads `lab.css`, `curriculum.css` and `course.css`, then the
 scripts in this order, and ends with `Course.mount(CourseData)`:
 
 ```html
@@ -57,11 +60,23 @@ edges with a `short` line. Without `spec.overview` the Overview section is skipp
 
 **Hosting things the kit does not draw.** (1) A painter may return `{ html, stat, bare }` instead of a string: `stat` fills the stat line and `bare` drops the
 stage frame when the painter draws its own. (2) A use case may set `custom` (an HTML string for the Step by step section) instead of `kind` and `steps`; the engine
-renders it as is and `config.afterRender(pageEl)` runs after every page render so the course can mount its own interactive code (Spark mounts its simulations there).
+renders it as is and `config.afterRender(pageEl)` runs after every page render so the course can mount its own interactive code. Spark uses the native animation contract described below.
 (3) Old links of the form `#c=<featureId>&uc=<n>` are rewritten to the new routes, so published URLs keep working.
 
 `steps` is 5 to 7 entries of `{ t, x, s, stat }`: title, one-move text, the **whole scene state** for the picture, and a stat line.
 `edges` is 2 entries of `{ t, ctx, fix }`. Text fields may carry `<code>` and `<b>`; everything else is escaped.
+
+## Shared animations and scene forms
+
+Spark has the same course files as Redis: `spec.js`, `uc-a.js`, `uc-b.js`, `uc-c.js`, `diagrams.js`, and `paint.js`. Course files contain the lesson text, complete scene state, fixtures, and presets. Rendering code and controls live in `assets/course/animations/`; no Spark globals or adapter are needed.
+
+For an interactive use case, set `animation: { kind, ...sceneData }` instead of `kind` and `steps`. Load `animations.js`, the required renderer modules, and their optional styles before the course data. A renderer registers with `Course.registerAnimation(kind, { mount(host, scene), validate?(scene) })`. The framework validates it and mounts a fresh host for each route; Back, Next, and Restart stay within that host. `validate` returns an array of errors. Without it, the definition must have non-empty `steps` containing `title` and `text`.
+
+Narrated animation families share `Course.animationPlayer(host, scene, painter, className)`. The painter receives `(stage, scene, stepIndex)`, draws the complete scene, and returns its stat text. Computed forms such as the CSV split reader can implement their own controls and validation while receiving fixtures and presets from the course.
+
+For ordinary step pictures, reusable forms register with `Course.registerScene(kind, painter)`. A course's `paint.js` binds its scene to `Course.renderScene(kind, scene, stepIndex)`, which returns `{ html, stat, bare }` for the standard course player. Add new forms to the shared assets when the existing picture kit or animation library cannot express a course's mechanism.
+
+Run `node --test tools/course/*.test.js` for the animation registration, mounting, and validation checks.
 
 ## Pictures
 

@@ -157,7 +157,7 @@
     return '<header class="page-head"><p class="kick">FEATURE ' + pad(n) + ' · USE CASE ' + pad(m) + '</p><h1>' + esc(u.title) + '</h1></header>' +
       numbered('trigger', 'Trigger', '<p class="lead-problem">' + u.trigger + '</p>' + (u.run ? '<div class="cmd"><span>Run</span><code>' + esc(u.run) + '</code></div>' : '') + (u.expect ? '<p class="expect"><b>Expect.</b> ' + u.expect + '</p>' : '')) +
       numbered('flow', 'Diagrams', (RD.diagrams[f.id + ':' + m] || []).map(d => diagram(d, true)).join(''), u.intro) +
-      (u.custom ? numbered('steps', 'Step by step', u.custom, 'Press Next step to walk through it one move at a time.') :
+      ((u.animation || u.custom) ? numbered('steps', 'Step by step', u.animation ? '<div class="readsim" id="c-animation" data-sim="' + esc(u.animation.kind) + '"></div>' : u.custom, 'Press Next step to walk through it one move at a time.') :
         numbered('steps', 'Step by step', '<div class="c-player"><div class="pv-stage" id="c-stage"><div class="pv" id="c-pic" aria-live="polite"></div></div>' +
         '<div class="c-inspector"><p class="kick" id="c-kick"></p><h3 id="c-title"></h3><p id="c-text"></p><div class="c-stat" id="c-stat"></div></div>' +
         '<div class="c-controls" role="group" aria-label="Step controls"><button id="c-reset" aria-label="Restart">↺</button><button id="c-back">← Back</button><button id="c-next" class="go">Next step →</button><span class="c-dots" id="c-dots"></span></div></div>',
@@ -232,7 +232,7 @@
     const page = $('page'); let title = RD.spec.title;
     const f = feats[route.n - 1], u = f && route.m ? ucs(f)[route.m - 1] : null;
     if ((route.n && !f) || (route.m && !u)) { page.innerHTML = notFound(); route = { n: 0, m: 0 }; }
-    else if (u) { page.innerHTML = useCase(route.n, route.m); if (!u.custom) mountPlayer(u); title = u.title + ' · ' + f.name; }
+    else if (u) { page.innerHTML = useCase(route.n, route.m); if (u.animation) player = Course.mountAnimation($('c-animation'), u.animation); else if (!u.custom) mountPlayer(u); title = u.title + ' · ' + f.name; }
     else if (f) { page.innerHTML = feature(route.n); title = f.name; }
     else page.innerHTML = overview();
     document.title = title + ' · ' + cfg.name + ' design';

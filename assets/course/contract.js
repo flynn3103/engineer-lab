@@ -64,12 +64,16 @@
       list.forEach((u, i) => {
         const id = f.id + ':' + (i + 1);
         ucTotal++;
-        need(u, u.custom ? ['title', 'intro', 'trigger', 'custom', 'edges'] : ['title', 'intro', 'trigger', 'kind', 'steps', 'edges'], 'use case ' + id);
-        ['run', 'expect', 'invariant'].forEach(k => { if (!u.custom && !u[k]) warn('use case ' + id + ' has no "' + k + '" (the method asks for one)'); });
+        need(u, u.animation ? ['title', 'intro', 'trigger', 'animation', 'edges'] : u.custom ? ['title', 'intro', 'trigger', 'custom', 'edges'] : ['title', 'intro', 'trigger', 'kind', 'steps', 'edges'], 'use case ' + id);
+        ['run', 'expect', 'invariant'].forEach(k => { if (!u.custom && !u.animation && !u[k]) warn('use case ' + id + ' has no "' + k + '" (the method asks for one)'); });
         if (!u.src) warn('use case ' + id + ' has no sources line');
         if (u.edges && u.edges.length !== 2) warn('use case ' + id + ' has ' + u.edges.length + ' edge cases, the method asks for 2');
         (u.edges || []).forEach((x, k) => need(x, ['t', 'ctx', 'fix'], 'use case ' + id + ' edge ' + (k + 1)));
-        if (u.custom) {
+        if (u.custom || u.animation) {
+          if (u.animation) {
+            if (!Course.validateAnimation) err('use case ' + id + ': animation runtime is not loaded');
+            else Course.validateAnimation(u.animation).forEach(message => err('use case ' + id + ': ' + message));
+          }
           const dsc = data.diagrams[id];
           if (!dsc || !dsc.length) err('use case ' + id + ' has no diagram'); else dsc.forEach((d, k) => { diagrams++; need(d, ['kind', 'title', 'src'], 'diagram ' + id + '#' + (k + 1)); lintMermaid(d.src || '', 'diagram ' + id + '#' + (k + 1), errors); });
           customUc++;

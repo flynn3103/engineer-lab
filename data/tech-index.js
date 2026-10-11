@@ -20,7 +20,7 @@ window.SITE_TECH_INDEX = [
   "title": "Apache Spark · 1. Map the engine",
   "summary": "More machines do not automatically form an engine. We need to decide who plans work, who executes it, where data lives, and how those components communicate.",
   "body": "Processes, messages, identities Separate resource allocation, task scheduling and bulk data movement; name the state each component owns. Start with ownership A cluster manager supplies executor processes. Within one application, the driver chooses tasks for their slots. Executors read shared input and store local intermediate blocks. The source and output store are outside the driver’s heap. Follow both kinds of arrow A task envelope and a map-output location are control metadata. Input records and shuffle ranges are data. A high-level picture should explain both without suggesting every record passes through the driver. Define the transport boundary A real executor registers its address, receives serialized code and task descriptions, reports heartbeats and completion, and serves block requests. The runnable reference substitutes direct calls for this transport. Extend it to worker processes only after its local contracts work.",
-  "url": "techstack/spark/course.html#c=architecture",
+  "url": "techstack/spark/course.html#/",
   "tags": [
     "engine",
     "architecture"
@@ -33,7 +33,7 @@ window.SITE_TECH_INDEX = [
   "title": "Apache Spark · 2. Define safe read partitions",
   "summary": "An equal byte cut can land inside a record. A reader that stops exactly at that cut can drop or corrupt it; a compressed stream may not allow a restart there at all.",
   "body": "Bytes → independent records Preserve every record identity once while deriving work units from the source format. Derive independent work The text reader locates a valid starting boundary and finishes its final owned record. Adjacent readers can inspect overlapping bytes without emitting overlapping records. Our displayed offsets are UTF-8 byte counts, not character positions. Respect the source format Ordinary gzip needs sequential decoder state; one huge stream gives one independent reader. Parquet has structured read units. CSV with quoted newlines, multiline JSON and other formats need their own reader contracts. Treat planning overhead as work Small-file packing reduces task counts but cannot erase file-listing and open costs. The toy uses one immutable CSV and intentionally omits file indexing and object-store latency.",
-  "url": "techstack/spark/course.html#c=read",
+  "url": "techstack/spark/course.html#/f/1",
   "tags": [
     "engine",
     "read"
@@ -46,7 +46,7 @@ window.SITE_TECH_INDEX = [
   "title": "Apache Spark · 3. Pull rows through operators",
   "summary": "Materializing the output of every filter and map makes memory grow with partition size. We need downstream demand to pull only the next useful result.",
   "body": "Iterator demand and resource lifetime Implement iterator composition and tie resource cleanup to consumption. Compose demand Filter repeatedly requests upstream records until one satisfies its predicate. Map transforms only surviving records. A narrow chain can process a large partition with a small working set when user functions do not retain unbounded state. Locate state growth Sort, aggregation and join build state are deliberate exceptions. Calling toList or retaining every row in a map replaces streaming with materialization. The bounded pipeline contract does not promise constant memory for every operator. Own resource lifetime Open reusable resources per partition attempt and register cleanup for task completion. A finally block around returning a lazy iterator runs too early. Retried external writes still need idempotency or a transaction protocol.",
-  "url": "techstack/spark/course.html#c=pipeline",
+  "url": "techstack/spark/course.html#/f/2",
   "tags": [
     "engine",
     "pipeline"
@@ -59,7 +59,7 @@ window.SITE_TECH_INDEX = [
   "title": "Apache Spark · 4. Describe work and reuse blocks",
   "summary": "Running every transformation eagerly wastes unused work. Retaining only output locations leaves no recovery recipe when those outputs disappear.",
   "body": "Lazy RDDs, persistence, checkpointing Build a lazy graph with a partition compute contract, then distinguish persistence intent from block residency. Separate description and execution A map returns a new graph node. An action requests its partitions and starts evaluation. Lineage is a recovery recipe under readable, reproducible inputs; it does not make changing sources or side effects safe. Bound retained storage Persistence is populated by execution. Memory-only misses recompute; memory-and-disk can retain overflow locally. The toy cache pins the first available partition slots and does not implement Spark’s block eviction policies. Distinguish checkpointing A durable checkpoint can replace a long parent chain. Local checkpoints use less reliable storage and cannot supply the same recovery guarantee. The reference deliberately stops at persistence; durable checkpoint storage is an extension.",
-  "url": "techstack/spark/course.html#c=lineage",
+  "url": "techstack/spark/course.html#/f/3",
   "tags": [
     "engine",
     "lineage"
@@ -72,7 +72,7 @@ window.SITE_TECH_INDEX = [
   "title": "Apache Spark · 5. Cut the graph into stages",
   "summary": "A same-key sum needs contributions from many parent partitions. The planner must separate independent producer work from consumers that cannot run yet.",
   "body": "Dependencies and readiness barriers Derive stages from actual dependencies and define the inputs that unlock them. Walk from the result Follow the requested RDD backwards. Narrow edges remain in a local task pipeline. A shuffle edge creates a producer stage and a downstream exchange consumer. Required outputs, rather than source-code line count, determine the boundary. Plan task count separately Create tasks for the stage’s required partitions; partial actions can request a subset. Free slots determine simultaneous execution. The simple all-partition city aggregation shown here has a producer stage and a result stage. Respect physical distribution Repartition introduces an exchange. A narrow coalesce can make one task pull several upstream partitions, serializing an uncached chain. Compatible partitioning or cached/shuffle outputs can change what work is necessary.",
-  "url": "techstack/spark/course.html#c=stages",
+  "url": "techstack/spark/course.html#/f/4",
   "tags": [
     "engine",
     "stages"
@@ -85,7 +85,7 @@ window.SITE_TECH_INDEX = [
   "title": "Apache Spark · 6. Dispatch tasks to executor slots",
   "summary": "There may be more ready partitions than execution slots. We need a normal launch/completion loop before adding failure handling.",
   "body": "A healthy execution before retries Trace task envelopes, slot ownership, completion and waves without confusing logical work with concurrency. Register then dispatch The driver learns executor addresses and available slots. The task scheduler selects pending attempts, serializes their closures or operator descriptions, and sends launch messages. The reference represents these with direct calls and deterministic waves. Receive results An executor computes its partition and reports failure or completion. A map completion includes a shuffle location; a result task can return a compact value. The scheduler updates task state and releases capacity for pending work. Separate assumptions from measurements All tasks take one logical tick in this experiment. Real durations vary with data and machine state, and locality/fair scheduling affect choices. The wave count explains capacity, not production elapsed time.",
-  "url": "techstack/spark/course.html#c=schedule",
+  "url": "techstack/spark/course.html#/f/5",
   "tags": [
     "engine",
     "schedule"
@@ -98,7 +98,7 @@ window.SITE_TECH_INDEX = [
   "title": "Apache Spark · 7. Write, index and fetch shuffle data",
   "summary": "Same-city records begin on different readers. We need to move their contributions together while preserving the aggregation result and avoiding a driver bottleneck.",
   "body": "Partial states and byte ranges Build consistent routing, local partial sums, indexed output ranges and reducer fetch/merge. Move valid partial state A sum can replace many local values with one partial sum. An average carries sum and count. groupByKey retains individual values and has a different memory and transfer contract. Separate layout and identity The normal sort-shuffle path uses an indexed data output per map; M×R describes logical map-to-reducer ranges, not a mandatory file count. Spark has shuffle writer variants. The toy encodes JSON lines to calculate exact range offsets. Fetch with bounded resources A reducer asks the output registry where each contributing map lives, retrieves its own ranges, decodes them and merges by key. A production fetcher also limits requests and bytes in flight, retries transport failures and validates blocks.",
-  "url": "techstack/spark/course.html#c=shuffle",
+  "url": "techstack/spark/course.html#/f/6",
   "tags": [
     "engine",
     "shuffle"
@@ -111,7 +111,7 @@ window.SITE_TECH_INDEX = [
   "title": "Apache Spark · 8. Bound state, spill runs and merge",
   "summary": "A map’s sorting or aggregation state can exceed local memory. We need a spillable structure whose answer survives releasing its working buffer.",
   "body": "Managed memory and finite local state Trace buffer capacity, sorted disk runs, released grants and the final merge; distinguish modeled memory from process memory. Account for the right memory Spark’s execution and storage regions share capacity; grants respond to demand rather than fixed private slices per task. More active tasks compete for the same executor memory. This lesson’s slider models a per-writer entry grant and does not simulate the unified allocator. Build the escape path Sort the granted buffer, write a durable local run, release entries, then continue. Final output merges runs and creates reducer offsets. The reference holds representations of disk runs in arrays; a real engine must replace them with files and bounded readers. Keep the container boundary visible JVM heap is not the whole container footprint. Native memory, off-heap data and Python workers also matter. Exit code 137 identifies SIGKILL; only termination evidence establishes a memory-limit kill. Arbitrary user objects do not automatically spill.",
-  "url": "techstack/spark/course.html#c=memory",
+  "url": "techstack/spark/course.html#/f/7",
   "tags": [
     "engine",
     "memory"
@@ -124,7 +124,7 @@ window.SITE_TECH_INDEX = [
   "title": "Apache Spark · 9. Recover missing outputs and track attempts",
   "summary": "A host can lose several completed outputs at once. Retrying a reducer against that dead location cannot recreate its missing input.",
   "body": "Fetch failure, replay, speculation Invalidate all affected outputs, replay only missing producers, register replacement attempts and resume consumers. Handle the failure class Retry a failed attempt if its inputs still exist. A lost shuffle location invalidates affected output metadata and triggers producer recovery. An executor process exit differs from losing the node and its disk. Restore dependencies Recompute missing producer partitions from available parents or immutable input; reuse intact map outputs. The new attempt publishes a replacement location. Consumers then retry fetching their required ranges. Separate speculation and idempotency An eligible slow attempt may get another copy on a different executor. It consumes capacity and can repeat effects. Speculation can help a slow machine; both copies still process the same oversized partition. Failure limits eventually abort deterministic bad work.",
-  "url": "techstack/spark/course.html#c=recovery",
+  "url": "techstack/spark/course.html#/f/8",
   "tags": [
     "engine",
     "recovery"
@@ -137,7 +137,7 @@ window.SITE_TECH_INDEX = [
   "title": "Apache Spark · 10. Publish results with explicit guarantees",
   "summary": "Writing directly to final paths can expose partial files or duplicate attempts. Choosing one task winner still cannot make many object publications one atomic transaction.",
   "body": "Attempt winners, visibility, readiness Isolate attempts, authorize task output and distinguish visible files from a ready dataset. Choose the sink A count returns a compact value. collect returns all selected rows to the driver and can exceed its result or memory limits. Large outputs belong in distributed storage; cluster memory does not make them fit on one driver. Coordinate attempts Supported committers isolate temporary or pending output and coordinate one winning task attempt. A task-side database insert or HTTP request does not automatically participate in this protocol. Define the reader contract Files can appear incrementally during publication. _SUCCESS can signal completion to cooperating readers, but it is not a transaction log or a concurrent table snapshot. S3A zero-rename committers avoid per-file rename, not per-object visibility. Failed publication may need cleanup or recovery.",
-  "url": "techstack/spark/course.html#c=commit",
+  "url": "techstack/spark/course.html#/f/9",
   "tags": [
     "engine",
     "commit"
@@ -150,7 +150,7 @@ window.SITE_TECH_INDEX = [
   "title": "Apache Spark · 11. Lower SQL expressions into task work",
   "summary": "Opaque functions tell an engine what code to run, but hide which columns and predicates can be simplified. A SQL layer needs an inspectable plan and physical properties.",
   "body": "Analyze, rewrite, plan, execute Trace logical analysis and rewrites into physical operators, exchange boundaries, codegen regions and stage tasks. Expose the query The running query filters paid orders, projects city and amount, then sums by city. RDD functions are opaque. DataFrames expose relational expressions; JVM Datasets add encoders and typed object APIs. A typed map lambda can hide logic from SQL rewrites. Resolve and optimize Resolve relations, columns and types; eliminate unused fields and simplify supported expressions. Pushdown depends on source support. The reference validates a fixed schema and constructs a small plan; it is not a SQL parser or a Catalyst implementation. Choose and lower physical work Partial aggregation precedes a hash exchange; final aggregation consumes aligned keys. Supported SQL operators can form generated JVM loops, but an exchange or unsupported/Python operation breaks that region. The iterator runtime is related to this execution idea, not the same implementation.",
-  "url": "techstack/spark/course.html#c=sql",
+  "url": "techstack/spark/course.html#/f/10",
   "tags": [
     "engine",
     "sql"
@@ -163,7 +163,7 @@ window.SITE_TECH_INDEX = [
   "title": "Apache Spark · 12. Place join state deliberately",
   "summary": "Paid orders and city regions may live on different workers. A correct join needs matching records to meet, but replicating an entire relation can exceed local capacity.",
   "body": "Broadcast, alignment, local build Compare broadcast probes with partitioned sort-merge work and locate the memory state for each strategy. Choose from properties and semantics Join type, supported keys, size statistics, hints and existing partitioning influence choice. The toy supports one inner equijoin and a size-threshold preference; it intentionally omits Spark’s full selection rules. Locate the state Broadcast prepares a relation on the driver and replicates decoded hash state to executors. Sort-merge aligns and sorts both sides. Shuffled hash builds a relation within each aligned task. Stored file size can underestimate decoded state. Preserve multiplicity One dimension row per city yields one match for each paid order here. Duplicate join keys must produce every matching pair. A hint or later AQE switch cannot remove those required pairs or erase work already executed.",
-  "url": "techstack/spark/course.html#c=joins",
+  "url": "techstack/spark/course.html#/f/11",
   "tags": [
     "engine",
     "joins"
@@ -176,7 +176,7 @@ window.SITE_TECH_INDEX = [
   "title": "Apache Spark · 13. Adapt consumers and decompose hot work",
   "summary": "Estimates cannot predict every partition size. One hot key can dominate while other tasks finish; fixing that imbalance must still preserve matches or aggregate state.",
   "body": "Runtime evidence, coalescing, skew, salt Distinguish adjacent-partition coalescing, eligible skew-join splits and two-phase salted aggregation. Measure after the exchange Runtime shuffle statistics reveal actual distribution. AQE can combine small adjacent ranges, revise eligible join choices and handle supported skew joins. This toy uses record-count thresholds, not Spark’s byte thresholds or eligibility rules. Split the right operation An eligible join split needs matching counterpart input for every piece. More hash buckets do not divide one aggregation key. Ordinary equality joins do not match NULL; grouping and null-safe equality have different contracts. Design valid partial state A sum can be decomposed into salted partial sums and merged by the original city. An average needs sum and count. Other aggregates may require more state or may not support the proposed decomposition. Salting is an explicit query technique, not an automatic AQE aggregation guarantee.",
-  "url": "techstack/spark/course.html#c=adaptive",
+  "url": "techstack/spark/course.html#/f/12",
   "tags": [
     "engine",
     "adaptive"
@@ -189,7 +189,7 @@ window.SITE_TECH_INDEX = [
   "title": "Apache Spark · 14. Retain and replay execution evidence",
   "summary": "Source code and final files cannot explain every retry, spill or strategy choice. Once the driver stops, unrecorded decisions disappear.",
   "body": "Events, metrics, history, final plans Connect generated events to actual work and distinguish history replay from application execution. Capture the real run The reference emits JobStart, ReadPartition, TaskWave, MapOutput, FetchRange and other events from its execution functions. The animation displays that generated list. Actual Spark also records stage and SQL events and richer task metrics. Retain deliberately Configure event logging before startup, write to durable storage and choose retention. Truncated or removed logs limit later reconstruction. A live UI alone does not retain all evidence after shutdown. Attribute actual cost Compare initial and final plans with execution metrics. A final broadcast choice cannot remove an earlier shuffle from the cost account. Input-size distributions and attempt history help distinguish skew from slow hardware.",
-  "url": "techstack/spark/course.html#c=evidence",
+  "url": "techstack/spark/course.html#/f/13",
   "tags": [
     "engine",
     "evidence"
@@ -202,7 +202,7 @@ window.SITE_TECH_INDEX = [
   "title": "Apache Spark · 15. Build and trace the complete engine",
   "summary": "Independent explanations do not prove that an engine fits together. The completed reference must preserve the query answer across scheduling, spill, replay and publication choices.",
   "body": "A cumulative engine build Build each checkpoint yourself and trace one record and its contribution end to end. Start with the smallest engine Build in order: safe reads and lazy iterators first; then dependencies, task slots, shuffle ranges, spill, recovery and publication. Each checkpoint has an observable acceptance criterion. Run the same model as the animation The animation runs engine-model.js in the browser. Its controls change partitions, combine, buffer entries and failure injection, then show city totals, generated metrics and output readiness. No Spark installation is needed. Extend the boundary honestly This is a teaching engine, not a distributed Spark replacement. Next extensions are worker-process transport, real external-sort files and bounded merge/fetch readers, cancellation, checksum validation, dynamic grants and reliable event/commit storage. Structured Streaming and the wider Spark ecosystem are outside this batch course.",
-  "url": "techstack/spark/course.html#c=build",
+  "url": "techstack/spark/course.html#/f/14",
   "tags": [
     "engine",
     "build"

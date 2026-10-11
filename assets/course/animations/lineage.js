@@ -8,47 +8,6 @@
   'use strict';
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  const FRAME = `<div class="rs ls">
-      <div class="ls-stage" data-stage></div>
-      <div class="pk-check" data-stat aria-live="polite"></div>
-      <div class="rs-say" aria-live="polite"><span class="rs-n" data-n></span><div><b data-title></b><p data-text></p></div></div>
-      <div class="rs-play"><button type="button" data-act="first">Restart</button><button type="button" data-act="prev">← Back</button><button type="button" data-act="next" class="rs-go">Next step →</button><span class="rs-count" data-count></span></div>
-    </div>`;
-
-  function usecase(host) {
-    const SD = root.SparkSystemDesign;
-    const u = SD && SD.data[host.dataset.f] && SD.data[host.dataset.f].uc[+host.dataset.n - 1];
-    return u && u.sim && u.sim.steps ? u : null;
-  }
-
-  function run(host, paint) {
-    const u = usecase(host); if (!u) return;
-    host.dataset.ready = '1';
-    host.innerHTML = FRAME;
-    const sim = u.sim, steps = sim.steps;
-    const $ = s => host.querySelector(s);
-    let k = 0;
-    function show() {
-      const st = steps[k];
-      $('[data-stat]').textContent = paint($('[data-stage]'), sim, k) || '';
-      $('[data-n]').textContent = k + 1;
-      $('[data-title]').textContent = st.title;
-      $('[data-text]').textContent = st.text;
-      $('[data-count]').textContent = `step ${k + 1} of ${steps.length}`;
-      $('[data-act=first]').disabled = $('[data-act=prev]').disabled = k === 0;
-      $('[data-act=next]').disabled = k === steps.length - 1;
-    }
-    host.addEventListener('click', ev => {
-      const b = ev.target.closest('button'); if (!b) return;
-      if (b.dataset.act === 'first') k = 0;
-      else if (b.dataset.act === 'prev') k = Math.max(0, k - 1);
-      else if (b.dataset.act === 'next') k = Math.min(steps.length - 1, k + 1);
-      show();
-    });
-    show();
-  }
-
-  /* UC-01: the task and the cache shelf on top, the chain of read, filter and map below. */
   function paintShelf(stage, sim, k) {
     const st = sim.steps[k];
     const look = { ask: 'asking', miss: 'miss', store: 'storing', hit: 'hit' }[st.look] || '';
@@ -150,13 +109,7 @@
 
   const PAINT = { shelf: paintShelf, tank: paintTank, tiles: paintTiles, replay: paintReplay };
 
-  function mount(rootEl) {
-    rootEl.querySelectorAll('[data-sim]').forEach(host => {
-      if (host.dataset.ready || !PAINT[host.dataset.sim]) return;
-      run(host, PAINT[host.dataset.sim]);
-    });
-  }
-
-  root.SparkLineage = { mount };
-  if (typeof module === 'object' && module.exports) module.exports = root.SparkLineage;
+  Object.entries(PAINT).forEach(([name, painter]) => root.Course.registerAnimation(name, {
+    mount(host, scene) { root.Course.animationPlayer(host, scene, painter, 'ls'); }
+  }));
 })(typeof globalThis !== 'undefined' ? globalThis : this);

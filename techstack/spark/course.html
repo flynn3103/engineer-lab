@@ -8,30 +8,32 @@
 <link rel="stylesheet" href="../../assets/lab.css">
 <link rel="stylesheet" href="../../assets/curriculum.css">
 <link rel="stylesheet" href="../../assets/course/course.css">
-<link rel="stylesheet" href="spark-sims.css">
-<link rel="stylesheet" href="engine-stagesim.css">
-<link rel="stylesheet" href="engine-visuals.css">
+<link rel="stylesheet" href="../../assets/course/animations.css">
+<link rel="stylesheet" href="../../assets/course/stages.css">
+<link rel="stylesheet" href="../../assets/course/scenes.css">
 </head>
 <body>
 <div id="app"></div>
 <noscript><p>This course needs JavaScript for its diagrams and computed experiments.</p></noscript>
-<!-- framework -->
+<!-- Shared framework and animation renderers, then course content. -->
 <script src="../../assets/course/kit.js"></script>
 <script src="../../assets/course/contract.js"></script>
-<!-- Spark course data and simulations -->
-<script src="engine-curriculum.js"></script>
-<script src="engine-stories.js"></script>
-<script src="engine-sysdesign.js"></script>
-<script src="engine-readsim.js"></script>
-<script src="engine-packsim.js"></script>
-<script src="engine-mapsim.js"></script>
-<script src="engine-treesim.js"></script>
-<script src="engine-comparesim.js"></script>
-<script src="engine-pipesim.js"></script>
-<script src="engine-lineagesim.js"></script>
-<script src="engine-stagesim.js"></script>
-<script src="engine-visuals.js"></script>
-<script src="spark-data.js"></script>
+<script src="../../assets/course/animations.js"></script>
+<script src="../../assets/course/animations/csv-read.js"></script>
+<script src="../../assets/course/animations/file-pack.js"></script>
+<script src="../../assets/course/animations/column-map.js"></script>
+<script src="../../assets/course/animations/file-tree.js"></script>
+<script src="../../assets/course/animations/parse-modes.js"></script>
+<script src="../../assets/course/animations/pipeline.js"></script>
+<script src="../../assets/course/animations/lineage.js"></script>
+<script src="../../assets/course/animations/stages.js"></script>
+<script src="../../assets/course/animations/scenes.js"></script>
+<script src="spec.js"></script>
+<script src="uc-a.js"></script>
+<script src="uc-b.js"></script>
+<script src="uc-c.js"></script>
+<script src="diagrams.js"></script>
+<script src="paint.js"></script>
 <script src="../../assets/course/course.js"></script>
 <script>Course.mount(CourseData);</script>
 </body>

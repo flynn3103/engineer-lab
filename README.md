@@ -19,7 +19,7 @@ Each system has its own folder with an interactive course. Lessons follow a Prob
 
 | System | Folder | Chapters |
 | --- | --- | --- |
-| Apache Spark | `techstack/spark/` | 15 |
+| Apache Spark | `techstack/spark/` | 14 features |
 | ScyllaDB | `techstack/scylla/` | 10 |
 | Redis | `techstack/redis/` | 9 features |
 | Apache Kafka | `techstack/kafka/` | 12 |
@@ -30,7 +30,7 @@ Redis’s course at `techstack/redis/course.html` follows a top-down system desi
 
 ### Course framework (`assets/course/`)
 
-System-design courses share one framework so their style, diagrams and data layout stay consistent. The look is the Spark course's. A course page is a thin `course.html` plus five data files (`spec.js`, `uc-*.js`, `diagrams.js`, `paint.js`) and ends with `Course.mount(CourseData)`. See `assets/course/README.md` for the data contract, the picture kit and the checks, and `tools/course/` for the scaffold, validator and browser checker. The Spark and Redis courses both run on it. Spark keeps its content in the original data files (`engine-curriculum.js`, `engine-sysdesign.js`, `engine-stories.js`, `engine-visuals.js`) and `techstack/spark/spark-data.js` maps them onto the framework; its 19 interactive simulations keep their own modules and are mounted by the framework's `afterRender` hook. Courses are built with the `learn-technology-from-scratch` skill, which ships the same framework.
+System-design courses share one framework so their style, diagrams and data layout stay consistent. The look is the Spark course's. A course page is a thin `course.html` plus course data files (`spec.js`, `uc-*.js`, `diagrams.js`, `paint.js`) and ends with `Course.mount(CourseData)`. See `assets/course/README.md` for the data contract, the picture kit and the checks, and `tools/course/` for the scaffold, validator and browser checker. The Spark and Redis courses both run on it. Spark and Redis use the same `spec.js`, `uc-*.js`, `diagrams.js`, and `paint.js` layout. Spark's 14 features and 67 use cases keep their scene data in these course files; reusable scene painters, animation controls, and 19 interactive animation forms live in `assets/course/`. Courses are built with the `learn-technology-from-scratch` skill, which ships the same framework.
 
 Each course's entry point is `course.html`. Legacy lesson content lives in `course.js` and per-chapter files in `chapters/chNN.js`; Redis uses `spec.js`, `uc-*.js`, `diagrams.js` and `paint.js` with the shared course framework. Chapter numbers are zero-based in code and URLs; lessons are displayed starting at 1.
 

@@ -1,4 +1,4 @@
-/* Stage animations (engine-stagesim.js). Colours come from the course tokens, so light and dark themes both work. */
+/* Stage animations (animations/stages.js). Colours come from the course tokens, so light and dark themes both work. */
 .sg-stage{display:grid;gap:12px;min-width:0}
 .sg-empty{margin:0;font:600 12px var(--mono);color:var(--mut)}
 
