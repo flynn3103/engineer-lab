@@ -221,3 +221,19 @@
   .vz-counts{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media (prefers-reduced-motion:reduce){.vz-seg,.vz-dot,.vz-track span,.vz-bacc,.vz-bhid,.vz-wf,.vz-wfin,.vz-hcell,.vz-tile,.vz-group2,.vz-ev,.vz-seg2,.vz-sstep{transition:none}}
+
+/* UC: schedule:3 locality ladder, schedule:4 failure budget, schedule:5 cores */
+.vz-wait{fill:var(--p4);stroke:var(--ink);stroke-width:1.5}
+.vz-budget{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.vz-bud{display:grid;gap:4px;border:var(--ink-line);border-radius:12px;padding:14px 10px;background:var(--soft);text-align:center;font:700 13px var(--mono);color:var(--ink);transition:background .3s}
+.vz-bud small{font:600 11px var(--mono);color:var(--mut)}
+.vz-bud.fail{background:var(--p5)}
+.vz-bud.ok{background:var(--p2)}
+.vz-bud.run{background:var(--p4)}
+.vz-bud.none{border-style:dashed;background:transparent}
+.vz-cores{display:grid;gap:8px}
+.vz-core{display:grid;gap:4px;border:var(--ink-line);border-radius:12px;padding:14px 8px;text-align:center;background:var(--card);font:700 13px var(--mono);color:var(--ink);transition:background .3s}
+.vz-core small{font:600 10.5px var(--mono);color:var(--mut)}
+.vz-core.run{background:var(--p2)}
+.vz-core.free{border-style:dashed;background:transparent;color:var(--mut)}
+@media (max-width:760px){.vz-budget{grid-template-columns:repeat(2,minmax(0,1fr))}}

@@ -368,8 +368,8 @@
 
   D.schedule = {
     goal: 'Keep every executor slot busy with ready tasks, and learn their outcomes, before worrying about failures.',
-    scope: ['In scope: registration, dispatch, status loop, locality wait.', 'Out of scope: retries (chapter 9), cross-application fairness.'],
-    fr: ['Track executors and their free slots.', 'Offer slots to the next runnable task set and launch tasks.', 'Receive status, free the slot, offer again.', 'Prefer data-local slots, but not forever.'],
+    scope: ['In scope: registration, dispatch, status loop, locality wait, attempt retries, cores per task.', 'Out of scope: recovery of lost map outputs (recovery page), cross-application fairness.'],
+    fr: ['Track executors and their free slots.', 'Offer slots to the next runnable task set and launch tasks.', 'Receive status, free the slot, offer again.', 'Prefer data-local slots, but not forever.', 'Retry a failed attempt until a fixed limit is reached.'],
     nfr: ['<b>Utilization:</b> no slot idle while a task is ready.', '<b>Dispatch rate:</b> driver handles launch and completion messages fast enough.'],
     hld: { src: `flowchart LR
   Dag["Stage planner"] -->|"task set"| TS["Task scheduler<br/>queue + locality"]
@@ -381,7 +381,7 @@
   BE --> TS`, caption: 'Offers go down, statuses come up. The planner never talks to executors directly.',
       decisions: [['Push or pull?', 'Executors register, driver offers', 'Driver stays authoritative on slot use.'], ['Wait for locality?', 'Bounded wait', 'Trades short delay for fewer remote reads.']] },
     uc: [
-      { title: 'UC-01 · One launch and completion cycle', intro: 'The loop that runs 62 times.', diagrams: [{ kind: SEQ, title: 'Dispatch loop', src: `sequenceDiagram
+      { title: 'UC-01 · One launch and completion cycle', intro: 'Each finished task frees a slot, and the freed slot triggers the next offer. The cycle repeats until the queue is empty.', diagrams: [{ kind: SEQ, title: 'Dispatch loop', src: `sequenceDiagram
   participant T as Task scheduler
   participant B as Backend
   participant E as Executor
@@ -397,11 +397,36 @@
   Pending --> Launched: slot matched
   Launched --> Running: executor started it
   Running --> Finished: success
-  Running --> Failed: error
+  Running --> Failed: error or executor lost
   Running --> Killed: cancelled
   Finished --> [*]
   Failed --> [*]
-  Killed --> [*]` }] }
+  Killed --> [*]` }] },
+      { title: 'UC-03 · Wait for a local slot, then step down', intro: 'A task prefers the executor that holds its data. If no slot is free there, it waits a bounded time at each locality level before accepting a farther one.', diagrams: [{ kind: FLOW, title: 'Locality levels', src: `flowchart TD
+  A["Free slot on the data's executor?"] -- "yes" --> R1["run: PROCESS_LOCAL"]
+  A -- "no, wait up to spark.locality.wait" --> B["Free slot on the same host?"]
+  B -- "yes" --> R2["run: NODE_LOCAL"]
+  B -- "no, wait again" --> C["Free slot in the same rack?"]
+  C -- "yes" --> R3["run: RACK_LOCAL"]
+  C -- "no, wait again" --> R4["run: ANY, read remotely"]` }] },
+      { title: 'UC-04 · Retry a failed attempt until the limit', intro: 'A failure from an application error is retried on another executor. If the same task keeps failing, the limit stops the job instead of looping forever.', diagrams: [{ kind: STATE, title: 'Attempts of one task', src: `stateDiagram-v2
+  [*] --> Attempt0
+  Attempt0 --> Succeeded: ok
+  Attempt0 --> Failed1: error
+  Failed1 --> Attempt1: retry on another executor
+  Attempt1 --> Succeeded: ok
+  Attempt1 --> Failed2: error
+  Failed2 --> Attempt2: retry
+  Attempt2 --> Failed3: error
+  Failed3 --> Attempt3: retry
+  Attempt3 --> Failed4: error
+  Failed4 --> Aborted: 4 of 4 used, job aborted
+  Succeeded --> [*]
+  Aborted --> [*]` }] },
+      { title: 'UC-05 · Cores per task set the slot count', intro: 'Each task takes spark.task.cpus cores from the executor. The number of tasks an executor can run at once is its cores divided by that value.', diagrams: [{ kind: FLOW, title: 'Slots from cores', src: `flowchart LR
+  E["Executor: 4 cores"] --> S["slots = cores / spark.task.cpus"]
+  S --> A["spark.task.cpus = 1: 4 tasks at once"]
+  S --> B["spark.task.cpus = 2: 2 tasks at once"]` }] }
     ],
     hard: null
   };

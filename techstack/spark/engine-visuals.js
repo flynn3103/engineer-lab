@@ -344,12 +344,50 @@
     return v.pub ? 'answer: 640 · published once per partition' : v.lost != null ? 'partition 1 lost: replaying only it' : 'rows: 12 · partitions: 4';
   }
 
+  /* schedule:3 · locality ladder: one lane per level. The bar is the wait at the current level; the dot is where the task ran. */
+  const LEVELS = ['PROCESS_LOCAL', 'NODE_LOCAL', 'RACK_LOCAL', 'ANY'];
+  function paintLadder(stage, sim, k) {
+    const v = sim.steps[k].v, W = 560, H = 190, L = 130, R = 16, MAX = 12;
+    const X = s => L + s / MAX * (W - L - R), Y = i => 30 + i * 40;
+    const lanes = LEVELS.map((name, i) => {
+      const bar = v.level === i && v.t > v.since ? `<rect class="vz-wait" x="${X(v.since)}" y="${Y(i) - 8}" width="${X(v.t) - X(v.since)}" height="16" rx="4"/>` : '';
+      const ran = v.ran === i ? `<circle class="vz-dot ok" cx="${X(v.t)}" cy="${Y(i)}" r="7"/>` : '';
+      const gave = v.passed.includes(i) ? `<text class="vz-axis" x="${X(MAX)}" y="${Y(i) - 8}" text-anchor="end">gave up</text>` : '';
+      return `<text class="vz-tick" x="${L - 12}" y="${Y(i) + 4}" text-anchor="end">${name}</text><line class="vz-grid" x1="${L}" x2="${W - R}" y1="${Y(i)}" y2="${Y(i)}"/>${bar}${ran}${gave}`;
+    }).join('');
+    const ticks = [0, 3, 6, 9, 12].map(s => `<text class="vz-tick" x="${X(s)}" y="${H - 6}" text-anchor="middle">${s}s</text>`).join('');
+    stage.innerHTML = svg(W, H, lanes + ticks, 'Locality levels over time');
+    if (v.zero) return 'spark.locality.wait = 0: no waiting';
+    return v.ran == null ? `waiting at ${LEVELS[v.level]} · ${v.t} s` : `ran at ${LEVELS[v.ran]} after ${v.t} s`;
+  }
+
+  /* schedule:4 · failure budget: one cell per attempt of one task, out of spark.task.maxFailures. */
+  function paintBudget(stage, sim, k) {
+    const v = sim.steps[k].v, LIM = 4, used = v.att.filter(x => x === 'fail').length;
+    const label = { fail: 'failed', ok: 'succeeded', run: 'running', none: 'not yet' };
+    const cells = Array.from({ length: LIM }, (_, i) => `<div class="vz-bud ${v.att[i] || 'none'}"><b>attempt ${i}</b><small>${label[v.att[i] || 'none']}</small></div>`).join('');
+    stage.innerHTML = `<div class="vz-row"><span class="vz-lab">task 7</span><span class="vz-chip">${used} of ${LIM} failures used</span></div>
+      <div class="vz-budget">${cells}</div>${v.abort ? '<div class="vz-note warn">limit reached: the job is aborted with the last error</div>' : ''}`;
+    return `failures: ${used} of ${LIM}${v.abort ? ' · job aborted' : ''}`;
+  }
+
+  /* schedule:5 · executor cores as cells. A task takes spark.task.cpus adjacent cells, so the slot count is cores / cpus. */
+  function paintCores(stage, sim, k) {
+    const v = sim.steps[k].v, N = v.cores, owner = Array(N).fill(null);
+    v.tasks.forEach(t => (t.at || []).forEach(c => { owner[c] = t; }));
+    const cells = owner.map((t, c) => `<div class="vz-core ${t ? 'run' : 'free'}"><small>core ${c + 1}</small><b>${t ? t.id : 'free'}</b></div>`).join('');
+    const waiting = v.tasks.filter(t => t.s === 'wait').map(t => `<span class="vz-chip warn">${t.id} waits: needs ${v.cpus} cores</span>`).join('');
+    stage.innerHTML = `<div class="vz-cores" style="grid-template-columns:repeat(${N},minmax(0,1fr))">${cells}</div>
+      <div class="vz-row">${waiting}<span class="vz-chip">spark.task.cpus = ${v.cpus}</span><span class="vz-chip">slots = ${N} / ${v.cpus} = ${Math.floor(N / v.cpus)}</span></div>`;
+    return `tasks running: ${v.tasks.filter(t => t.s !== 'wait').length} · free cores: ${owner.filter(x => !x).length}`;
+  }
+
   const PAINT = {
     ticks: paintTicks, kanban: paintKanban, stacked: paintStacked, lanes: paintLanes,
     sawtooth: paintSawtooth, bullet: paintBullet, heatmap: paintHeat, strip: paintStrip,
     ledger: paintLedger, filetree: paintFileTree, flow: paintFlow, waterfall: paintWaterfall,
     fanout: paintFanout, scatter: paintScatter, histogram: paintHistogram, donut: paintDonut,
-    tape: paintTape, segments: paintSegments, mosaic: paintMosaic
+    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores
   };
 
   /* Attach each picture to its use case. Narration (title, text) stays in engine-stories.js. */
@@ -366,6 +404,24 @@
       { cards: [{ id: 'A1', col: 3, note: 'success' }, { id: 'A2', col: 4, note: 'error' }] },
       { cards: [{ id: 'A1', col: 3, note: 'success' }, { id: 'A2', col: 4, note: 'error' }, { id: 'A3', col: 2, note: 'running' }] },
       { cards: [{ id: 'A1', col: 3, note: 'success' }, { id: 'A2', col: 4, note: 'error' }, { id: 'A3', col: 4, note: 'no heartbeat' }, { id: 'A2', col: 5, ghost: true, note: 'late success' }] }] },
+    'schedule:3': { kind: 'ladder', steps: [
+      { level: 0, since: 0, t: 0, ran: null, passed: [] },
+      { level: 0, since: 0, t: 1.5, ran: null, passed: [] },
+      { level: 1, since: 3, t: 3, ran: null, passed: [0] },
+      { level: 1, since: 3, t: 4, ran: 1, passed: [0] },
+      { level: 3, since: 9, t: 9, ran: 3, passed: [0, 1, 2] },
+      { level: 0, since: 0, t: 0, ran: null, passed: [], zero: true }] },
+    'schedule:4': { kind: 'budget', steps: [
+      { att: ['run'] }, { att: ['fail', 'run'] }, { att: ['fail', 'fail', 'run'] },
+      { att: ['fail', 'fail', 'fail', 'run'] }, { att: ['fail', 'fail', 'fail', 'fail'] },
+      { att: ['fail', 'fail', 'fail', 'fail'], abort: true }] },
+    'schedule:5': { kind: 'cores', steps: [
+      { cores: 4, cpus: 2, tasks: [] },
+      { cores: 4, cpus: 2, tasks: [{ id: 'T1', at: [0, 1], s: 'run' }] },
+      { cores: 4, cpus: 2, tasks: [{ id: 'T1', at: [0, 1], s: 'run' }, { id: 'T2', at: [2, 3], s: 'run' }] },
+      { cores: 4, cpus: 2, tasks: [{ id: 'T1', at: [0, 1], s: 'run' }, { id: 'T2', at: [2, 3], s: 'run' }, { id: 'T3', s: 'wait' }] },
+      { cores: 4, cpus: 2, tasks: [{ id: 'T3', at: [0, 1], s: 'run' }, { id: 'T2', at: [2, 3], s: 'run' }] },
+      { cores: 4, cpus: 1, tasks: [{ id: 'T1', at: [0], s: 'run' }, { id: 'T2', at: [1], s: 'run' }, { id: 'T3', at: [2], s: 'run' }, { id: 'T4', at: [3], s: 'run' }] }] },
     'shuffle:1': { kind: 'stacked', steps: [
       { raw: true, mem: [['cat', 1, 0], ['dog', 1, 1], ['cat', 1, 0], ['bird', 1, 0], ['dog', 1, 1], ['cat', 1, 0]], run: [], file: [] },
       { mem: [['cat', 3, 0], ['dog', 2, 1], ['bird', 1, 0]], run: [], file: [] },

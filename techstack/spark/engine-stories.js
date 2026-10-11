@@ -552,6 +552,69 @@
   };
 
   /* ---------- 06 Shuffle ---------- */
+  ST['schedule:3'] = {
+    trigger: 'A task prefers the executor that holds its data, but every slot on that executor is busy right now.',
+    command: 'spark-submit --conf spark.locality.wait=3s app.py  # 3s is the default',
+    expect: 'The task waits at most one locality wait per level it passes, then runs somewhere else. The delay is bounded.',
+    sim: {
+      kind: 'ladder',
+      steps: [
+        { title: 'The task wants its data', text: 'The block the task reads is cached on executor 1. The scheduler first looks for a free slot on executor 1, the best level, which is PROCESS_LOCAL.' },
+        { title: 'No slot there: start a wait', text: 'Executor 1 is full. The scheduler starts a timer and waits up to spark.locality.wait, 3 seconds by default, for a slot at this level.' },
+        { title: 'Timer ends: step down one level', text: 'No PROCESS_LOCAL slot appeared. The scheduler moves to NODE_LOCAL, meaning any executor on the same host, and starts a new wait.' },
+        { title: 'A slot opens on the same host', text: 'Executor 2 on the same host frees a slot before the timer ends. The task starts there and does not cross hosts to read its data.' },
+        { title: 'Every level gave up: run anywhere', text: 'If no slot had appeared on the same host either, the scheduler would also wait at RACK_LOCAL, then run the task on any free slot. Each wait is bounded, so the task always runs.' },
+        { title: 'Set the wait to zero', text: 'With spark.locality.wait=0 the scheduler does not wait at all and takes the first free slot. Longer waits keep more reads local, at the cost of idle time.' }
+      ]
+    },
+    edges: [
+      E('No slot at the data\'s executor', 'Wait a bounded time, then step down.', 'The data is on one executor, which is busy. Waiting without limit would leave the other slots idle.', 'Each locality level gets a bounded wait (spark.locality.wait, default 3 s). After it, the task moves to the next level.'),
+      E('The wait costs more than a remote read', 'Lower the wait, not the rule.', 'For short tasks or a fast network, a 3 s wait can take longer than the read it saves.', 'Lower spark.locality.wait, or set a per-level value such as spark.locality.wait.node, after measuring.')
+    ]
+  };
+
+  ST['schedule:4'] = {
+    trigger: 'A task attempt fails because of an error in the application, such as an exception in user code or bad input.',
+    command: 'spark-submit --conf spark.task.maxFailures=4 app.py  # 4 is the default',
+    expect: 'The same task may fail up to 4 times. The fourth failure aborts the job with the last error.',
+    sim: {
+      kind: 'budget',
+      steps: [
+        { title: 'Attempt 0 starts', text: 'Task 7 starts its first attempt. Nothing has failed yet, so all 4 attempts are still available.' },
+        { title: 'Attempt 0 fails', text: 'An exception in the user code fails the attempt. The scheduler records the reason and queues the task again as a new attempt.' },
+        { title: 'Attempt 1 fails too', text: 'The retry runs on another executor and fails with the same error. Two failures are now on record, and two attempts remain.' },
+        { title: 'Attempt 2 fails', text: 'The third attempt fails in the same way. One attempt is left.' },
+        { title: 'Attempt 3 fails: the limit is reached', text: 'The fourth failure uses up spark.task.maxFailures. The scheduler stops retrying this task.' },
+        { title: 'The job is aborted', text: 'The job stops, and its error message shows the last failure. Retrying more would only repeat the same error.' }
+      ]
+    },
+    edges: [
+      E('A flaky failure, then success', 'The retry hides it.', 'A network blip fails one attempt. The next attempt on another executor succeeds, and the job completes.', 'The failed attempt stays in the logs, and only the successful attempt produces the result.'),
+      E('A deterministic error', 'Retries only repeat it.', 'Bad input or a bug in the code fails the same way on every attempt, so each retry wastes time.', 'After the fourth failure the job aborts with the task error. Fix the cause, then rerun.')
+    ]
+  };
+
+  ST['schedule:5'] = {
+    trigger: 'Each task needs 2 cores (spark.task.cpus=2), and the executor offers 4 cores.',
+    command: 'spark-submit --executor-cores 4 --conf spark.task.cpus=2 app.py',
+    expect: 'Two tasks run at once on this executor. The number of slots is executor cores divided by spark.task.cpus, rounded down.',
+    sim: {
+      kind: 'cores',
+      steps: [
+        { title: 'The executor offers 4 cores', text: 'The executor registers with 4 free cores. Nothing is running yet.' },
+        { title: 'The first task takes 2 cores', text: 'The scheduler matches task 1 to the offer. It needs 2 cores, so it takes 2 of the 4.' },
+        { title: 'A second task fits in the rest', text: 'Task 2 also needs 2 cores. The 2 cores left are exactly enough, so it starts. All 4 cores are now busy.' },
+        { title: 'A third task waits', text: 'Task 3 is ready, but no 2 free cores remain. It waits in the queue. The executor is not idle: it is full.' },
+        { title: 'Task 1 finishes', text: 'Task 1 reports success and frees its 2 cores. The scheduler offers them again, and task 3 starts.' },
+        { title: 'Compare with spark.task.cpus=1', text: 'With one core per task, the same 4 cores would run 4 tasks at once. The same hardware gives twice the slots.' }
+      ]
+    },
+    edges: [
+      E('Cores are not a multiple of cpus', 'Some cores sit idle.', 'With 5 cores and spark.task.cpus=2, only 2 tasks run at once and one core stays idle.', 'Choose executor cores as a multiple of spark.task.cpus, or accept the idle core.'),
+      E('A task needs more cores than an executor has', 'It never fits.', 'spark.task.cpus=4 on an executor with 2 cores: no offer can cover the task, so it waits with nothing else running there.', 'Set executor cores to at least spark.task.cpus, or lower spark.task.cpus.')
+    ]
+  };
+
   ST['shuffle:1'] = {
     diagrams: [{ kind: SEQ, title: 'Map-side write', src: `sequenceDiagram
   participant T as Map task
