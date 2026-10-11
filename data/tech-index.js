@@ -212,84 +212,85 @@ window.SITE_TECH_INDEX = [
 {
 "type": "Tour",
 "system": "scylla",
-"title": "ScyllaDB internals, end to end",
-"summary": "Keep accepting 30,000 orders a second while machines die and you add new ones.",
-"body": "Token ring, coordinator and consistency levels, retries, write and read paths, compaction, tombstones, repair, tablets, Raft metadata.",
+"title": "ScyllaDB · Design a leaderless wide-column store",
+"summary": "Take 30,000 orders a second on three copies of every row while machines die and nodes join: hash placement, quorum, an immutable-file write path, tombstones, tablets and Raft metadata.",
+"body": "Token ring and vnodes, hot partitions, shard per core, coordinator and quorum, local datacenter levels, token-aware routing, retry storms, idempotent retries, commitlog and memtable, flush, read path and Bloom filters, row cache, compaction strategies, disk headroom, tombstones, gc_grace_seconds, hints and repair, tablet map and migration, Raft election and log replication, what needs the metadata majority.",
 "url": "techstack/scylla/course.html",
 "tags": [
 "tour",
-"interactive"
+"system design",
+"use cases",
+"animations"
 ],
 "id": 12
 },
 {
 "type": "Chapter",
 "system": "scylla",
-"title": "ScyllaDB · 1. Partition Key and Token Ring",
-"summary": "Why does one celebrity seller melt a single node while the other nodes sit idle, and how does adding a node change who owns what?",
-"body": "Partition key → token: the Murmur3 partitioner hashes the partition key to a 64-bit token. The same key always lands on the same token. The ring and vnodes: every node owns several token positions (num_tokens). The owner of a token is the first node position clockwise from it.",
-"url": "techstack/scylla/course.html#ch0",
+"title": "ScyllaDB · 1. Partitioning and the token ring",
+"summary": "A hash of the partition key places a row on a set of nodes that every node can compute, and one key always stays together.",
+"body": "Place each partition on RF nodes with no directory, spread load evenly, and stay together for one key. Hash a partition key to a token. Find the owner and the other replicas from the token. Map the token to one core on each replica. The same key always maps to the same token and replicas. Adding a node moves only the ranges it takes over. All rows of one partition live together on each replica. The token ring: who owns a key Hash a partition key, find the owner clockwise, then see how many tokens per node and a new node change who owns what. Try your own key, switch between 1, 4 and 16 tokens per node, and add a node. The platform has 4 nodes and adds a fifth at peak. Orders are keyed by seller_id and every node must agree where seller 17 lives without asking anyone (toy token space 0 to 359; real tokens are 64-bit). The same key always gives the same token and the same replicas. A new node takes only the arcs it claims, and many tokens per node make the arcs average out. Every node computes the same owner and replicas for a key from the token alone; one partition is never split between owners. A hot partition and bucketing Replication adds copies, not independent pieces of one key. See why one celebrity seller melts one core while the rest idle, and what a bucketed key changes. During a flash sale, seller 17 receives 40,000 writes a second. Each core can take about 10,000 operations a second for this workload (example numbers). The partition key is seller_id. The hot key saturates the single core that owns it. With 8 buckets the same traffic is 5,000 a second on each of 8 cores. All rows with the same partition key share one token, so they share one core on each replica. From token to node to core Inside a node, each CPU core owns its own slice of the tokens and shares nothing with the others. See how a key finds its core, and what a driver that knows this saves. A client sends a write for seller-17. The node has 16 cores, each running one shard (example). The write reaches the owning core directly when the driver is shard-aware, and with one extra hop inside the node when it is not. A token maps to exactly one shard on each replica, and only that shard reads or writes its data.",
+"url": "techstack/scylla/course.html#/f/1",
 "tags": [
-"key",
-"token",
-"owner"
+"partitioning",
+"system design",
+"use cases"
 ],
 "id": 13
 },
 {
 "type": "Chapter",
 "system": "scylla",
-"title": "ScyllaDB · 2. Coordinator and Consistency Levels",
-"summary": "RF=3, one replica missed a price update and later some reads showed the old price. When is a read guaranteed to see the latest write?",
-"body": "Coordinator: whichever node receives the request. It computes the replica set from the token and sends the mutation to all replicas in parallel. Consistency level: how many replica answers the coordinator waits for. ONE, QUORUM, LOCAL_QUORUM, ALL are the usual levels.",
-"url": "techstack/scylla/course.html#ch1",
+"title": "ScyllaDB · 2. Coordinator and consistency levels",
+"summary": "Any node coordinates: it sends to every replica in parallel and waits for as many as the consistency level asks.",
+"body": "Let the client trade latency and availability against freshness per request. Send each write to every replica in parallel. Reply after the number of acknowledgements the level needs. Merge replica answers on read by timestamp. R + W greater than RF guarantees a read sees the latest acknowledged write. A level that cannot be met fails fast as unavailable. LOCAL levels never wait for another datacenter. Quorum: when a read sees the latest write Take replicas down, write and read at different levels, and watch which version each read returns. The rule is simple: if the replicas written plus the replicas read are more than RF, they must overlap. An order's price is updated while one of its three replicas restarts. The write returns OK, the replica comes back, and support still sees two prices (illustrative). At QUORUM for both, the read always overlaps the write on at least one replica and returns the newest value. At ONE and ONE it can return a stale one. If the replicas written (W) plus the replicas read (R) exceed the replication factor, every read overlaps the newest acknowledged write. The coordinator fans out and waits for a level The node that receives a request sends it to every replica at once and answers as soon as enough replies arrive. See what a slow or dead replica does to latency. A client sends a write at QUORUM with RF=3. Replica C is slow, and later one run has C down (example timings). The client gets OK after the second acknowledgement, without waiting for the slowest replica. The coordinator sends to every replica and answers when the number of acknowledgements equals the level, no earlier and no later. Two datacenters: QUORUM against LOCAL_QUORUM With two datacenters a global quorum has to cross the WAN, and it fails when a whole datacenter is lost. See why most traffic uses a local level. Two datacenters hold RF=3 each, six replicas in total. DC2 loses its network (example). LOCAL_QUORUM in DC1 keeps working with DC2 gone. A global QUORUM needs 4 of 6 replicas and fails with only 3 left. A LOCAL level counts only replicas in the coordinator's datacenter, so it never waits on another datacenter.",
+"url": "techstack/scylla/course.html#/f/2",
 "tags": [
-"coordinator",
-"rf",
-"cl"
+"consistency",
+"system design",
+"use cases"
 ],
 "id": 14
 },
 {
 "type": "Chapter",
 "system": "scylla",
-"title": "ScyllaDB · 3. Timeouts, Retries and Routing",
-"summary": "Client timeouts climb faster than traffic and healthy coordinators burn CPU. How many requests reach the replicas per user request during overload?",
-"body": "Shard-per-core: each CPU core owns a slice of the data. A request that arrives at the wrong node or shard must be forwarded. Token-aware and shard-aware drivers compute the token from the prepared statement and send the request to a replica, and to the right shard on it.",
-"url": "techstack/scylla/course.html#ch2",
+"title": "ScyllaDB · 3. Drivers, timeouts and retries",
+"summary": "Token-aware and shard-aware drivers skip hops, and unbounded retries turn a slow cluster into a dead one.",
+"body": "Send each request to a replica, and keep a failing cluster from being buried by its own clients. Compute the token on the client from the prepared statement. Retry only what is safe, with a bound and backoff. Treat a timeout as unknown, not as failure. A request takes the fewest hops. Retries multiply load by a bounded factor. A retried statement must give the same final state. Token-aware routing skips a hop A request sent to a random node must be forwarded to a replica. A driver that computes the token sends it to a replica directly. A service issues 20,000 reads a second against a 12-node cluster. The driver is a plain round-robin policy, then a token-aware one (example). About 3 out of 4 round-robin requests need an extra forward with RF=3 on 12 nodes. With token awareness the first node is a replica. The driver chooses a coordinator that is a replica of the partition when it can compute the token; otherwise the cluster forwards. A timeout storm: retries multiply load A slow cluster makes clients time out, and each retry adds load to a cluster that is already slow. See how fast it feeds itself. Clients send 10,000 requests a second and retry a timed-out request up to 3 times. The replicas can take 15,000 a second (example numbers). Load on the replicas is 10,000 × (1 + p + p² + p³), where p is the share of attempts that time out. It crosses capacity near p = 0.35 and then keeps growing. With r retries and a timeout share p, the load factor is the sum of p to the power i for i from 0 to r. A timeout means unknown, not failed When a write times out the client does not know if it was applied. A retry is only safe when applying the same statement twice gives the same state. A write at QUORUM times out after the coordinator sent it to three replicas. The client retries (example). A timed-out write may already be applied on some replicas, so retry only statements that are idempotent. A retry after a timeout is safe only if applying the statement once or twice leaves the same state.",
+"url": "techstack/scylla/course.html#/f/3",
 "tags": [
-"token-aware",
-"shard-aware",
-"retries"
+"clients",
+"system design",
+"use cases"
 ],
 "id": 15
 },
 {
 "type": "Chapter",
 "system": "scylla",
-"title": "ScyllaDB · 4. Replica Write Path",
-"summary": "The power fails right after the client got OK. Is the order still there, and what decides the answer?",
-"body": "Commitlog: every mutation is appended to a segment file first. It is sequential, so it is cheap, and it is replayed after a crash. Sync mode: commitlog_sync: periodic acknowledges at once and syncs every commitlog_sync_period_in_ms.",
-"url": "techstack/scylla/course.html#ch3",
+"title": "ScyllaDB · 4. Replica write path",
+"summary": "A write is a commitlog append and a memtable insert; files are only ever created, never edited.",
+"body": "Make a write durable and fast without reading or rewriting existing data. Append every write to the commitlog. Insert into the memtable sorted by key. Flush a full memtable to an immutable SSTable. A write never reads existing data. A crash is repaired by replaying the commitlog. Writes slow down before memory runs out. Commitlog, memtable and flush A write never touches an existing file. See the commitlog and the memtable fill, the flush that makes an immutable SSTable, and why an update lands in a newer file. A replica receives 7,500 writes a second. The power fails right after the client got OK, and the question is what survives (example rate). The write is in the commitlog and the memtable when the replica acknowledges. Only a flush creates an SSTable, and a later update to the same key goes to a newer file. A write is acknowledged after the commitlog append and memtable insert; SSTables are only created by flush and compaction, never edited. Commitlog sync: the loss window on one node Acknowledging a write is not the same as having it on disk. See the window a single node can lose, and why replication usually covers it. A node runs the commitlog in periodic mode with a sync every 10 seconds (example period; check commitlog_sync_period_in_ms). It crashes 4 seconds after a sync. Writes acknowledged since the last sync are lost on that node. At QUORUM with RF=3 the other two replicas still hold them. In periodic mode, a single node can lose the writes since its last commitlog sync; replication, not the node, covers that window. Memory pressure: flushing falls behind Memtables live in memory until flushed. If the disk cannot absorb flushes as fast as writes arrive, the node has to slow writers down before memory runs out. A bulk load runs while the disks are busy with compaction. Memtable memory is a fixed budget per shard (example percentages). Dirty memory grows until it reaches the limit, then writes are throttled or time out until a flush frees memory. A node slows writers down when memtable memory is full, instead of running out of memory.",
+"url": "techstack/scylla/course.html#/f/4",
 "tags": [
-"commitlog",
-"memtable",
-"sstable"
+"write path",
+"system design",
+"use cases"
 ],
 "id": 16
 },
 {
 "type": "Chapter",
 "system": "scylla",
-"title": "ScyllaDB · 5. Read Path",
-"summary": "A point read takes 40 ms (illustrative) and the replica checked 11 SSTables. How does a read skip files that cannot hold the key?",
-"body": "Bloom filter (per SSTable): says “definitely absent” or “maybe present”. The size is about 1.44·log₂(1/p) bits per key, where p is bloom_filter_fp_chance. Partition index and summary: after a “maybe”, the index jumps close to the partition’s position in the data file.",
-"url": "techstack/scylla/course.html#ch4",
+"title": "ScyllaDB · 5. Read path",
+"summary": "A read merges the memtable and every file that may hold the key, and Bloom filters let it skip the rest.",
+"body": "Answer a point read with few disk reads even though data is spread across files. Check each SSTable filter before reading it. Merge cells from all sources and keep the newest. Serve hot rows from the cache. A key that is not in a file costs no read of that file (up to the false-positive rate). The newest timestamp wins. A scan must not wash the cache. A read merges files and skips the rest Each SSTable has a Bloom filter that answers \"definitely absent\" or \"maybe present\". See which files a read opens, how the cells are merged by timestamp, and what a missing key costs. A point read takes 40 ms and the replica checked 11 SSTables (illustrative). The question is why it did not check fewer. The replica reads only SSTables whose filter says \"maybe\" and merges the cells by timestamp. A key in no file costs no data-file read. A read returns the cell with the newest timestamp among the memtable and every SSTable it consults. Bloom filter size against false positives A Bloom filter spends memory to avoid reads. See how many bits per key a false-positive target costs, and what it saves. The table has 1 billion partitions on a node and many reads for keys that are not there (example). About 1.44 × log₂(1/p) bits per key: roughly 9.6 bits at p = 0.01, so about 1.2 GB for 1 billion keys. A Bloom filter never says \"absent\" for a key that is present; it says \"maybe\" for an absent key with probability p. The row cache and the wash-out of a scan Hot rows are served from a cache without touching any SSTable. A big scan can fill the cache with rows nobody will read again. A dashboard reads the same 8 hot sellers all day. Every night a report scans millions of cold rows (example). A cache hit reads no SSTable. A scan without BYPASS CACHE evicts the hot rows; with it, the hot rows stay. Rows read normally are put in the cache; a query run with BYPASS CACHE neither uses nor fills it.",
+"url": "techstack/scylla/course.html#/f/5",
 "tags": [
-"bloom",
-"index",
-"merge",
-"cache"
+"read path",
+"system design",
+"use cases"
 ],
 "id": 17
 },
@@ -297,71 +298,57 @@ window.SITE_TECH_INDEX = [
 "type": "Chapter",
 "system": "scylla",
 "title": "ScyllaDB · 6. Compaction",
-"summary": "After a week of writes, read p99 doubled and the disk alarm fired. Which compaction strategy fits which workload, and at what cost?",
-"body": "STCS: merges SSTables of similar size once enough of them exist. Cheap for writes, but a merge may need as much temporary space as its inputs. LCS: levels of small non-overlapping SSTables. Reads touch few files, at the cost of rewriting data several times.",
-"url": "techstack/scylla/course.html#ch5",
+"summary": "Background merges keep the number of files per read small and reclaim overwritten data, at a cost in I/O and temporary space.",
+"body": "Keep reads cheap and disk use bounded without stopping writes. Merge SSTables and drop overwritten cells. Choose a strategy that fits the workload. Keep room to write the output before deleting the inputs. Compaction cannot fall behind flushes for long. Output is written before inputs are deleted. Disk use stays under the headroom you planned. Compaction merges files and drops overwritten cells Size-tiered compaction waits for several SSTables of similar size and merges them into one. See what the merge drops, and what a read costs before and after. After a week of writes, read p99 doubled and the disk alarm fired. The key a has been updated in every flush (illustrative). The merge writes one new SSTable containing the newest cell of each key and then deletes the inputs. Reads then touch one file instead of three. A compaction output holds the newest cell of every key from its inputs, and the inputs are deleted only after the output is complete. Choosing a compaction strategy Each strategy trades write work, read work and disk space differently. Match it to how the table is written and read. Three tables: orders written once and kept 7 days, sessions updated often and read a lot, and a bulk ingest table (example workloads). Orders (time series with TTL) fit time-window; sessions (read-heavy, overwritten) fit leveled; bulk ingest fits size-tiered. No strategy is best on all three amplifications; the right one is the one that is cheap where your workload is heavy. Headroom: compaction needs space to write first A merge writes its output before it deletes its inputs. See how much free disk that takes, and what happens when flushes outrun compaction. A node has a 10 TB disk at 50% full (example). Four SSTables of 1 TB each are due for a merge. The merge briefly needs about 4 TB of extra space. Plan steady-state use well under the point where the largest merge fits. A compaction output is complete before its inputs are deleted, so free space must cover the largest merge.",
+"url": "techstack/scylla/course.html#/f/6",
 "tags": [
-"stcs",
-"lcs",
-"twcs"
+"compaction",
+"system design",
+"use cases"
 ],
 "id": 18
 },
 {
 "type": "Chapter",
 "system": "scylla",
-"title": "ScyllaDB · 7. Deletes, TTL and Tombstones",
-"summary": "A queue table (insert, read, delete) gets slower every hour although it is nearly empty. What is the read still scanning?",
-"body": "Tombstone kinds: cell, row, range and partition. A range or partition tombstone is one marker that shadows many rows, but the shadowed rows still sit in older SSTables. TTL: an expired cell is treated as a tombstone;",
-"url": "techstack/scylla/course.html#ch6",
+"title": "ScyllaDB · 7. Deletes, tombstones and repair",
+"summary": "A delete is a marker that must reach every replica before it can be forgotten, and repair is what spreads it.",
+"body": "Make deletes final across replicas without growing reads for ever. Write a tombstone with a timestamp for a delete or an expired TTL. Keep it long enough for repair to spread it. Purge it only when it is safe. A tombstone is kept at least gc_grace_seconds (864,000 s). Hints cover at most 3 hours of downtime by default. Repair must complete within the grace window. A delete is a tombstone, not an erase Deleting key a writes a new cell with a timestamp. The old value stays in an older file, hidden. See the read return \"deleted\", and watch when compaction is allowed to forget the tombstone. An order is deleted. The old row sits in an SSTable written a week ago, and the delete lands in the memtable (illustrative). The read returns nothing because the newest cell is a tombstone. The old value is removed only when a compaction sees both and the tombstone is old enough to purge. A delete is a cell with a timestamp; it shadows older cells and can be purged only when every older copy is also gone and the grace period has passed. A queue table that gets slower every hour A read has to step over tombstones to find live rows. A table used as a queue deletes from the head and reads from the head, so every read walks the pile of deletes. Workers read the first 10 rows of the partition jobs and then delete them. The table is nearly empty, yet reads get slower hour by hour (example numbers). Each read scans every tombstone at the head before it reaches 10 live rows, so cost grows with the number of processed jobs, not with the live data. A read must scan every tombstone in its range before it can return the live rows after them. The deleted order that came back A replica that misses a delete and is not repaired in time can bring the row back after the tombstone has been forgotten. A delete is acknowledged at QUORUM by replicas A and B while C is down. C returns 5 days later. No repair runs (example timeline in days). After day 10 the tombstone is purged on A and B. C still holds the old row, so a read that touches C returns it, and repair then copies it back everywhere. A tombstone may be purged only after every replica holds it, which repair guarantees and elapsed time alone does not.",
+"url": "techstack/scylla/course.html#/f/7",
 "tags": [
-"tombstones",
-"ttl",
-"range deletes"
+"deletes and repair",
+"system design",
+"use cases"
 ],
 "id": 19
 },
 {
 "type": "Chapter",
 "system": "scylla",
-"title": "ScyllaDB · 8. Repair and gc_grace_seconds",
-"summary": "A deleted order reappeared two weeks later. What must be true about tombstones, repair and a replica that missed the delete?",
-"body": "Hinted handoff: the coordinator stores a hint for a replica that missed a write, but only while the replica is down for less than max_hint_window_in_ms (3 hours by default). Row-level repair (nodetool repair): compares replicas and streams the differences, including tombstones.",
-"url": "techstack/scylla/course.html#ch7",
+"title": "ScyllaDB · 8. Tablets and elastic scaling",
+"summary": "Tables are cut into tablets with their own replica sets, so a balancer can move small ranges while traffic flows.",
+"body": "Add or remove nodes at peak by moving only the ranges that need to move. Keep a map from token range to replica set. Move a tablet from one node to another. Split big tablets and merge small ones. Traffic continues during a move. No acknowledged write is lost in a move. A single partition is never split. The tablet map and adding a node With tablets each table is cut into many small token ranges, each with its own replica set listed in a map. Adding a node moves a few tablets, not whole ranges. The team adds a fifth node during peak traffic. The cluster has 4 nodes, RF=3 and 6 tablets for one table (example tiny numbers). The new node starts empty, the balancer moves tablets to it one at a time, and the rest of the cluster keeps serving. The tablet map names the replica set of every token range, and a node holds a tablet only if the map says so. How a tablet moves without losing a write Moving a replica means writes keep arriving while data is copied. See the order that makes the move safe, and what happens if it fails. Tablet T2 moves its replica from node B to node E while clients write to it (example). The new replica receives writes before and during the copy, reads switch only when it is complete, and the old replica is removed last. The new replica receives every write from before streaming starts until reads switch, so no acknowledged write is missed. Splitting and merging tablets by size Tablets grow with their data. A tablet that gets too big is split in two, a pair that gets too small is merged, but one partition can never be split. A tablet's data grows past the target while another table's data expires. The size target here is 5 GB (example; the real target is set by the release and options). The big tablet is split at a token boundary into two halves. A tablet made of one huge partition stays whole. A split divides a token range at a token boundary, so one partition always stays in one tablet.",
+"url": "techstack/scylla/course.html#/f/8",
 "tags": [
-"anti-entropy",
-"grace",
-"resurrection"
+"elasticity",
+"system design",
+"use cases"
 ],
 "id": 20
 },
 {
 "type": "Chapter",
 "system": "scylla",
-"title": "ScyllaDB · 9. Tablets and Migration",
-"summary": "The team adds a node at peak. Will traffic stop, will writes be lost, and when does the new node actually take load?",
-"body": "Tablet map: each table is split into tablets. Each tablet has a token range, a replica set and a state. The map is metadata managed through Raft (next chapter). Load balancer: runs in the background, moves tablets from loaded nodes to emptier ones and balances shards inside a node.",
-"url": "techstack/scylla/course.html#ch8",
+"title": "ScyllaDB · 9. Raft for cluster metadata",
+"summary": "Schema, topology and the tablet map change through one Raft group, so there is a single agreed history.",
+"body": "Keep cluster metadata consistent when nodes crash and networks split, without slowing row traffic. Elect one leader per term. Commit a metadata change only after a majority stores it. Keep row reads and writes off this path. At most one leader per term. A committed entry is never lost or changed. A side without a majority cannot change metadata. Electing a leader Metadata changes need one leader. Start an election yourself, crash the leader, or split the network, and watch terms, votes and the majority rule decide who may lead. The node that led the metadata group stops. The other nodes notice missing heartbeats and one of them must take over without two leaders ever existing in one term (5 voters shown). A node that gets votes from a majority becomes leader of a new term. A side with fewer than a majority can never elect one. There is at most one leader per term, and a leader needs votes from a majority of the voters. Committing an entry with a majority Send commands to the leader and see when an entry becomes committed. Split the network and watch the side without a majority accept entries it can never commit, then lose them when the network heals. The schema change ADD COLUMN goes to the leader while the network between the nodes splits (5 voters, majority 3). An entry is committed once 3 of 5 nodes store it. A leader with only 2 reachable nodes cannot commit, and its entry is overwritten after the heal. A committed entry is stored on a majority and is never lost or changed: any later leader must hold it. What needs the Raft majority and what does not Only cluster metadata goes through Raft. Reads and writes of your data take the coordinator and consistency level path, so they do not need the metadata majority. A network split leaves 7 of 12 nodes on one side and 5 on the other (example). Both sides keep getting traffic. The 7-node side can still change schema and topology; the 5-node side cannot. Row traffic on both sides depends only on whether its own level can be met. Cluster metadata changes need a Raft majority; row reads and writes do not use Raft at all.",
+"url": "techstack/scylla/course.html#/f/9",
 "tags": [
-"split",
-"move",
-"epoch"
+"metadata consensus",
+"system design",
+"use cases"
 ],
 "id": 21
-},
-{
-"type": "Chapter",
-"system": "scylla",
-"title": "ScyllaDB · 10. Raft Metadata Consensus",
-"summary": "Two nodes are cut off from the third. Who may change the schema or the tablet map, and what stops two histories from forming?",
-"body": "Group 0: one Raft group that holds the metadata state machine for schema and topology (including the tablet map). Terms and leader: an election creates a leader for a new term; only the leader appends entries. Commit rule: an entry is committed once a majority of voters stores it.",
-"url": "techstack/scylla/course.html#ch9",
-"tags": [
-"leader",
-"term",
-"majority"
-],
-"id": 22
 },
 {
 "type": "Chapter",

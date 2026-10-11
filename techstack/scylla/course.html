@@ -3,35 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ScyllaDB course · Linh Trần Nhật</title>
-<meta name="description" content="Problem-based ScyllaDB course: each chapter starts from a production problem, shows the mechanism as an animated scene, and ends with diagnosis.">
+<title>Design a leaderless wide-column store · ScyllaDB</title>
+<meta name="description" content="Learn ScyllaDB as a system design: problem, requirements, estimates and high-level design, then 9 features and 27 use cases, with animations for the token ring, quorum, LSM compaction and Raft.">
 <link rel="stylesheet" href="../../assets/lab.css">
 <link rel="stylesheet" href="../../assets/curriculum.css">
-<link rel="stylesheet" href="diagrams.css">
+<link rel="stylesheet" href="../../assets/course/course.css">
+<link rel="stylesheet" href="../../assets/course/animations.css">
+<link rel="stylesheet" href="../../assets/course/cluster.css">
 </head>
 <body>
 <div id="app"></div>
-<script src="course.js"></script>
-<script src="chapters/ch00.js"></script>
-<script src="chapters/ch01.js"></script>
-<script src="chapters/ch02.js"></script>
-<script src="chapters/ch03.js"></script>
-<script src="chapters/ch04.js"></script>
-<script src="chapters/ch05.js"></script>
-<script src="chapters/ch06.js"></script>
-<script src="chapters/ch07.js"></script>
-<script src="chapters/ch08.js"></script>
-<script src="chapters/ch09.js"></script>
-<script src="chapter-notes.js"></script>
-<script src="../../assets/scene-kit.js"></script>
-<script src="../../assets/lesson.js"></script>
-<script>
-(function () {
-  /* chapters/chNN.js override the course data chapter by chapter (zero-based index). */
-  const O = window.CHAPTER_OVERRIDES || {};
-  window.COURSE.chapters = window.COURSE.chapters.map((c, i) => (O[i] ? { ...c, ...O[i] } : c));
-  Lesson.course(window.COURSE, { root: '../../' });
-})();
-</script>
+<noscript><p>This course needs JavaScript for its diagrams and pictures.</p></noscript>
+<!-- framework: kit, contract and the animation registry first, then the course data and painters, then the engine -->
+<script src="../../assets/course/kit.js"></script>
+<script src="../../assets/course/contract.js"></script>
+<script src="../../assets/course/animations.js"></script>
+<script src="../../assets/course/animations/ring.js"></script>
+<script src="../../assets/course/animations/quorum.js"></script>
+<script src="../../assets/course/animations/lsm.js"></script>
+<script src="../../assets/course/animations/raft.js"></script>
+<script src="spec.js"></script>
+<script src="uc-a.js"></script>
+<script src="uc-b.js"></script>
+<script src="uc-c.js"></script>
+<script src="diagrams.js"></script>
+<script src="paint.js"></script>
+<script src="../../assets/course/course.js"></script>
+<script>Course.mount(CourseData);</script>
 </body>
 </html>

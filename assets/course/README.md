@@ -8,8 +8,8 @@ assets/course/
   course.css     the style: shell, page head, numbered sections, cards, tables, diagrams, edge cards, pager, player, pictures
   kit.js         picture helpers and reusable forms          -> Course.kit
   animations.js  optional renderer registry and narrated animation player
-  animations/    reusable scene painters and computed simulation renderers (btree.js: B+tree insert, split, lookup, range scan)
-  animations.css, scenes.css, stages.css, btree.css  optional styles for these animation forms
+  animations/    reusable scene painters and computed simulation renderers (btree.js: B+tree insert, split, lookup, range scan; ring.js, quorum.js, lsm.js, raft.js: token ring, quorum reads and writes, LSM write/read/compaction/tombstones, Raft election and replication)
+  animations.css, scenes.css, stages.css, btree.css, cluster.css  optional styles for these animation forms
   contract.js    data contract and validator                  -> Course.validate(CourseData)
   course.js      shell, router, page templates, Mermaid, player -> Course.mount(CourseData)
 tools/course/
@@ -77,6 +77,8 @@ Narrated animation families share `Course.animationPlayer(host, scene, painter, 
 For ordinary step pictures, reusable forms register with `Course.registerScene(kind, painter)`. A course's `paint.js` binds its scene to `Course.renderScene(kind, scene, stepIndex)`, which returns `{ html, stat, bare }` for the standard course player. Add new forms to the shared assets when the existing picture kit or animation library cannot express a course's mechanism.
 
 `animations/btree.js` is a computed animation: scene data is `{ kind: 'btree', cap, base, presets: [{ label, ops }], try? }` with ops `insert`, `search` or `range`; the pure model is exposed as `Course.btree` and tested in `tools/course/btree.test.js`. The PostgreSQL course uses it.
+
+The ScyllaDB animations follow the same pattern (pure model on `Course.ring`, `Course.quorum`, `Course.lsm`, `Course.raft`, tested in `tools/course/cluster.test.js`, styled by `cluster.css`). Scene data: `ring` `{ nodes, start, rf, tokenChoices, key, keys }`; `quorum` `{ rf, field, values, presets }` with ops `down`, `up`, `write`, `read`, `repair`; `lsm` `{ memCap, threshold, presets }` with ops `put`, `del`, `get`, `flush`, `compact`; `raft` `{ n, split, cmd, presets }` with ops `timeout`, `client`, `partition`, `heal`, `crash`, `restart`.
 
 Run `node --test tools/course/*.test.js` for the animation registration, mounting, B+tree model, and validation checks.
 
