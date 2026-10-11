@@ -1068,6 +1068,69 @@
     ]
   };
 
+  ST['memory:3'] = {
+    trigger: 'A job caches a table, and then runs a large sort that needs memory from the same pool.',
+    command: 'spark-submit --conf spark.memory.storageFraction=0.5 app.py  # 0.5 is the default',
+    expect: 'Execution can take back cached space above the protected share, and it spills when it still lacks memory. Cache never takes memory from running work.',
+    sim: {
+      kind: 'pool',
+      steps: [
+        { title: 'One pool, two users', text: 'Storage for cached data and execution for sorts, joins and aggregations share one unified pool of 10 units. Nothing is cached and nothing is running yet.' },
+        { title: 'Caching fills storage', text: 'The table is cached and fills 6 units. Cache may use free space, so it grows past its protected half of 5 units.' },
+        { title: 'A sort asks for memory', text: 'A sort starts and asks for 6 units. The free space holds 4 units, so the sort takes those and still needs 2 more.' },
+        { title: 'Execution takes back cache above the share', text: 'Execution may evict cached blocks, but only the part above the protected 5 units. It takes 1 unit back, so the sort still lacks 1 and spills that part to disk.' },
+        { title: 'Cache cannot take back execution', text: 'A new cache request for 3 units arrives. Storage cannot evict the running sort, so the new block is not cached, and the job does not fail.' },
+        { title: 'The sort ends and memory is free again', text: 'The sort finishes and releases its 5 units. The cache can grow back into the free space when the next block is stored.' }
+      ]
+    },
+    edges: [
+      E('A cached table is needed again', 'It may have been evicted.', 'Execution can take cache above the protected share. Reading that table later recomputes the evicted blocks.', 'Cache only what you reuse, or raise the storage fraction if the cache must survive large sorts.'),
+      E('Storage fraction set too high', 'Execution starves and spills.', 'If storage can hold most of the pool, execution has little room and spills heavily.', 'Keep spark.memory.storageFraction at the default unless the cache is more important than the sorts.')
+    ]
+  };
+
+  ST['memory:4'] = {
+    trigger: 'An executor runs several tasks at once, and each task builds a large hash table in execution memory.',
+    command: 'spark-submit --executor-cores 4 --executor-memory 8g app.py  # the pool is shared by the running tasks',
+    expect: 'Each running task may use at most its fair share of the execution pool. More cores means smaller shares and more spilling.',
+    sim: {
+      kind: 'shares',
+      steps: [
+        { title: 'One task alone', text: 'With a single running task it may use the whole execution pool of 6 units.' },
+        { title: 'Four tasks start', text: 'Four tasks run at once. Each may use at most a quarter of the pool, which is 1.5 units, and must have at least an eighth, 0.75 units, before it waits or spills.' },
+        { title: 'A task asks for more than its share', text: 'Task 3 needs 2 units, but its cap is 1.5. It keeps the 1.5 units and spills the remaining 0.5 units to disk.' },
+        { title: 'Other tasks finish: the shares grow', text: 'Two tasks finish, so only two are running. Each running task may now use up to half the pool, which is 3 units.' },
+        { title: 'Doubling the cores halves the share', text: 'With 8 cores, 8 tasks run at once. Each share shrinks to at most 0.75 units, so the same pool now serves many smaller tasks.' },
+        { title: 'More memory gives each task more room', text: 'With 12 units in the pool and 8 tasks, each may use up to 1.5 units. The same 8 tasks spill nothing, because the extra memory is what they lacked.' }
+      ]
+    },
+    edges: [
+      E('A few tasks are much bigger than the rest', 'The share is fair, not needed.', 'A task with a large key can need more than its share, while small tasks leave their share unused. Only the big task spills.', 'Fix the skew (see the adaptive feature) rather than adding cores, which shrinks everyone share.'),
+      E('More cores, same memory', 'Parallelism costs memory.', 'Doubling cores on the same executor halves each task share. Operations that used to fit now spill.', 'Match cores to memory per task, for example by raising executor memory when you raise cores.')
+    ]
+  };
+
+  ST['memory:5'] = {
+    trigger: 'A job keeps millions of cached objects on the Java heap, and the garbage collector pauses the executor again and again.',
+    command: 'spark-submit --conf spark.memory.offHeap.enabled=true --conf spark.memory.offHeap.size=4g app.py  # off-heap is off by default',
+    expect: 'Data kept off the heap is invisible to the garbage collector, so pauses are shorter. The total memory budget does not change.',
+    sim: {
+      kind: 'heap',
+      steps: [
+        { title: 'Objects on the heap', text: 'Each cached row is a Java object on the heap. The garbage collector must scan those objects every time it runs.' },
+        { title: 'A full collection pauses everything', text: 'When the heap fills, a full collection stops all tasks in the executor. The executor is silent for several seconds at a time.' },
+        { title: 'Move storage off heap', text: 'With spark.memory.offHeap.enabled=true, the cache keeps its bytes outside the heap, in memory the collector never scans.' },
+        { title: 'Execution uses off-heap too', text: 'Sorts and hash tables can also use the off-heap pool. The heap now holds only small objects and pointers.' },
+        { title: 'Pauses shrink', text: 'The heap is small, so collections are quick and frequent but short. The executor keeps working between them.' },
+        { title: 'Off-heap is not free', text: 'The off-heap pool is a separate budget. When it runs out, the work spills as it would on heap, and the container limit still counts the off-heap bytes.' }
+      ]
+    },
+    edges: [
+      E('Off-heap runs out', 'Spill, or a container kill.', 'Off-heap memory counts toward the container limit. Filling it can get the container killed if the overhead room is too small.', 'Size spark.memory.offHeap.size together with the executor memory overhead.'),
+      E('Objects are created outside Spark', 'The collector still scans them.', 'Data built in user code on the heap is not moved off heap, so the pauses remain.', 'Keep large data in DataFrames or the cache, where Spark manages its memory.')
+    ]
+  };
+
   root.SparkStories = ST;
   if (typeof module === 'object' && module.exports) module.exports = ST;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

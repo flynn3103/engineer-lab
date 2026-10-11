@@ -530,7 +530,22 @@
   D -- "no" --> F["Task fails with out-of-memory"]
   C --> G{"Process exceeds container limit?"}
   G -- "yes" --> H["Container killed by OS"]
-  G -- "no" --> I["Continue"]` }] }
+  G -- "no" --> I["Continue"]` }] },
+      { title: 'UC-03 · Cache and execution share one pool', intro: 'Cached data and running work draw from the same unified pool. Each can borrow the other free space, but cache can only be evicted down to a protected share.', diagrams: [{ kind: FLOW, title: 'Who can evict whom', src: `flowchart TD
+  P["Unified pool"] --> S["Storage: cached blocks"]
+  P --> E["Execution: sorts, joins, aggregations"]
+  E -- "may evict cache above the protected share" --> S
+  S -. "cannot evict running execution" .-> E` }] },
+      { title: 'UC-04 · Each running task gets a share of execution memory', intro: 'The execution pool is split among the tasks that are running. A task may use at most its share, so adding cores lowers the share each task gets.', diagrams: [{ kind: FLOW, title: 'Bounds per task', src: `flowchart LR
+  P["Execution pool"] --> N["N running tasks"]
+  N --> C["Each task: up to pool / N"]
+  N --> F["Each task: at least pool / (2N) before it waits or spills"]` }] },
+      { title: 'UC-05 · Off-heap memory and the garbage collector', intro: 'Data kept on the Java heap is scanned by the garbage collector. Off-heap storage and execution memory stay outside the heap, so the collector has less to scan and pauses are shorter.', diagrams: [{ kind: STATE, title: 'Where cached bytes live', src: `stateDiagram-v2
+  [*] --> OnHeap
+  OnHeap --> GCScanned: heap fills
+  GCScanned --> OnHeap: full collection pauses everything
+  OnHeap --> OffHeap: spark.memory.offHeap.enabled = true
+  OffHeap --> [*]: not scanned by the collector` }] }
     ],
     hard: { title: 'What happens to the answer when memory runs out?', body: 'Shrink the grant and watch runs spill and merge back to the same total.' }
   };

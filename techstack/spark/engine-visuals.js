@@ -421,12 +421,54 @@
     return `blocks: ${fmt(blocks)} · average block ${kb.toFixed(1)} KB`;
   }
 
+  /* memory:3 · one unified pool as a segmented bar. The dashed line is storage's protected share; spills and refusals are marked. */
+  function paintPool(stage, sim, k) {
+    const v = sim.steps[k].v, P = v.pool, pct = x => x / P * 100, free = P - v.storage - v.exec;
+    const protectedAt = pct(P / 2);
+    stage.innerHTML = `<div class="vz-pool">
+        <div class="vz-ptrack">
+          <span class="vz-pst" style="width:${pct(v.storage)}%"><em>cache ${v.storage}</em></span>
+          <span class="vz-pex" style="width:${pct(v.exec)}%"><em>execution ${v.exec}</em></span>
+          <span class="vz-pfree" style="width:${pct(free)}%"><em>free ${free}</em></span>
+          <span class="vz-pprot" style="left:${protectedAt}%"><em>protected 5</em></span>
+        </div>
+        <div class="vz-scale"><span>0</span><span>5</span><span>10 units</span></div>
+      </div>
+      <div class="vz-row">${v.asked ? `<span class="vz-chip warn">sort asks for ${v.asked} more</span>` : ''}${v.spill ? `<span class="vz-chip warn">spills ${v.spill} to disk</span>` : ''}${v.refused ? `<span class="vz-chip bad">cache refused ${v.refused}: not stored</span>` : ''}</div>`;
+    return `cache ${v.storage} · execution ${v.exec} · free ${free} of ${P}`;
+  }
+
+  /* memory:4 · one column per running task. The bar is what it uses; the solid line is its cap (pool / N), the dashed line its floor (pool / 2N). */
+  function paintShares(stage, sim, k) {
+    const v = sim.steps[k].v, P = v.pool, H = 180, cap = P / v.n, floor = P / (2 * v.n), y = x => H - x / P * H;
+    const cols = v.tasks.map(t => `<div class="vz-share"><div class="vz-scol"><span class="vz-sbar" style="height:${t.use / P * 100}%"></span>${t.spill ? `<span class="vz-sspill" style="height:${t.spill / P * 100}%"></span>` : ''}</div><b>${t.id}</b><small>${t.use} units${t.spill ? ' · spills ' + t.spill : ''}</small></div>`).join('');
+    stage.innerHTML = `<div class="vz-shares" style="--cap:${y(cap)}px;--floor:${y(floor)}px;height:${H + 40}px">
+        <div class="vz-capline" style="bottom:${100 * cap / P}%"><em>cap ${cap} units</em></div>
+        <div class="vz-floorline" style="bottom:${100 * floor / P}%"><em>floor ${floor} units</em></div>
+        ${cols}</div>`;
+    return `running tasks: ${v.n} · cap per task ${cap} units`;
+  }
+
+  /* memory:5 · two stacked bars, heap and off-heap, and the GC pause meter. The full collection is marked when it happens. */
+  function paintHeap(stage, sim, k) {
+    const v = sim.steps[k].v, MAX = 8, pct = x => x / MAX * 100;
+    const bar = (label, val, max, cls) => `<div class="vz-hrow"><span class="vz-lab">${label}</span><div class="vz-track big"><span class="${cls}" style="width:${val / max * 100}%"></span></div><small class="vz-num">${val} / ${max} GB</small></div>`;
+    const pause = v.pause > 2 ? 'bad' : v.pause > 0 ? 'warn' : 'good';
+    stage.innerHTML = `<div class="vz-heapbox">
+        ${bar('java heap', v.heap, v.heapMax, 'f1')}
+        ${bar('off-heap', v.off, v.offMax, 'f0')}
+        <div class="vz-hrow"><span class="vz-lab">gc pause</span><div class="vz-track big"><span class="${pause === 'bad' ? 'f2' : 'f1'}" style="width:${Math.min(100, v.pause / 8 * 100)}%"></span></div><small class="vz-num">${v.pause} s</small></div>
+      </div>
+      <div class="vz-row">${v.full ? '<span class="vz-chip good">only short collections left</span>' : ''}${v.pause > 2 ? '<span class="vz-chip bad">every task is paused</span>' : ''}${v.off >= v.offMax ? '<span class="vz-chip bad">off-heap full: spills, counts toward the container limit</span>' : ''}</div>`;
+    return `heap ${v.heap} GB · off-heap ${v.off} GB · pause ${v.pause} s`;
+  }
+
   const PAINT = {
     ticks: paintTicks, kanban: paintKanban, stacked: paintStacked, lanes: paintLanes,
     sawtooth: paintSawtooth, bullet: paintBullet, heatmap: paintHeat, strip: paintStrip,
     ledger: paintLedger, filetree: paintFileTree, flow: paintFlow, waterfall: paintWaterfall,
     fanout: paintFanout, scatter: paintScatter, histogram: paintHistogram, donut: paintDonut,
-    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores, paths: paintPaths, routes: paintRoutes, explode: paintExplode
+    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores, paths: paintPaths, routes: paintRoutes, explode: paintExplode, pool: paintPool, shares: paintShares, heap: paintHeap
   };
 
   /* Attach each picture to its use case. Narration (title, text) stays in engine-stories.js. */
@@ -586,7 +628,28 @@
       { rows: true, parts: true, shuf: true },
       { rows: true, parts: true, shuf: true, lost: 1 },
       { rows: true, parts: true, lost: 1, replayed: true, pub: true },
-      { rows: true, parts: true, lost: 1, replayed: true, pub: true, alt: true }] }
+      { rows: true, parts: true, lost: 1, replayed: true, pub: true, alt: true }] },
+    'memory:3': { kind: 'pool', steps: [
+      { storage: 0, exec: 0, pool: 10 },
+      { storage: 6, exec: 0, pool: 10 },
+      { storage: 6, exec: 4, pool: 10, asked: 2 },
+      { storage: 5, exec: 5, pool: 10, spill: 1 },
+      { storage: 5, exec: 5, pool: 10, refused: 3 },
+      { storage: 5, exec: 0, pool: 10 }] },
+    'memory:4': { kind: 'shares', steps: [
+      { pool: 6, n: 1, tasks: [{ id: 'T1', use: 6, spill: 0 }] },
+      { pool: 6, n: 4, tasks: [{ id: 'T1', use: 1.5, spill: 0 }, { id: 'T2', use: 1.5, spill: 0 }, { id: 'T3', use: 1.5, spill: 0 }, { id: 'T4', use: 1.5, spill: 0 }] },
+      { pool: 6, n: 4, tasks: [{ id: 'T1', use: 1.5, spill: 0 }, { id: 'T2', use: 1.5, spill: 0 }, { id: 'T3', use: 1.5, spill: 0.5, need: 2 }, { id: 'T4', use: 1.5, spill: 0 }] },
+      { pool: 6, n: 2, tasks: [{ id: 'T3', use: 3, spill: 0 }, { id: 'T4', use: 3, spill: 0 }] },
+      { pool: 6, n: 8, tasks: [{ id: 'T1', use: 0.75, spill: 0 }, { id: 'T2', use: 0.75, spill: 0 }, { id: 'T3', use: 0.75, spill: 0 }, { id: 'T4', use: 0.75, spill: 0 }, { id: 'T5', use: 0.75, spill: 0 }, { id: 'T6', use: 0.75, spill: 0 }, { id: 'T7', use: 0.75, spill: 0 }, { id: 'T8', use: 0.75, spill: 0 }] },
+      { pool: 12, n: 8, tasks: [{ id: 'T1', use: 1.5, spill: 0 }, { id: 'T2', use: 1.5, spill: 0 }, { id: 'T3', use: 1.5, spill: 0 }, { id: 'T4', use: 1.5, spill: 0 }, { id: 'T5', use: 1.5, spill: 0 }, { id: 'T6', use: 1.5, spill: 0 }, { id: 'T7', use: 1.5, spill: 0 }, { id: 'T8', use: 1.5, spill: 0 }] }] },
+    'memory:5': { kind: 'heap', steps: [
+      { heap: 8, off: 0, heapMax: 8, offMax: 6, pause: 0 },
+      { heap: 8, off: 0, heapMax: 8, offMax: 6, pause: 8 },
+      { heap: 3, off: 5, heapMax: 8, offMax: 6, pause: 1 },
+      { heap: 2, off: 6, heapMax: 8, offMax: 6, pause: 1 },
+      { heap: 2, off: 6, heapMax: 8, offMax: 6, pause: 0.4 },
+      { heap: 2, off: 6, heapMax: 8, offMax: 6, pause: 0.4, full: true }] },
   };
   const SD = root.SparkSystemDesign || (typeof require === "function" ? require("./engine-sysdesign.js") : null);
   for (const [key, spec] of Object.entries(DATA)) {
