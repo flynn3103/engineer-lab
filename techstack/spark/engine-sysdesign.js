@@ -475,7 +475,22 @@
     R->>B: range 3 of map 1
     B-->>R: bytes
   end
-  R->>R: merge partial sums by key` }] }
+  R->>R: merge partial sums by key` }] },
+      { title: 'UC-03 · Few reducers: skip the sort', intro: 'With few reducers and no map-side combine, a map task can write one small file per reducer and join them. With many reducers, sorting into one file is cheaper.', diagrams: [{ kind: FLOW, title: 'Choosing the write path', src: `flowchart TD
+  A["Map task with R reducers"] --> B{"R at most 200, and no map-side combine?"}
+  B -- "yes" --> C["Bypass: one temp file per reducer"]
+  C --> D["Concatenate into one data file + index"]
+  B -- "no" --> E["Sort records by reducer id, spill if needed"]
+  E --> F["Merge into one data file + index"]` }] },
+      { title: 'UC-04 · Read local ranges from disk', intro: 'A reducer does not always need the network. Ranges written on its own executor, or on its own host, can be read straight from disk.', diagrams: [{ kind: FLOW, title: 'Where each range is read from', src: `flowchart LR
+  R["Reduce task"] --> L["same executor: read the local file"]
+  R --> H["same host: read the other executor's file from disk"]
+  R --> N["other host: fetch over the network, within the cap"]` }] },
+      { title: 'UC-05 · Block count grows as maps times reducers', intro: 'Each map writes one range per reducer, and each reducer fetches from every map. The number of blocks is the product, so it can grow very fast.', diagrams: [{ kind: FLOW, title: 'Where the blocks come from', src: `flowchart LR
+  M["2,000 map tasks"] --> B["blocks = maps x reducers"]
+  R["2,000 reduce tasks"] --> B
+  B --> Q["4,000,000 fetches"]
+  Q --> F["Fix: fewer reducers, or merge them at run time"]` }] }
     ],
     hard: { title: 'How do partial sums from different executors meet?', body: 'Watch indexed ranges, map-side combine and fetch limits. Change reducer count to see blocks multiply.' }
   };

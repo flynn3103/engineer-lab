@@ -382,12 +382,51 @@
     return `tasks running: ${v.tasks.filter(t => t.s !== 'wait').length} · free cores: ${owner.filter(x => !x).length}`;
   }
 
+  /* shuffle:3 · write path: the checks, then either temp files per reducer or one sorted run, then the output and open-file count. */
+  function paintPaths(stage, sim, k) {
+    const v = sim.steps[k].v, shown = Math.min(v.tmp, 8);
+    const checks = v.checks ? `<div class="vz-row">${v.checks.map(([t, ok]) => `<span class="vz-chip ${ok ? 'good' : 'warn'}">${esc(t)}</span>`).join('')}</div>` : '';
+    const tmps = Array.from({ length: shown }, (_, i) => `<span class="vz-tmp">r${i}.tmp</span>`).join('') + (v.tmp > shown ? `<span class="vz-chip">+${v.tmp - shown} more</span>` : '');
+    const tmpRow = v.tmp ? `<div class="vz-hrow"><span class="vz-lab">temp files</span><div class="vz-tmps">${tmps}</div></div>` : '';
+    const sortRow = v.sorted ? `<div class="vz-hrow"><span class="vz-lab">sorted run</span><div class="vz-hbar"><span class="vz-seg r0" style="width:100%">records sorted by reducer id</span></div></div>` : '';
+    const out = v.data ? `<div class="vz-row"><span class="vz-lab">output</span><span class="vz-file">data file</span>${v.index ? '<span class="vz-file">index file</span>' : ''}${v.merged ? '<small class="vz-empty">segments joined end to end</small>' : ''}</div>` : '';
+    const open = v.open != null ? `<div class="vz-row"><span class="vz-lab">files open at once</span><span class="vz-chip ${v.open > 200 ? 'bad' : 'good'}">${v.open}</span></div>` : '';
+    stage.innerHTML = `${checks}${tmpRow}${sortRow}${out}${open}`;
+    return v.path ? `write path: ${v.path} · reducers: ${v.R}` : `reducers: ${v.R} · path not chosen yet`;
+  }
+
+  /* shuffle:4 · where each range is read from: same executor, same host, other host. Only the last group uses the network. */
+  function paintRoutes(stage, sim, k) {
+    const v = sim.steps[k].v, label = { wait: 'waiting', disk: 'read from disk', net: 'over the network', done: 'done' };
+    const group = (title, sub, states) => `<div class="vz-route"><b>${title}</b><small>${sub}</small>${states.map((s, i) => `<div class="vz-block ${s}"><span>range ${i + 1}</span><small>${label[s]}</small></div>`).join('')}</div>`;
+    const net = v.R.filter(s => s === 'net' || s === 'done').length, disk = [...v.L, ...v.H].filter(s => s === 'disk' || s === 'done').length;
+    stage.innerHTML = `<div class="vz-routes">${group('same executor', 'no socket', v.L)}${group('same host', 'another executor, same machine', v.H)}${group('other host', 'crosses the network', v.R)}</div>
+      <div class="vz-row"><span class="vz-chip">from disk: ${disk}</span><span class="vz-chip">over network: ${net}</span>${v.cap ? '<span class="vz-chip warn">network cap: 2 requests in flight</span>' : ''}</div>`;
+    return `from disk: ${disk} of 5 local · over network: ${net} of 3`;
+  }
+
+  /* shuffle:5 · blocks explode as maps times reducers. Bars show the totals; the last row shows the size of each block. */
+  function paintExplode(stage, sim, k) {
+    const v = sim.steps[k].v, blocks = v.M * v.R, MAX = 4e6, kb = 8e6 / blocks, fmt = n => n.toLocaleString('en-US');
+    const row = (label, val, pct, cls) => `<div class="vz-hrow"><span class="vz-lab">${label}</span><div class="vz-track big"><span class="${cls}" style="width:${Math.min(100, pct)}%"></span></div><small class="vz-num">${val}</small></div>`;
+    const plan = v.planned ? `<div class="vz-note good">planned ${fmt(v.planned)} reduce partitions, merged at run time to ${fmt(v.R)}</div>` : '';
+    const note = v.note ? `<div class="vz-note">${esc(v.note)}</div>` : '';
+    stage.innerHTML = `<div class="vz-explode">
+        ${row('map outputs', fmt(v.M), v.M / 4000 * 100, 'f0')}
+        ${row('reduce tasks', fmt(v.R), v.R / 4000 * 100, 'f1')}
+        ${row('blocks = M × R', fmt(blocks), blocks / MAX * 100, 'f2')}
+        ${row('fetches per reducer', fmt(v.M), v.M / 4000 * 100, 'f0')}
+        <div class="vz-row"><span class="vz-lab">average block</span><span class="vz-chip ${kb < 100 ? 'bad' : 'good'}">${kb.toFixed(1)} KB</span></div>
+      </div>${plan}${note}`;
+    return `blocks: ${fmt(blocks)} · average block ${kb.toFixed(1)} KB`;
+  }
+
   const PAINT = {
     ticks: paintTicks, kanban: paintKanban, stacked: paintStacked, lanes: paintLanes,
     sawtooth: paintSawtooth, bullet: paintBullet, heatmap: paintHeat, strip: paintStrip,
     ledger: paintLedger, filetree: paintFileTree, flow: paintFlow, waterfall: paintWaterfall,
     fanout: paintFanout, scatter: paintScatter, histogram: paintHistogram, donut: paintDonut,
-    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores
+    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores, paths: paintPaths, routes: paintRoutes, explode: paintExplode
   };
 
   /* Attach each picture to its use case. Narration (title, text) stays in engine-stories.js. */
@@ -438,6 +477,27 @@
       { known: true, lanes: [{ h: 'A', p: 100, s: 'done' }, { h: 'B', p: 100, s: 'done' }, { h: 'C', p: 60, s: 'fetch' }], inflight: 1 },
       { known: true, lanes: [{ h: 'A', p: 100, s: 'done' }, { h: 'B', p: 100, s: 'done' }, { h: 'C', p: 100, s: 'done' }], inflight: 0, merge: [['A', 2], ['B', 1], ['C', 4]] },
       { known: true, lanes: [{ h: 'A', p: 100, s: 'done' }, { h: 'B', p: 100, s: 'done' }, { h: 'C', p: 100, s: 'done' }], inflight: 0, freed: true }] },
+    'shuffle:3': { kind: 'paths', steps: [
+      { R: 8, path: null, checks: [['8 reducers ≤ 200', true], ['no map-side combine', true]], tmp: 0 },
+      { R: 8, path: 'bypass', checks: [['8 reducers ≤ 200', true], ['no map-side combine', true]], tmp: 8, open: 8 },
+      { R: 8, path: 'bypass', checks: [['8 reducers ≤ 200', true], ['no map-side combine', true]], tmp: 8, merged: true, open: 8 },
+      { R: 8, path: 'bypass', checks: [['8 reducers ≤ 200', true], ['no map-side combine', true]], tmp: 0, data: true, index: true, open: 0 },
+      { R: 1000, path: 'sort', checks: [['1000 reducers > 200', false], ['sort path', true]], tmp: 0, sorted: true, open: 1 },
+      { R: 1000, path: 'sort', checks: [['1000 reducers > 200', false], ['sort path', true]], tmp: 0, sorted: true, data: true, index: true, open: 1 }] },
+    'shuffle:4': { kind: 'routes', steps: [
+      { L: ['wait', 'wait'], H: ['wait'], R: ['wait', 'wait', 'wait'] },
+      { L: ['wait', 'wait'], H: ['wait'], R: ['wait', 'wait', 'wait'] },
+      { L: ['disk', 'disk'], H: ['wait'], R: ['wait', 'wait', 'wait'] },
+      { L: ['disk', 'disk'], H: ['disk'], R: ['wait', 'wait', 'wait'] },
+      { L: ['disk', 'disk'], H: ['disk'], R: ['net', 'net', 'wait'], cap: true },
+      { L: ['done', 'done'], H: ['done'], R: ['done', 'done', 'done'] }] },
+    'shuffle:5': { kind: 'explode', steps: [
+      { M: 2000, R: 2000 },
+      { M: 2000, R: 2000, note: 'each map output has 2000 ranges, one per reducer' },
+      { M: 2000, R: 2000, note: 'each reducer makes 2000 fetches, one per map' },
+      { M: 2000, R: 2000, note: 'every request costs a round trip and a seek, even for a 2 KB range' },
+      { M: 2000, R: 200 },
+      { M: 2000, R: 200, planned: 2000 }] },
     'memory:1': { kind: 'sawtooth', steps: [
       { used: 0, runs: 0, ask: 64 }, { used: 64, runs: 0 }, { used: 128, runs: 0, refused: true },
       { used: 0, runs: 1 }, { used: 64, runs: 1 }, { used: 0, runs: 2, merge: true }, { used: 0, runs: 2, merge: true, same: true }] },

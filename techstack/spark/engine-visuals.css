@@ -237,3 +237,24 @@
 .vz-core.run{background:var(--p2)}
 .vz-core.free{border-style:dashed;background:transparent;color:var(--mut)}
 @media (max-width:760px){.vz-budget{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* UC: shuffle:3 write paths, shuffle:4 routes, shuffle:5 block explosion */
+.vz-tmps{display:flex;gap:6px;flex-wrap:wrap}
+.vz-tmp{font:600 11.5px var(--mono);color:var(--ink);background:var(--p4);border:1.5px dashed var(--ink);border-radius:6px;padding:2px 8px}
+.vz-routes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.vz-route{display:grid;gap:6px;align-content:start;background:var(--card);border:var(--ink-line);border-radius:14px;padding:12px;box-shadow:var(--shadow);min-width:0}
+.vz-route b{font:700 12.5px var(--mono);color:var(--ink)}
+.vz-route>small{font:600 11px var(--mono);color:var(--mut)}
+.vz-block{display:grid;gap:2px;border:var(--ink-line);border-radius:10px;padding:6px 8px;background:var(--soft);transition:background .3s}
+.vz-block span{font:700 12px var(--mono);color:var(--ink)}
+.vz-block small{font:600 10.5px var(--mono);color:var(--mut)}
+.vz-block.disk{background:var(--p2)}
+.vz-block.net{background:var(--p1)}
+.vz-block.done{background:var(--p0)}
+.vz-explode{display:grid;gap:10px;background:var(--card);border:var(--ink-line);border-radius:14px;padding:14px;box-shadow:var(--shadow)}
+.vz-explode .vz-lab{min-width:150px}
+.vz-track span.f0{background:var(--p0)}
+.vz-track span.f1{background:var(--p1)}
+.vz-track span.f2{background:var(--p5)}
+.vz-num{font:700 12px var(--mono);color:var(--ink);min-width:90px;text-align:right}
+@media (max-width:760px){.vz-routes{grid-template-columns:1fr}}

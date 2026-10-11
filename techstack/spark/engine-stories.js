@@ -668,6 +668,69 @@
   };
 
   /* ---------- 07 Memory ---------- */
+  ST['shuffle:3'] = {
+    trigger: 'A map task has 8 reduce partitions to write, and its records are not combined on the map side.',
+    command: 'spark-submit --conf spark.shuffle.sort.bypassMergeThreshold=200 app.py  # 200 is the default',
+    expect: 'The output is identical either way. Bypass is only used when the reducer count is at most the threshold and no map-side combine is needed.',
+    sim: {
+      kind: 'paths',
+      steps: [
+        { title: 'Check the conditions', text: 'The map task has 8 reducers, which is at most 200, and no map-side combine is needed. The bypass path is allowed.' },
+        { title: 'One temp file per reducer', text: 'Each reducer gets its own temporary file. Each record is appended to the file of the reducer it belongs to. No sorting is needed.' },
+        { title: 'Concatenate into one file', text: 'When the task finishes, the 8 temporary files are joined end to end into one data file. The start offset of each part is recorded as it goes.' },
+        { title: 'Write the index and report', text: 'An index file records where each reducer segment starts. The temporary files are deleted, and the output is registered with the driver as before.' },
+        { title: 'Many reducers: the sort path', text: 'With 1000 reducers the bypass path is not used. The task sorts its records by reducer id, spills if needed, and merges them into one data file.' },
+        { title: 'Why the threshold exists', text: 'Bypass keeps one file open per reducer at the same time. Past the threshold, 1000 open files cost more than the sort saves, so the sort path wins.' }
+      ]
+    },
+    edges: [
+      E('The reduce needs a map-side combine', 'Bypass cannot combine, so it is not used.', 'reduceByKey adds up values per key on the map side. The bypass path writes records without combining them, so it would lose that saving.', 'Spark checks whether a combine is needed before it checks the reducer count.'),
+      E('Very many reducers', 'Too many open files at once.', 'Bypass opens one file per reducer at the same time. With thousands of reducers, that exhausts the open-file limit.', 'Above the threshold the sort path writes one sorted file, so only one file is open at a time.')
+    ]
+  };
+
+  ST['shuffle:4'] = {
+    trigger: 'A reduce task needs one range from each map output, and the outputs are on the same executor, the same host or another host.',
+    command: 'spark-submit --conf spark.shuffle.readHostLocalDisk=true app.py  # true is the default',
+    expect: 'Only ranges from other hosts use the network. The in-flight cap applies to those, and local ranges are read straight from disk.',
+    sim: {
+      kind: 'routes',
+      steps: [
+        { title: 'Ask the driver for locations', text: 'The reducer asks the driver where each map output lives. Every answer names an executor and a host, so the reducer can group the ranges by where they are.' },
+        { title: 'Group the ranges by location', text: 'Two ranges are on the reducer\'s own executor, one is on another executor on the same host, and three are on a different host.' },
+        { title: 'Local ranges are read from disk', text: 'The two ranges on the same executor are read from its local files. No socket is opened, and no bytes cross the network.' },
+        { title: 'Same-host ranges read the disk directly', text: 'The range on the other executor sits on the same machine. The reducer reads that file from the local disk too, so it skips the network.' },
+        { title: 'Remote ranges go over the network', text: 'The three ranges on the other host use the network, within the cap. Only two requests are in the air at a time.' },
+        { title: 'Merge all six ranges', text: 'All ranges are in. The reducer merges the partial sums, and the result is the same as if every range had come over the network.' }
+      ]
+    },
+    edges: [
+      E('The local file is gone', 'The local read fails.', 'The file was deleted, or the host lost its disk after the map task finished.', 'The reader reports a fetch failure, and the driver reruns that map task, just as in the fetch-failure case above.'),
+      E('A host with many executors', 'Many local reads at the same time.', 'Lots of local reads on one machine can saturate its disk, even though none of them uses the network.', 'Spread the reducers across hosts, or raise disk bandwidth; the cap still bounds the remote part.')
+    ]
+  };
+
+  ST['shuffle:5'] = {
+    trigger: 'A stage has 2000 map tasks and 2000 reduce tasks, and each map writes a range for every reducer.',
+    command: 'spark.conf.set("spark.sql.adaptive.enabled", "true")  # AQE is on by default since Spark 3.2',
+    expect: 'The block count is maps times reducers. Fewer or larger ranges cut the number of requests, which is what slows the reducers down.',
+    sim: {
+      kind: 'explode',
+      steps: [
+        { title: 'Count the maps and reducers', text: 'The stage has 2000 map tasks and 2000 reduce tasks. Each map output holds one range per reducer, so the blocks multiply: 2000 times 2000 is 4 million.' },
+        { title: 'Every map writes a range per reducer', text: 'One map output is 2000 small ranges, each only a few kilobytes. Writing them is cheap, but the index now has 2000 entries per map.' },
+        { title: 'Every reducer asks every map', text: 'Each reducer needs one range from each of the 2000 maps, so it makes 2000 separate fetches. Across all reducers that is 4 million requests.' },
+        { title: 'Small reads are dominated by overhead', text: 'Each request costs a round trip and a disk seek, however small the range. With 2 KB ranges, the overhead costs more than the bytes themselves.' },
+        { title: 'Use fewer reduce partitions', text: 'With 200 reducers there are 400,000 blocks. Each range is ten times bigger, and each reducer still fetches from 2000 maps.' },
+        { title: 'Let the engine merge small partitions', text: 'Adaptive query execution can plan 2000 reduce partitions and merge small neighbours at run time, down to 200 here. The blocks drop to the same 400,000.' }
+      ]
+    },
+    edges: [
+      E('Many tiny blocks', 'Overhead dominates the work.', 'A round trip and a seek cost about the same for 2 KB as for 2 MB. Millions of tiny blocks make the reducers wait on requests.', 'Use fewer partitions, so each block is larger.'),
+      E('The reducer count is fixed at planning time', 'The plan can be too fine.', 'The reducer count is chosen before the data sizes are known, and it is often too high for a small shuffle.', 'Adaptive execution merges small neighbours after the map stage, as in the last step.')
+    ]
+  };
+
   ST['memory:1'] = {
     trigger: 'A task is building a big table in memory, for example counting words, and it keeps growing.',
     sim: {
