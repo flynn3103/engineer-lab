@@ -269,7 +269,7 @@
 .vz-pfree{background:var(--card)}
 .vz-pprot{position:absolute;top:-16px;bottom:0;width:0;border-left:1.5px dashed var(--ink);transition:left .4s}
 .vz-pprot em{position:absolute;top:-2px;left:6px;font:700 11px var(--mono);color:var(--ink);white-space:nowrap}
-.vz-shares{position:relative;display:flex;align-items:flex-end;gap:12px;padding:14px 14px 0;background:var(--card);border:var(--ink-line);border-radius:14px;box-shadow:var(--shadow);height:220px;overflow:hidden}
+.vz-shares{position:relative;display:flex;align-items:flex-end;gap:12px;padding:14px 14px 0 118px;background:var(--card);border:var(--ink-line);border-radius:14px;box-shadow:var(--shadow);height:220px;overflow:hidden}
 .vz-share{flex:1;min-width:0;display:grid;gap:6px;justify-items:center;align-self:stretch;align-content:end}
 .vz-scol{position:relative;width:100%;max-width:70px;height:170px;border:var(--ink-line);border-radius:10px 10px 0 0;background:var(--soft);display:flex;align-items:flex-end;overflow:hidden}
 .vz-sbar{display:block;width:100%;background:var(--p0);transition:height .4s}
@@ -279,7 +279,7 @@
 .vz-capline,.vz-floorline{position:absolute;left:0;right:0;border-top:1.5px solid var(--ink);pointer-events:none}
 .vz-capline{border-top-style:solid}
 .vz-floorline{border-top-style:dashed}
-.vz-capline em,.vz-floorline em{position:absolute;right:8px;top:-17px;font:700 10.5px var(--mono);font-style:normal;color:var(--ink);background:var(--card);padding:0 4px;border-radius:4px}
+.vz-capline em,.vz-floorline em{position:absolute;left:6px;top:-9px;font:700 10.5px var(--mono);font-style:normal;color:var(--ink);background:var(--card);padding:0 4px;border-radius:4px}
 .vz-heapbox{display:grid;gap:10px;background:var(--card);border:var(--ink-line);border-radius:14px;padding:14px;box-shadow:var(--shadow)}
 
 /* UC: recovery:3 backoff, recovery:4 exclude, recovery:5 service */

@@ -671,11 +671,11 @@
 
   /* evidence:5 · a box plot of task durations. The box is the middle half; the whiskers reach the min and max; dots are outliers. */
   function paintBox(stage, sim, k) {
-    const v = sim.steps[k].v, W = 560, H = 150, L = 40, R = 20, MAX = 260;
-    const X = s => L + s / MAX * (W - L - R), cy = 70;
+    const v = sim.steps[k].v, W = 560, H = 150, L = 40, R = 20;
     if (!v.stats) { stage.innerHTML = `<p class="vz-empty">select a stage to see its task durations</p>`; return 'no stage selected'; }
-    const s = v.stats, boxW = X(s.q3) - X(s.q1);
-    const ticks = [0, 60, 120, 180, 240].map(t => `<text class="vz-tick" x="${X(t)}" y="${H - 6}" text-anchor="middle">${t}s</text>`).join('');
+    const s = v.stats, MAX = Math.ceil(s.max * 1.15 / 10) * 10, step = Math.ceil(MAX / 4 / 5) * 5;
+    const X = t => L + t / MAX * (W - L - R), cy = 70, boxW = X(s.q3) - X(s.q1);
+    const ticks = [0, 1, 2, 3, 4].map(i => i * step).filter(t => t <= MAX).map(t => `<text class="vz-tick" x="${X(t)}" y="${H - 6}" text-anchor="middle">${t}s</text>`).join('');
     const out = (v.outliers || []).map(o => `<circle class="vz-dot hot" cx="${X(o)}" cy="${cy}" r="6"/>`).join('');
     const body = `<line class="vz-grid" x1="${L}" x2="${W - R}" y1="${cy}" y2="${cy}"/>
       <line class="vz-line" x1="${X(s.min)}" x2="${X(s.q1)}" y1="${cy}" y2="${cy}"/>
@@ -716,13 +716,13 @@
 
   /* build:4 · three option sets, one small bar per counter. The highlighted counter is the one under discussion. */
   const RUNS = [
-    { name: 'small memory, speculation off', total: 640, spill: 3, attempts: 12, time: 14 },
-    { name: 'large memory, speculation off', total: 640, spill: 0, attempts: 10, time: 10 },
-    { name: 'large memory, speculation on', total: 640, spill: 0, attempts: 13, time: 11 }
+    { name: 'small memory, speculation off', short: 'small, no spec', total: 640, spill: 3, attempts: 12, time: 14 },
+    { name: 'large memory, speculation off', short: 'large, no spec', total: 640, spill: 0, attempts: 10, time: 10 },
+    { name: 'large memory, speculation on', short: 'large, spec', total: 640, spill: 0, attempts: 13, time: 11 }
   ];
   function paintMultiples(stage, sim, k) {
     const v = sim.steps[k].v, metrics = [['total', 'answer', 640], ['spill', 'spilled', 4], ['attempts', 'attempts', 14], ['time', 'time (s)', 16]];
-    const panels = metrics.map(([key, title, max]) => `<div class="vz-mp${v.focus === key ? ' focus' : ''}"><b>${title}</b>${RUNS.map(r => `<div class="vz-mrow"><span>${r.name.split(',')[0]}</span><div class="vz-track"><span style="width:${r[key] / max * 100}%"></span></div><small>${r[key]}</small></div>`).join('')}</div>`).join('');
+    const panels = metrics.map(([key, title, max]) => `<div class="vz-mp${v.focus === key ? ' focus' : ''}"><b>${title}</b>${RUNS.map(r => `<div class="vz-mrow"><span>${r.short}</span><div class="vz-track"><span style="width:${r[key] / max * 100}%"></span></div><small>${r[key]}</small></div>`).join('')}</div>`).join('');
     stage.innerHTML = `<div class="vz-multiples">${panels}</div>${v.note ? `<div class="vz-note good">${esc(v.note)}</div>` : ''}`;
     return v.focus ? `focus: ${v.focus} · time: ${RUNS.map(r => r.time).join(' / ')} s` : 'three option sets, not yet compared';
   }
