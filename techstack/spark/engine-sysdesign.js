@@ -795,7 +795,19 @@
   B -- "left" --> C["Split left into N ranges"]
   C --> D["Copy matching right partition N times"]
   B -- "right" --> E["Mirror the same plan"]
-  B -- "aggregation" --> F["Salt key, partial aggregate, then combine"]` }] }
+  B -- "aggregation" --> F["Salt key, partial aggregate, then combine"]` }] },
+      { title: 'UC-03 · Switch a shuffle join to broadcast at run time', intro: 'The plan is chosen from estimates made before the job runs. After one side finishes its map stage, its real size is known. If it is below the broadcast threshold, the join is switched to a broadcast join.', diagrams: [{ kind: FLOW, title: 'Runtime join choice', src: `flowchart TD
+  E["Estimate says 200 MB, so shuffle join"] --> R["Run the first side's map stage"]
+  R --> M["Measure real size: 6 MB"]
+  M --> T{"Below autoBroadcastJoinThreshold (10 MB)?"}
+  T -- "yes" --> B["Switch to broadcast join: the other side is not shuffled"]
+  T -- "no" --> S["Keep the shuffle join"]` }] },
+      { title: 'UC-04 · Read local shuffle blocks without the network', intro: 'After a shuffle, some blocks sit on the executor that will read them. The adaptive local shuffle reader reads those from local disk, and only the remaining blocks use the network.', diagrams: [{ kind: FLOW, title: 'Local and remote blocks', src: `flowchart LR
+  P["Shuffle read"] --> Q["Adaptive: check where each block sits"]
+  Q --> L["Blocks on this executor: read local disk"]
+  Q --> N["Blocks on other executors: fetch over the network"]` }] },
+      { title: 'UC-05 · Re-plan after every query stage', intro: 'Adaptive execution cuts the query at each shuffle. After a query stage runs and is measured, the rest of the query is planned again with the real sizes.', diagrams: [{ kind: FLOW, title: 'The re-planning loop', src: `flowchart LR
+  S1["Query stage 1"] --> M1["Measure sizes"] --> P1["Re-plan the rest"] --> S2["Query stage 2"] --> M2["Measure"] --> P2["Re-plan"] --> S3["Query stage 3"]` }] }
     ],
     hard: { title: 'How do you fix a hot key without breaking the answer?', body: 'See coalescing and skew splitting on measured sizes. Check which operations allow valid partial state.' }
   };

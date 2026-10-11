@@ -1362,6 +1362,69 @@
     ]
   };
 
+  ST['adaptive:3'] = {
+    trigger: 'The planner chose a shuffle join from estimates, but after one side finishes its map stage, its real size is small enough to broadcast.',
+    command: 'spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "10MB")  # 10 MB is the default; adaptive execution uses it at run time',
+    expect: 'When the real size of one side is under the threshold, the join becomes a broadcast join, and the other side is never shuffled.',
+    sim: {
+      kind: 'switch',
+      steps: [
+        { title: 'The plan guessed wrong', text: 'Before the job ran, the estimate said the filtered table was 200 MB, so the planner chose a shuffle join for both sides.' },
+        { title: 'The first side runs its shuffle', text: 'The filtered side finishes its map stage. The engine now knows its real size: 6 MB.' },
+        { title: 'Compare the real size with the threshold', text: 'The real size is below the broadcast threshold of 10 MB, so broadcasting this side is cheap.' },
+        { title: 'Switch the join to broadcast', text: 'The engine rewrites the join: the small side is broadcast to every worker, and the big side is read where it is.' },
+        { title: 'The big side is never shuffled', text: 'Because the join is now a broadcast, the other large side is not shuffled at all. That saves a whole exchange.' },
+        { title: 'The answer is the same', text: 'Only the physical join changed. The rows returned are identical to what the shuffle join would have returned.' }
+      ]
+    },
+    edges: [
+      E('The real size is still above the threshold', 'The shuffle join stays.', 'Measured size can be far above the threshold, so the switch does not happen and the planned shuffle join runs as before.', 'Nothing to do; raise the threshold only if the memory on each worker can hold the small side.'),
+      E('Broadcast side is too big for a worker', 'Memory pressure on each worker.', 'A broadcast copy lives in every worker. A threshold set too high can make many workers run short of memory.', 'Keep the threshold near the default unless you have measured the memory headroom.')
+    ]
+  };
+
+  ST['adaptive:4'] = {
+    trigger: 'After a shuffle, some of the blocks a reducer needs are on the same executor, and they could be read without the network.',
+    command: 'spark.conf.set("spark.sql.adaptive.localShuffleReader.enabled", "true")  # true by default',
+    expect: 'Blocks on the reducer own executor are read from its local disk. Only the remaining blocks use the network.',
+    sim: {
+      kind: 'localread',
+      steps: [
+        { title: 'The plan reads every block the same way', text: 'Before adaptive planning, every shuffle block is read through the normal reader, as if all of them were remote.' },
+        { title: 'Check where each block sits', text: 'Once the map outputs are known, the engine sees which blocks are on the executor that runs this reducer.' },
+        { title: 'Local blocks become local reads', text: 'The three blocks on the same executor are read straight from its disk. The plan node is renamed to a local shuffle read.' },
+        { title: 'Remote blocks still use the network', text: 'The other five blocks sit on different executors, so they are fetched over the network as before, under the same cap.' },
+        { title: 'Count what changed', text: 'Of 8 blocks, 3 are now local. That is 3 fewer requests on the network for this reducer.' },
+        { title: 'Same data, less traffic', text: 'The rows are the same. Only the way the blocks reach the reducer changed.' }
+      ]
+    },
+    edges: [
+      E('The reducer runs on a different executor than the blocks', 'Nothing is local.', 'Blocks written by one executor are only local to that executor, so a reducer elsewhere still fetches them all over the network.', 'Nothing to change; the reader falls back to network fetches automatically.'),
+      E('Local disk is slow', 'Local is not always faster.', 'A local read still uses the disk, so a slow disk can make a local read slower than a fast network fetch.', 'Check disk throughput, and keep the reducer executors on machines with healthy disks.')
+    ]
+  };
+
+  ST['adaptive:5'] = {
+    trigger: 'A query has several shuffles, and each stage produces new size information that the rest of the plan can use.',
+    command: 'spark.conf.set("spark.sql.adaptive.enabled", "true")  # on by default since Spark 3.2',
+    expect: 'After each query stage finishes, the engine plans the rest of the query again with the measured sizes. The loop repeats at each stage boundary.',
+    sim: {
+      kind: 'loop',
+      steps: [
+        { title: 'Query stages are cut at exchanges', text: 'Each shuffle becomes a query stage boundary. Nothing after the first boundary is fixed yet.' },
+        { title: 'Run the first query stage', text: 'The first stage runs, and its shuffle output is measured: the size of each partition and the number of rows.' },
+        { title: 'Re-plan the rest', text: 'With the measured sizes, the engine plans everything after this stage again: join type, partition count and skew handling.' },
+        { title: 'Run the next stage with the new plan', text: 'The second stage runs using the new plan, and its output is measured in turn.' },
+        { title: 'Re-plan again if needed', text: 'The loop repeats at each boundary. A later stage can be re-planned from everything measured so far.' },
+        { title: 'The final plan is the one that ran', text: 'The plan that actually executed is the final one, and explain shows it with the changes adaptive execution made.' }
+      ]
+    },
+    edges: [
+      E('A query with no shuffle', 'Nothing to re-plan.', 'Without a shuffle there is no stage boundary, so the query is planned once, as usual.', 'Nothing to do; the plan is already final.'),
+      E('Re-planning on noisy statistics', 'A plan can change for the worse.', 'A tiny sample of a stage can suggest a plan that is wrong for the rest of the data.', 'Compare explain output on a representative run before relying on a specific plan change.')
+    ]
+  };
+
   root.SparkStories = ST;
   if (typeof module === 'object' && module.exports) module.exports = ST;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -603,12 +603,48 @@
     return v.result ? `output rows: ${v.result.length}` : 'no join yet';
   }
 
+  /* adaptive:3 · the join decision on one scale: the estimate, the measured size, and the threshold. The join shown is what the engine chose. */
+  function paintSwitch(stage, sim, k) {
+    const v = sim.steps[k].v, MAX = 250, pct = x => x / MAX * 100;
+    const measured = v.real != null ? `<span class="vz-sw-real" style="width:${pct(v.real)}%"></span>` : '';
+    stage.innerHTML = `<div class="vz-swscale">
+        <div class="vz-swtrack"><span class="vz-swest" style="width:${pct(v.est)}%"></span>${measured}
+          <span class="vz-swthr" style="left:${pct(v.threshold)}%"><em>broadcast threshold 10 MB</em></span></div>
+        <div class="vz-scale"><span>0</span><span>100 MB</span><span>200 MB</span><span>250 MB</span></div>
+        <div class="vz-swkey"><span class="vz-sw-est">estimate ${v.est} MB</span>${v.real != null ? `<span class="vz-sw-real-k">measured ${v.real} MB</span>` : ''}</div>
+      </div>
+      <div class="vz-row"><span class="vz-chip ${v.join === 'broadcast' ? 'good' : 'warn'}">join: ${v.join === 'broadcast' ? 'broadcast hash join' : 'shuffle join'}</span>${v.compare ? '<span class="vz-chip">6 MB is below 10 MB</span>' : ''}${v.saved ? '<span class="vz-chip good">the big side is not shuffled</span>' : ''}</div>`;
+    return `join: ${v.join} · estimate ${v.est} MB${v.real != null ? ' · measured ' + v.real + ' MB' : ''}`;
+  }
+
+  /* adaptive:4 · the eight blocks of one reducer, as tiles. Local blocks are read from disk; the rest travel over the network. */
+  function paintLocalRead(stage, sim, k) {
+    const v = sim.steps[k].v;
+    const label = { net: 'over the network', local: 'read from local disk', wait: 'not yet checked' };
+    const tiles = v.blocks.map((s, i) => `<div class="vz-lblock ${s}"><b>block ${i + 1}</b><small>${label[s]}</small></div>`).join('');
+    const nLocal = v.blocks.filter(s => s === 'local').length, nNet = v.blocks.filter(s => s === 'net').length;
+    stage.innerHTML = `<div class="vz-lblocks">${tiles}</div>
+      <div class="vz-row"><span class="vz-lab">reader</span><span class="vz-chip">executor E1</span>${v.mode === 'normal' ? '<span class="vz-chip warn">normal shuffle reader</span>' : '<span class="vz-chip good">local shuffle reader</span>'}${v.count ? `<span class="vz-chip">${nLocal} local · ${nNet} over the network</span>` : ''}</div>`;
+    return `local: ${nLocal} of 8 · over the network: ${nNet}`;
+  }
+
+  /* adaptive:5 · query stages in a row, with the re-planning cycle under them. The highlighted phase is the current one. */
+  const PHASES = [['run', 'run stage'], ['measure', 'measure sizes'], ['replan', 're-plan the rest']];
+  function paintLoop(stage, sim, k) {
+    const v = sim.steps[k].v, N = 3;
+    const stages = Array.from({ length: N }, (_, i) => `<div class="vz-qstage ${i < v.done ? 'done' : i === v.stage ? 'now' : ''}"><b>query stage ${i + 1}</b><small>${i < v.done ? 'finished' : i === v.stage ? (v.phase === 'final' ? 'final plan' : 'current') : 'not yet planned'}</small></div>`).join('');
+    const cyc = PHASES.map(([key, name]) => `<span class="vz-phase${v.phase === key || (v.phase === 'cut' && key === 'run') ? ' on' : ''}">${name}</span>`).join('<span class="vz-arrow">→</span>');
+    stage.innerHTML = `<div class="vz-qstages">${stages}</div><div class="vz-cycle">${cyc}</div>
+      ${v.phase === 'cut' ? '<div class="vz-note">the query is cut into stages at each exchange</div>' : ''}${v.phase === 'final' ? '<div class="vz-note good">the plan shown by explain is the one that executed</div>' : ''}`;
+    return `finished: ${v.done} of ${N} query stages · phase: ${v.phase}`;
+  }
+
   const PAINT = {
     ticks: paintTicks, kanban: paintKanban, stacked: paintStacked, lanes: paintLanes,
     sawtooth: paintSawtooth, bullet: paintBullet, heatmap: paintHeat, strip: paintStrip,
     ledger: paintLedger, filetree: paintFileTree, flow: paintFlow, waterfall: paintWaterfall,
     fanout: paintFanout, scatter: paintScatter, histogram: paintHistogram, donut: paintDonut,
-    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores, paths: paintPaths, routes: paintRoutes, explode: paintExplode, merge: paintMerge, pairs: paintPairs, venn: paintVenn, rewrite: paintRewrite, expand: paintExpand, swarm: paintSwarm, renames: paintRenames, overwrite: paintOverwrite, backoff: paintBackoff, exclude: paintExclude, service: paintService, pool: paintPool, shares: paintShares, heap: paintHeap
+    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores, paths: paintPaths, routes: paintRoutes, explode: paintExplode, switch: paintSwitch, localread: paintLocalRead, loop: paintLoop, merge: paintMerge, pairs: paintPairs, venn: paintVenn, rewrite: paintRewrite, expand: paintExpand, swarm: paintSwarm, renames: paintRenames, overwrite: paintOverwrite, backoff: paintBackoff, exclude: paintExclude, service: paintService, pool: paintPool, shares: paintShares, heap: paintHeap
   };
 
   /* Attach each picture to its use case. Narration (title, text) stays in engine-stories.js. */
@@ -861,7 +897,28 @@
       { mode: 'left', result: [1, 2, 3, 4, 5] },
       { mode: 'anti', result: [1, 2] },
       { mode: 'full', result: [1, 2, 3, 4, 5, 6, 7] },
-      { mode: 'filter', result: [3, 4, 5] }] }
+      { mode: 'filter', result: [3, 4, 5] }] },
+    'adaptive:3': { kind: 'switch', steps: [
+      { est: 200, real: null, threshold: 10, join: 'shuffle' },
+      { est: 200, real: 6, threshold: 10, join: 'shuffle' },
+      { est: 200, real: 6, threshold: 10, join: 'shuffle', compare: true },
+      { est: 200, real: 6, threshold: 10, join: 'broadcast' },
+      { est: 200, real: 6, threshold: 10, join: 'broadcast', saved: true },
+      { est: 200, real: 6, threshold: 10, join: 'broadcast', saved: true }] },
+    'adaptive:4': { kind: 'localread', steps: [
+      { blocks: ['net', 'net', 'net', 'net', 'net', 'net', 'net', 'net'], mode: 'normal' },
+      { blocks: ['wait', 'wait', 'wait', 'wait', 'wait', 'wait', 'wait', 'wait'], mode: 'checked' },
+      { blocks: ['local', 'local', 'local', 'wait', 'wait', 'wait', 'wait', 'wait'], mode: 'local' },
+      { blocks: ['local', 'local', 'local', 'net', 'net', 'net', 'net', 'net'], mode: 'local' },
+      { blocks: ['local', 'local', 'local', 'net', 'net', 'net', 'net', 'net'], mode: 'local', count: true },
+      { blocks: ['local', 'local', 'local', 'net', 'net', 'net', 'net', 'net'], mode: 'local', count: true }] },
+    'adaptive:5': { kind: 'loop', steps: [
+      { stage: 0, phase: 'cut', done: 0 },
+      { stage: 1, phase: 'run', done: 0 },
+      { stage: 1, phase: 'replan', done: 1 },
+      { stage: 2, phase: 'run', done: 1 },
+      { stage: 3, phase: 'replan', done: 2 },
+      { stage: 3, phase: 'final', done: 3 }] }
   };
   const SD = root.SparkSystemDesign || (typeof require === "function" ? require("./engine-sysdesign.js") : null);
   for (const [key, spec] of Object.entries(DATA)) {
