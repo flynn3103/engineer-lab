@@ -12,9 +12,9 @@ window.SITE_SYSTEMS = [
   { id:'kafka', name:'Apache Kafka', color:'#4a5568', kind:'Distributed event log', chapters:12,
     url:'techstack/kafka/01-kafka-internals-end-to-end.html',
     topics:'Partitions, ISR, consumer groups, transactions.' },
-  { id:'postgres', name:'PostgreSQL', color:'#336791', kind:'Relational database', chapters:12,
-    url:'techstack/postgres/01-postgres-internals-end-to-end.html',
-    topics:'Buffer pool, B-tree, MVCC, WAL, VACUUM.' },
+  { id:'postgres', name:'PostgreSQL', color:'#336791', kind:'Relational database', chapters:8,
+    url:'techstack/postgres/course.html',
+    topics:'System design, 8 features, 24 use cases, B+tree animation.' },
   { id:'k8s', name:'Kubernetes', color:'#326ce5', kind:'Container orchestration', chapters:11,
     url:'techstack/k8s/01-k8s-internals-end-to-end.html',
     topics:'API server, etcd, scheduler, kubelet, rollouts.' }

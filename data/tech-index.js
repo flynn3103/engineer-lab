@@ -673,184 +673,128 @@ window.SITE_TECH_INDEX = [
 {
 "type": "Tour",
 "system": "postgres",
-"title": "PostgreSQL internals, end to end",
-"summary": "Take 2,000 checkout transactions a second while finance runs 10-minute reports, and never lose a committed row to a power cut.",
-"body": "Parser and catalog, heap pages and buffer pool, executor, B-tree, MVCC, WAL and recovery, VACUUM, planner, joins and work_mem, checkpoints, isolation, replication.",
-"url": "techstack/postgres/01-postgres-internals-end-to-end.html",
+"title": "PostgreSQL · Design a relational database engine",
+"summary": "Keep 200 million orders safe through crashes, long reports and schema changes: snapshots instead of locks, a log instead of data-file flushes, and background cleanup.",
+"body": "Query path and plan cache, heap pages and buffer pool, TOAST, B+tree page split and range scan, HOT updates, MVCC snapshots, deadlocks, WAL commit and crash recovery, full-page writes, VACUUM horizon, autovacuum, transaction id wraparound, statistics and plan flips, hash join batches, iterator execution, synchronous_commit, recovery conflicts, replication slots.",
+"url": "techstack/postgres/course.html",
 "tags": [
 "tour",
-"interactive"
+"system design",
+"use cases"
 ],
 "id": 48
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 1. SQL, Parser and Catalog",
-"summary": "A deploy renamed one column. Some app servers fail at once with a name error, others fail later with a different error. Why does PostgreSQL fail before it reads a single row?",
-"body": "Parser checks grammar only and produces a raw parse tree. It does not look at any table, so SELEC fails here with SQLSTATE 42601. Analyzer resolves every table and column through the catalogs (pg_class, pg_attribute, pg_namespace), using search_path for unqualified names.",
-"url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch0",
+"title": "PostgreSQL · 1. Connections, parser and plan cache",
+"summary": "A connection is a process. A statement is parsed, checked against the catalog and planned before any data page is read.",
+"body": "Turn text into a checked, planned statement cheaply, and bound the number of backends. Fork a backend for each client connection. Reject a statement that names a missing object before reading rows. Reuse a plan for a prepared statement when that is safe. A statement that cannot be resolved fails in analysis, before execution. Backends are capped by max_connections (100 by default), with a few slots kept for superusers. A prepared statement runs 5 custom plans before a generic one is considered. A renamed column fails before any row is read A deploy renamed one column. Some app servers fail at once with a name error. See which stage of the query path rejects the statement, and why no data page is touched. The column orders.customer_name was renamed to buyer_name. An old app server still sends SELECT customer_name FROM orders WHERE id = 42. The error comes from the analyze stage. The planner and executor never run, so zero heap or index pages are read. A statement that names a missing object is rejected in analysis, before the planner or any data page is involved. One process per connection Every client connection is an operating-system process. See how the connection limit is spent, and what a pooler changes. 500 application instances each open 10 connections (5,000 in total) to a server with max_connections = 100 (example fleet). The first 97 ordinary connections succeed. After that, ordinary roles are refused while 3 slots stay open for superusers. The number of backends never exceeds max_connections, and each one is a separate process. A prepared statement switches to a generic plan A prepared statement is planned with the real value five times, then the server may keep one plan for any value. See the switch, and when it hurts. The app runs PREPARE by_customer (int) AS SELECT * FROM orders WHERE customer_id = $1 and executes it for different customers. Customer 1 owns 2 million orders; most customers own a dozen (example data). Executions 1 to 5 use a custom plan. From the 6th, the server uses a generic plan if it is not costlier than the average custom plan. A prepared statement is planned with real values for its first 5 executions, and a generic plan is used only if its estimated cost is not above the custom average.",
+"url": "techstack/postgres/course.html#/f/1",
 "tags": [
-"parse",
-"analyze",
-"rewrite",
-"plan"
+"query path",
+"system design",
+"use cases"
 ],
 "id": 49
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 2. Heap Pages and the Buffer Pool",
-"summary": "The same orders lookup takes 2 ms in the morning and 300 ms after the nightly batch. Nothing changed in the query. What did the batch change?",
-"body": "8 kB page: the unit of storage and caching. A page has a header, an array of line pointers growing down, and tuples growing up. A row is addressed as (page, line pointer).",
-"url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch1",
+"title": "PostgreSQL · 2. Heap pages, buffer pool and TOAST",
+"summary": "Rows live in 8 kB slotted pages, pages are cached in shared buffers by a clock sweep, and large values are moved out of the row.",
+"body": "Store variable-size rows in fixed-size pages and serve hot pages from memory. Address any row by block number and line pointer. Keep recently used pages in memory and pick a victim when full. Store values over about 2 kB out of line. A row never spans pages, so a page is the unit of I/O and of logging. shared_buffers defaults to 128 MB. A large sequential scan must not flush the whole cache (ring of 256 kB). A slotted page: line pointers and the ctid Rows are placed in an 8 kB page by two arrays growing towards each other. See why a row keeps its address when other rows move. An orders page receives three 150-byte rows, then one is deleted and the page is cleaned (row size is an example). The row stays at the same ctid (block 0, line pointer number) while the space behind it is reorganized. A row version is addressed by (block, line pointer); moving its bytes inside the page never changes its ctid. The buffer pool and the clock sweep Shared buffers hold copies of 8 kB pages. When the pool is full, a clock hand decides which page to drop. See how often-used pages survive. A tiny 8-buffer pool is full and a query needs page X, which is not cached (the real default is 128 MB, 16,384 buffers). The hand lowers usage counts as it passes, and evicts the first unpinned buffer whose count reaches 0. A buffer is evicted only when its usage count is 0 and nobody has it pinned; every pass of the hand lowers the count by one. TOAST: values too large for a row A row has to fit in one page, so large values are compressed and then moved to a side table. See when that happens and what it costs. The orders table gains a notes text column. Some values are 500 bytes, some 3 kB of JSON, and some 40 kB of text that does not compress (example sizes). Small values stay inline. Large ones are compressed, and when that is not enough they move to a TOAST table, leaving a pointer of about 18 bytes in the row. A heap row always fits in one page: large values are compressed or replaced by a pointer to chunks in the TOAST table.",
+"url": "techstack/postgres/course.html#/f/2",
 "tags": [
-"pages",
-"shared_buffers",
-"clock sweep"
+"storage",
+"system design",
+"use cases"
 ],
 "id": 50
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 3. Iterator Execution",
-"summary": "ORDER BY amount LIMIT 5 over ten million rows reads everything, while LIMIT 5 alone returns instantly. What decides whether a query can stop early?",
-"body": "ExecProcNode: each node returns one row per call by calling its child, so a tree runs as nested pulls. Streaming nodes (scan, filter, limit, nested loop) pass rows through and hold almost nothing. Blocking nodes (Sort, Hash, HashAggregate) must read their input first.",
-"url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch2",
+"title": "PostgreSQL · 3. B+tree indexes",
+"summary": "A balanced tree of pages that finds a key in a few page reads, splits when a page fills, and chains the leaves for range scans.",
+"body": "Find a row or a range of rows without reading the table. Descend from the root to a leaf in one page read per level. Insert in order and split a full page without blocking readers for long. Serve a range by walking right-sibling links. The tree stays balanced: all leaves at the same depth. Leaf pages are filled to 90% by default (fillfactor 90), internal pages to 70%. An update that changes no indexed column and fits in the page adds no index entries (HOT). Insert, page split and lookup in a B+tree Press the scenario buttons, or type your own key. Watch the path from the root to a leaf, the moment a full page splits, how a separator moves up, and why a range scan follows the right-sibling links. Checkout looks up WHERE id = 40 on a 200-million row table, and the loader keeps inserting new ids into the same index. Here a page holds 3 keys; a real 8 kB page holds hundreds. A lookup reads one index page per level, then one heap page. Inserts split the full leaf, push a separator up, and grow the tree by one level only when the root itself splits. All leaves are at the same depth, every page stays within capacity, and the tree grows only at the root. Column order in a multi-column index An index on two columns is sorted by the first column, then by the second inside each first value. See which queries can use it. The team creates CREATE INDEX ON orders (customer_id, created_at) and then writes five different queries (example workload). Queries that fix the leading column (or ask for its order) use the index well. A query on the second column alone cannot seek into it. A B-tree index can seek only on a leading prefix of its columns, in order. HOT updates leave the indexes alone An update writes a new row version. If no indexed column changed and the page has room, the new version stays on the same page and no index entry is added. The order status moves from new to shipped 3,000 times a second. orders is indexed on id and customer_id, but not on status. The update is HOT: both indexes still point at the old pointer, and a chain inside the page leads to the new version. A HOT update adds no index entry; indexes always reach the right version through the chain that starts at the old pointer.",
+"url": "techstack/postgres/course.html#/f/3",
 "tags": [
-"volcano",
-"pull",
-"blocking nodes"
+"indexes",
+"system design",
+"use cases"
 ],
 "id": 51
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 4. B-tree Index",
-"summary": "Finding amount = 99 in ten million rows scans every page, and after adding an index inserts get slower. What does an index cost and buy?",
-"body": "Search: from the root page, binary-search each page to pick a child, down to a leaf. The number of page reads is the tree height. Page split: when a leaf is full, PostgreSQL allocates a new page, moves about half of the entries and adds a downlink in the parent. Splits can cascade up.",
-"url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch3",
+"title": "PostgreSQL · 4. Transactions and MVCC",
+"summary": "Row versions carry the ids of the transactions that created and removed them, and each snapshot decides which versions it sees.",
+"body": "Let readers and writers run in parallel and give each transaction a consistent view. Stamp each version with the creating and deleting transaction id. Build a snapshot per statement or per transaction. Detect a deadlock and abort one transaction. A plain SELECT takes no row lock and never waits for a writer. The default isolation level is READ COMMITTED. A deadlock is detected after deadlock_timeout (1 s) and one session gets error 40P01. An update writes a new row version PostgreSQL never changes a row in place. Each version is stamped with the transaction that created it and the one that removed it. See which version a reader gets at each moment. Transaction 100 inserts order 42 with amount 50. Transaction 105 later changes the amount to 60 while a report keeps reading (example ids). The reader sees amount 50 until transaction 105 commits, then 60. The old version is kept until no snapshot needs it. A version is visible to a snapshot only if its xmin is committed before the snapshot and its xmax is not. Snapshots at READ COMMITTED and REPEATABLE READ Both levels use snapshots, but they take them at different moments. See what the same two sessions observe at each level. Session A runs a report with two queries. Session B inserts a 50-unit order between them and commits (example timing). At READ COMMITTED the second query sees B's order. At REPEATABLE READ both queries use one snapshot and agree. READ COMMITTED takes a snapshot per statement; REPEATABLE READ takes one per transaction at its first statement. Two sessions, one deadlock Row locks last until the transaction ends, so two transactions that take them in opposite order can wait for each other forever. See how PostgreSQL breaks the cycle. A transfer updates two accounts. Session A moves money from account 1 to 2 while session B moves from 2 to 1 (example transfers). After 1 second one session is aborted with error 40P01 and the other finishes. A deadlock is a cycle in the waits-for graph; PostgreSQL breaks it by aborting one participant after deadlock_timeout.",
+"url": "techstack/postgres/course.html#/f/4",
 "tags": [
-"descend",
-"split",
-"index-only"
+"transactions",
+"system design",
+"use cases"
 ],
 "id": 52
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 5. Transactions and MVCC",
-"summary": "The finance report reads an order while checkout updates it. Who waits for whom?",
-"body": "Tuple header: every row version carries xmin (the creating transaction) and xmax (the deleting or updating one). An UPDATE sets xmax on the old version and writes a new version.",
-"url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch4",
+"title": "PostgreSQL · 5. WAL, checkpoints and crash recovery",
+"summary": "The log is flushed first and the data pages later; recovery replays the log from the last checkpoint.",
+"body": "Make commits durable with one sequential flush and recover to a consistent state after a crash. Write a log record for every page change before the page is written. Flush the log up to the commit record before acknowledging a commit. Replay the log after a crash, skipping changes already on the page. Write-ahead rule: a data page is never written before the WAL up to its last change is flushed. A checkpoint is due every 5 minutes or when WAL nears max_wal_size (1 GB). Replay is idempotent: it compares each record to the page LSN. A commit is a log flush When COMMIT returns, the data file may not have changed at all. See which write makes the commit durable. A customer pays for an order. The server crashes one millisecond after COMMIT returned (example). The paid order survives, because the WAL up to the commit record was flushed to disk before COMMIT returned. Write-ahead rule: a data page is written only after the WAL up to its last change is on disk, and a commit returns only after its commit record is. Crash recovery replays from the redo point After a crash the data files are a mix of old and new pages. See how replaying the log makes them consistent without redoing work twice. The server is killed with power loss. Two pages were written before the crash, one was not (example LSNs). Records whose LSN is newer than the page LSN are applied; the others are skipped. Transactions without a commit record stay invisible. Replay compares each record LSN to the page LSN, so applying the log twice gives the same result as applying it once. Full-page writes and the post-checkpoint spike The first change to a page after a checkpoint logs the whole 8 kB page. See what that does to the WAL volume and why it exists. The loader writes about 15 MB of WAL per 30 seconds. After every checkpoint the WAL rate jumps for a short while (example rates). WAL volume spikes right after a checkpoint, then decays, because each page is imaged only once per checkpoint cycle. The first modification of a page after a checkpoint writes the whole page to the WAL, so recovery never applies a record to a torn page.",
+"url": "techstack/postgres/course.html#/f/5",
 "tags": [
-"xmin/xmax",
-"snapshots",
-"hot"
+"durability",
+"system design",
+"use cases"
 ],
 "id": 53
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 6. WAL and Crash Recovery",
-"summary": "Power fails right after COMMIT returned. Is the paid order still there, and what did PostgreSQL write to make it so?",
-"body": "WAL record: describes a change, identified by an increasing LSN. WAL is appended to WAL buffers in memory and written to pg_wal files. Commit: with synchronous_commit = on the backend waits until WAL up to its commit record is flushed to disk (fsync).",
-"url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch5",
+"title": "PostgreSQL · 6. VACUUM, autovacuum and the horizon",
+"summary": "Dead versions are reclaimed only when no snapshot can still see them, and old rows are frozen before the id counter wraps.",
+"body": "Keep tables and indexes from growing without bound and never let transaction ids wrap. Find versions older than every snapshot and mark their space reusable. Start vacuum automatically from table statistics. Freeze old rows so ids can be reused. One long transaction holds back cleanup for every table. Autovacuum runs when dead rows pass 50 + 20% of the table (defaults). Wraparound protection is forced at autovacuum_freeze_max_age (200 million). One idle transaction holds back cleanup VACUUM removes a dead version only when no snapshot can still see it. One forgotten transaction can stop that for the whole database. An engineer opens a transaction in a SQL client to look at data and leaves for lunch. Orders keep being updated (example). Dead versions deleted after the idle session's snapshot cannot be removed, so tables and indexes grow until it ends. A dead version is removable only when it was deleted before the oldest snapshot of any session, slot or prepared transaction. When autovacuum decides to run Autovacuum starts a table when its dead rows pass a threshold that grows with the table. See why the default is too lazy for a big table. The 200 million row orders table takes many updates. The team asks why autovacuum starts so rarely (example sizes). The default trigger is 50 + 20% of the rows, which is 40 million dead rows for this table. A per-table setting lowers it to 2 million. Autovacuum starts a table when dead rows exceed threshold + scale_factor × rows, so the larger the table, the later it starts unless the factor is lowered. Freezing keeps transaction ids from wrapping Transaction ids are 32-bit numbers compared in a circle. Old rows must be frozen before the counter laps them, or they would appear to be in the future. The shop burns about 259 million transaction ids a day (3,000 write transactions per second). The age of the oldest unfrozen row keeps growing (example). At age 200 million autovacuum is forced to freeze old rows, so the age falls back and the 2.1 billion limit is never reached. Every row is frozen before its age reaches about 2 billion transaction ids, enforced by forced vacuum at autovacuum_freeze_max_age.",
+"url": "techstack/postgres/course.html#/f/6",
 "tags": [
-"log before page",
-"fsync",
-"redo"
+"cleanup",
+"system design",
+"use cases"
 ],
 "id": 54
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 7. VACUUM and the Horizon",
-"summary": "The orders table doubles in size every week while its row count stays flat. Why can the old rows not be removed?",
-"body": "Dead tuple: a version whose deleter committed. It stays on the page until VACUUM reclaims its space for reuse. xmin horizon: the oldest transaction ID any snapshot may still need. Held back by long transactions, replication slots, prepared transactions and standbys with hot_standby_feedback.",
-"url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch6",
+"title": "PostgreSQL · 7. Planner, statistics and executor",
+"summary": "Statistics give row estimates, estimates give costs, the cheapest plan runs as a tree of operators that pull one row at a time.",
+"body": "Pick a good plan from sampled statistics and run it within a memory budget. Sample tables and store distributions per column. Cost scans and joins and pick the cheapest tree. Run the tree, spilling to disk when memory is short. A stale estimate can flip a plan, so ANALYZE must keep up. work_mem is per node, per query (4 MB default; hash nodes get 2×). An operator returns one row per call, so a LIMIT can stop early. Stale statistics flip the plan The planner never looks at the data while planning. It trusts sampled statistics. See what happens when they fall behind the data. A flash sale adds 12 million pending orders to a 200 million row table within an hour. A join between pending orders and customers suddenly runs for hours (example numbers). The estimate is off by 13 times, so the planner picks a nested loop with an index probe per row. After ANALYZE it picks a hash join. The planner picks the plan with the lowest estimated cost, and the estimate is only as good as the last ANALYZE. A hash join that does not fit in work_mem A hash join builds an in-memory table of the smaller input. When it does not fit, the join is split into batches that go through temporary files. A query joins a 24 MB build side with a large probe side while memory for the hash is 8 MB: work_mem 4 MB times hash_mem_multiplier 2.0 (example sizes). The join runs in 4 batches. Only batch 0 stays in memory; the others go through temp files and are joined one at a time. Rows with equal join keys always land in the same batch, so joining the batches one by one gives the same result as one big hash. Each operator returns one row at a time The executor is a tree of operators. The top node asks for a row, and each node asks its child. See why LIMIT can stop early and why a sort cannot. The home page runs SELECT * FROM orders WHERE status = 'paid' ORDER BY created_at DESC LIMIT 3 on 200 million rows (example query). With an index on created_at the scan reads only about six rows. Without one, the sort has to read all 200 million before returning the first. An operator produces one row per call and asks its children only when it needs more, so a node above can stop the work below.",
+"url": "techstack/postgres/course.html#/f/7",
 "tags": [
-"dead tuples",
-"horizon",
-"freeze"
+"planning",
+"system design",
+"use cases"
 ],
 "id": 55
 },
 {
 "type": "Chapter",
 "system": "postgres",
-"title": "PostgreSQL · 8. Planner and Statistics",
-"summary": "After the nightly bulk load a 5 ms query takes 5 minutes, though the query and the schema did not change. What did the planner decide differently?",
-"body": "pg_statistic (shown in pg_stats): per column null fraction, n_distinct, most common values and a histogram, sampled by ANALYZE with default_statistics_target (default 100).",
-"url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch7",
+"title": "PostgreSQL · 8. Streaming replication",
+"summary": "The WAL is streamed to replicas, a setting decides how far a commit waits for them, and replicas can hold back cleanup on the primary.",
+"body": "Keep a near-current copy for failover and read scale, with an explicit durability trade-off. Send WAL to each replica as it is flushed. Let a commit wait for a chosen replica stage. Keep WAL a replica still needs. A replica applies WAL in order and serves read-only queries. Default synchronous_commit is on, which waits for the local flush only unless sync standbys are named. A query on a standby is cancelled after max_standby_streaming_delay (30 s) when it blocks replay. How long does COMMIT wait for the standby WAL goes to the standby as it is flushed, but a commit waits for the standby only when told to, and only up to a chosen stage. See what each setting guarantees. The payments service must not lose an acknowledged commit, while the audit-log service can accept some loss (example requirements). Each level waits for one more stage: off, local flush, standby write, standby flush, standby apply. A commit returns only after the stage named by synchronous_commit has been reached, and nothing stronger is promised. A long query on a standby is cancelled A hot standby replays the primary's changes while answering queries. Sometimes a replayed change takes away rows a running query still needs. A 60-second report runs on a read replica. Meanwhile the primary vacuums a table the report reads (example timing). Replay waits up to 30 seconds for the query, then the standby cancels it with a conflict error. Replay never removes a row version a standby query can still see unless it cancels that query after the standby delay. A replication slot fills the primary disk A slot makes the primary keep every WAL file a replica has not yet consumed. A replica that never returns means WAL that is never removed. A replica is decommissioned but its slot is left behind. The primary writes about 2 GB of WAL an hour onto a 100 GB disk (example sizes). With the default of no limit, WAL piles up until the disk is full and the primary stops accepting writes. A slot keeps WAL until its consumer has read it, so retained WAL grows without bound unless the consumer returns or a limit is set.",
+"url": "techstack/postgres/course.html#/f/8",
 "tags": [
-"selectivity",
-"cost",
-"analyze"
+"replication",
+"system design",
+"use cases"
 ],
 "id": 56
-},
-{
-"type": "Chapter",
-"system": "postgres",
-"title": "PostgreSQL · 9. Sort and Hash Join under work_mem",
-"summary": "An ORDER BY over 50 GB runs with only 64 MB of memory per operation. Does it fail, and what does it do instead?",
-"body": "work_mem is the budget per sort or hash operation, not per query or per server. One query can have several such nodes, and each parallel worker gets its own budget.",
-"url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch8",
-"tags": [
-"work_mem",
-"spill",
-"batches"
-],
-"id": 57
-},
-{
-"type": "Chapter",
-"system": "postgres",
-"title": "PostgreSQL · 10. Checkpoints",
-"summary": "The WAL directory keeps growing and every five minutes write latency spikes. Why does PostgreSQL write checkpoints at all, and what do the knobs trade off?",
-"body": "Checkpoint: flush every dirty buffer, then write a checkpoint record. The redo point is where recovery will start. Triggers: checkpoint_timeout (default 5 min) or WAL growth approaching max_wal_size, whichever comes first.",
-"url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch9",
-"tags": [
-"checkpoint",
-"max_wal_size",
-"recovery time"
-],
-"id": 58
-},
-{
-"type": "Chapter",
-"system": "postgres",
-"title": "PostgreSQL · 11. Isolation and Deadlocks",
-"summary": "Two transactions update the same two accounts in opposite order and one of them gets an error. Why does PostgreSQL kill a query that did nothing wrong?",
-"body": "Isolation levels: Read Committed takes a new snapshot per statement; Repeatable Read one per transaction; Serializable adds SSI conflict detection on top of it.",
-"url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch10",
-"tags": [
-"anomalies",
-"ssi",
-"wait-for graph"
-],
-"id": 59
-},
-{
-"type": "Chapter",
-"system": "postgres",
-"title": "PostgreSQL · 12. Streaming Replication and synchronous_commit",
-"summary": "The primary crashes and the team fails over, and two minutes of paid orders are missing. What does a COMMIT actually wait for?",
-"body": "WAL sender and receiver: the primary streams WAL records to each standby, which writes, flushes and replays them in order. Commit levels: local waits for the primary's flush only, remote_write for the standby's OS write, on for the standby's flush, remote_apply for replay so reads on the standby…",
-"url": "techstack/postgres/01-postgres-internals-end-to-end.html#ch11",
-"tags": [
-"wal sender",
-"slots",
-"sync standby"
-],
-"id": 60
 },
 {
 "type": "Tour",

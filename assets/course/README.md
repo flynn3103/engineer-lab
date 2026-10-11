@@ -8,8 +8,8 @@ assets/course/
   course.css     the style: shell, page head, numbered sections, cards, tables, diagrams, edge cards, pager, player, pictures
   kit.js         picture helpers and reusable forms          -> Course.kit
   animations.js  optional renderer registry and narrated animation player
-  animations/    reusable scene painters and computed simulation renderers
-  animations.css, scenes.css, stages.css  optional styles for these animation forms
+  animations/    reusable scene painters and computed simulation renderers (btree.js: B+tree insert, split, lookup, range scan)
+  animations.css, scenes.css, stages.css, btree.css  optional styles for these animation forms
   contract.js    data contract and validator                  -> Course.validate(CourseData)
   course.js      shell, router, page templates, Mermaid, player -> Course.mount(CourseData)
 tools/course/
@@ -76,7 +76,9 @@ Narrated animation families share `Course.animationPlayer(host, scene, painter, 
 
 For ordinary step pictures, reusable forms register with `Course.registerScene(kind, painter)`. A course's `paint.js` binds its scene to `Course.renderScene(kind, scene, stepIndex)`, which returns `{ html, stat, bare }` for the standard course player. Add new forms to the shared assets when the existing picture kit or animation library cannot express a course's mechanism.
 
-Run `node --test tools/course/*.test.js` for the animation registration, mounting, and validation checks.
+`animations/btree.js` is a computed animation: scene data is `{ kind: 'btree', cap, base, presets: [{ label, ops }], try? }` with ops `insert`, `search` or `range`; the pure model is exposed as `Course.btree` and tested in `tools/course/btree.test.js`. The PostgreSQL course uses it.
+
+Run `node --test tools/course/*.test.js` for the animation registration, mounting, B+tree model, and validation checks.
 
 ## Pictures
 
