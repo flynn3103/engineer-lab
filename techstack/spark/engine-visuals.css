@@ -322,3 +322,19 @@
 .vz-otile.staged{background:var(--card);border-style:dashed}
 .vz-otile.gone{background:var(--p5);text-decoration:line-through;opacity:.7}
 @media (max-width:760px){.vz-fmoves,.vz-ofolder{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* UC: sql:3 rewrite, sql:4 expand, sql:5 swarm */
+.vz-expr{background:var(--card);border:var(--ink-line);border-radius:14px;padding:14px 18px;box-shadow:var(--shadow)}
+.vz-expr code{font:700 15px var(--mono);color:var(--ink);white-space:pre-wrap}
+.vz-cmp{font:700 11.5px var(--mono);color:var(--ink);border:var(--ink-line);border-radius:10px;padding:6px 10px;background:var(--p0);transition:background .3s}
+.vz-cmp.off{background:transparent;border-style:dashed;color:var(--mut);text-decoration:line-through}
+.vz-expand{background:var(--card);border:var(--ink-line);border-radius:14px;padding:12px;box-shadow:var(--shadow);overflow-x:auto}
+.vz-tbl{width:100%;border-collapse:collapse;font:600 12.5px var(--mono);color:var(--ink)}
+.vz-tbl th{text-align:left;font-size:11px;color:var(--mut);padding:6px 10px;border-bottom:1.5px solid var(--ink)}
+.vz-tbl td{padding:6px 10px;border-bottom:1px solid var(--line)}
+.vz-tbl td i{color:var(--mut)}
+.vz-swarm{display:flex;flex-wrap:wrap;gap:3px;align-content:flex-start;background:var(--card);border:var(--ink-line);border-radius:14px;padding:14px;box-shadow:var(--shadow);min-height:110px}
+.vz-sq{display:inline-block;width:18px;height:18px;border:1.5px solid var(--ink);border-radius:3px;background:var(--p0);transition:background .3s}
+.vz-sq.tiny{width:9px;height:9px;background:var(--p4)}
+.vz-sq.big{width:44px;height:44px;border-radius:6px;background:var(--p5)}
+@media (max-width:760px){.vz-tbl{font-size:11px}}

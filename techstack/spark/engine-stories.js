@@ -1236,6 +1236,69 @@
     ]
   };
 
+  ST['sql:3'] = {
+    trigger: 'A filter has conditions that can be computed or removed before any row is read, such as a repeated comparison and a constant expression.',
+    command: 'df.filter((F.col("x") > 5) & (F.col("x") > 3) & (F.lit(2) * 3 == 6)).explain(True)  # the optimized plan shows one condition',
+    expect: 'The optimized plan keeps one condition, and the rows it returns are exactly the rows the original filter returned.',
+    sim: {
+      kind: 'rewrite',
+      steps: [
+        { title: 'The query as written', text: 'The filter says x is greater than 5, and also greater than 3, and also that 2 times 3 equals 6. The planner has not simplified anything yet.' },
+        { title: 'Fold the constant', text: '2 times 3 is known before any row is read, so the planner replaces it with 6. The last condition, 6 equals 6, is always true.' },
+        { title: 'Drop the always-true part', text: 'AND with a condition that is always true changes nothing, so that part is removed.' },
+        { title: 'Keep the stronger condition', text: 'If x is greater than 5, it is always greater than 3. The weaker condition is redundant, so only x greater than 5 remains.' },
+        { title: 'The answer is the same', text: 'Rows with x above 5 are exactly the rows that passed the original filter. The result is identical, only the work is smaller.' },
+        { title: 'Cheaper per row, and pushed down', text: 'One comparison runs per row instead of four. The single filter can be pushed to the file reader, which then skips rows it does not need.' }
+      ]
+    },
+    edges: [
+      E('A condition that changes with the data', 'The planner keeps it.', 'x > now() depends on the moment the query runs, so it cannot be folded to a constant before execution.', 'Compute the value in the driver first, or accept that the condition is checked per row.'),
+      E('Null values', 'Simplification must keep null semantics.', 'x > 5 is not always true for null x. The planner only drops a condition when that is safe for null inputs.', 'Nothing to do; the optimizer keeps the result identical. Check with explain if a filter looks removed.')
+    ]
+  };
+
+  ST['sql:4'] = {
+    trigger: 'A query counts distinct values of two different columns in one aggregation, such as COUNT(DISTINCT city) and COUNT(DISTINCT product) per day.',
+    command: 'df.groupBy("day").agg(F.countDistinct("city"), F.countDistinct("product")).explain()  # look for Expand in the plan',
+    expect: 'Each distinct column needs its own grouping, so every input row is copied once per distinct column before the aggregation. More distinct columns mean more copies.',
+    sim: {
+      kind: 'expand',
+      steps: [
+        { title: 'Two distinct counts in one query', text: 'The query counts distinct cities and distinct products for each day. One plain grouping cannot count two different sets of unique values at once.' },
+        { title: 'Expand: one copy per distinct column', text: 'Spark copies each input row once per distinct column. Each copy keeps only its own column, and the other is set to null. Here 3 rows become 6.' },
+        { title: 'Group the copies by day and column', text: 'Each copy is grouped by day and by which column it carries. The distinct values of one column meet only with the same column.' },
+        { title: 'Count distinct within each group', text: 'Within each group, duplicates are removed and counted. The city count comes from one group, and the product count from the other.' },
+        { title: 'Combine the results per day', text: 'The partial counts are combined into one row per day that holds both counts.' },
+        { title: 'The cost: rows multiply', text: 'With 10 distinct columns, the input is copied 10 times. A large table with many distinct columns can cost far more than one plain aggregation.' }
+      ]
+    },
+    edges: [
+      E('Approximate counts are enough', 'Cheaper than an exact expand.', 'When an estimate is acceptable, approximate distinct counts avoid the expand and need far less memory.', 'Use approx_count_distinct where a small error is fine.'),
+      E('Only one distinct column', 'No expand needed.', 'With one distinct column the planner uses a simpler two-phase aggregation, not an expand.', 'Nothing to change; the explain plan shows which path was taken.')
+    ]
+  };
+
+  ST['sql:5'] = {
+    trigger: 'A grouping runs a shuffle over a small table, using the default spark.sql.shuffle.partitions setting of 200.',
+    command: 'spark.conf.set("spark.sql.shuffle.partitions", "200")  # 200 is the default; adaptive execution can merge small partitions at run time',
+    expect: 'The shuffle always creates 200 reduce tasks. For a small input most are nearly empty, so adaptive execution or a smaller count saves the start-up cost.',
+    sim: {
+      kind: 'swarm',
+      steps: [
+        { title: 'A small table, one shuffle', text: 'The table is 10 MB. A group by is about to shuffle it.' },
+        { title: 'The shuffle makes 200 partitions', text: 'The default is 200 shuffle partitions, so the reduce stage has 200 tasks, however little data there is.' },
+        { title: 'Most tasks have almost nothing', text: '10 MB spread over 200 tasks is about 50 KB each. Most tasks finish about as fast as they can be started.' },
+        { title: 'Starting tasks costs more than the work', text: 'Scheduling and starting 200 tasks takes more time than the work itself, so the stage is slow for a small job.' },
+        { title: 'Adaptive execution merges small partitions', text: 'After the map stage, the engine sees the real sizes and merges neighbouring small partitions up to a target size. Here it runs 8 tasks instead of 200.' },
+        { title: 'Set the count for the data size', text: 'For large data, 200 can be too few, and each task becomes huge: 2 TB over 200 tasks is about 10 GB each. Tune the count to the data, or let adaptive execution choose.' }
+      ]
+    },
+    edges: [
+      E('Too few partitions for large data', 'Each task is huge and slow.', 'A few very large partitions can run out of memory and spill heavily, while most slots sit idle.', 'Raise spark.sql.shuffle.partitions, or rely on adaptive execution to split them.'),
+      E('Many tiny output files', 'Each reduce task writes a file.', 'Two hundred reducers can write two hundred small output files for a small result.', 'Coalesce or repartition before writing, or merge partitions at run time.')
+    ]
+  };
+
   root.SparkStories = ST;
   if (typeof module === 'object' && module.exports) module.exports = ST;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

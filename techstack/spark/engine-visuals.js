@@ -524,12 +524,48 @@
     return v.items.length ? `visible to readers: ${v.items.filter(i => i.st === 'old' || i.st === 'new').length} items` : 'visible to readers: nothing';
   }
 
+  /* sql:3 · the filter as written, with the comparisons that remain highlighted. A pushed filter is shown on the reader. */
+  function paintRewrite(stage, sim, k) {
+    const v = sim.steps[k].v, slots = Array.from({ length: 4 }, (_, i) => `<span class="vz-cmp ${i < v.ops ? 'on' : 'off'}">${i < v.ops ? 'comparison' : 'removed'}</span>`).join('');
+    stage.innerHTML = `<div class="vz-expr"><code>${esc(v.expr)}</code></div>
+      <div class="vz-row"><span class="vz-lab">per row</span>${slots}</div>
+      <div class="vz-row">${v.pushed ? '<span class="vz-chip good">pushed down: the file reader skips rows</span>' : '<span class="vz-chip">evaluated after reading each row</span>'}</div>`;
+    return `comparisons per row: ${v.ops} of 4${v.pushed ? ' · pushed to reader' : ''}`;
+  }
+
+  /* sql:4 · the input table, its expanded copies (one per distinct column), the groups, the counts and the combined row. */
+  const EXP_IN = [['Mon', 'Hanoi', 'tea'], ['Mon', 'Hue', 'tea'], ['Tue', 'Hanoi', 'milk']];
+  function paintExpand(stage, sim, k) {
+    const v = sim.steps[k].v;
+    const table = (head, rows, cls) => `<table class="vz-tbl ${cls || ''}"><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr>${rows.map(r => `<tr>${r.map(c => `<td>${c == null ? '<i>null</i>' : esc(c)}</td>`).join('')}</tr>`).join('')}</table>`;
+    const exp = EXP_IN.flatMap(([d, c, p]) => [[d, c, null, 'city'], [d, null, p, 'product']]);
+    let body = '';
+    if (v.view === 'input') body = table(['day', 'city', 'product'], EXP_IN);
+    if (v.view === 'expand') body = table(['day', 'city', 'product', 'copy'], exp);
+    if (v.view === 'group') body = table(['day', 'copy', 'distinct value'], exp.map(([d, c, p, kind]) => [d, kind, kind === 'city' ? c : p]));
+    if (v.view === 'count') body = table(['day', 'copy', 'count distinct'], [['Mon', 'city', 2], ['Mon', 'product', 1], ['Tue', 'city', 1], ['Tue', 'product', 1]]);
+    if (v.view === 'combine') body = table(['day', 'distinct cities', 'distinct products'], [['Mon', 2, 1], ['Tue', 1, 1]]);
+    if (v.view === 'cost') body = `<div class="vz-note warn">10 distinct columns: each input row is copied 10 times</div>`;
+    stage.innerHTML = `<div class="vz-expand">${body}</div>`;
+    return { input: 'input: 3 rows', expand: 'expanded: 6 rows, one copy per distinct column', group: 'grouped by day and column', count: 'distinct counted within each group', combine: 'one row per day', cost: 'copies grow with each distinct column' }[v.view];
+  }
+
+  /* sql:5 · one square per reduce task. Tiny tasks are drawn small; the overhead and merge steps say what changed. */
+  function paintSwarm(stage, sim, k) {
+    const v = sim.steps[k].v, N = v.tasks, per = N ? v.mb / N : 0, shown = Math.min(N, 200);
+    const sq = Array.from({ length: shown }, () => `<span class="vz-sq${v.tiny ? ' tiny' : ''}${v.big ? ' big' : ''}"></span>`).join('');
+    const perTxt = per >= 1024 ? `${(per / 1024).toFixed(1)} GB` : per >= 1 ? `${per.toFixed(1)} MB` : `${Math.round(per * 1024)} KB`;
+    stage.innerHTML = `<div class="vz-swarm">${sq || '<p class="vz-empty">no shuffle yet</p>'}</div>
+      <div class="vz-row"><span class="vz-chip">input: ${v.mb >= 1000 ? (v.mb / 1000).toFixed(0) + ' GB' : v.mb + ' MB'}</span>${N ? `<span class="vz-chip">reduce tasks: ${N}</span><span class="vz-chip ${v.big || v.tiny ? 'warn' : 'good'}">per task: ${perTxt}</span>` : ''}${v.overhead ? '<span class="vz-chip bad">start-up cost dominates</span>' : ''}${v.merged ? '<span class="vz-chip good">merged at run time</span>' : ''}</div>`;
+    return N ? `reduce tasks: ${N} · per task about ${perTxt}` : 'no shuffle yet';
+  }
+
   const PAINT = {
     ticks: paintTicks, kanban: paintKanban, stacked: paintStacked, lanes: paintLanes,
     sawtooth: paintSawtooth, bullet: paintBullet, heatmap: paintHeat, strip: paintStrip,
     ledger: paintLedger, filetree: paintFileTree, flow: paintFlow, waterfall: paintWaterfall,
     fanout: paintFanout, scatter: paintScatter, histogram: paintHistogram, donut: paintDonut,
-    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores, paths: paintPaths, routes: paintRoutes, explode: paintExplode, renames: paintRenames, overwrite: paintOverwrite, backoff: paintBackoff, exclude: paintExclude, service: paintService, pool: paintPool, shares: paintShares, heap: paintHeap
+    tape: paintTape, segments: paintSegments, mosaic: paintMosaic, ladder: paintLadder, budget: paintBudget, cores: paintCores, paths: paintPaths, routes: paintRoutes, explode: paintExplode, rewrite: paintRewrite, expand: paintExpand, swarm: paintSwarm, renames: paintRenames, overwrite: paintOverwrite, backoff: paintBackoff, exclude: paintExclude, service: paintService, pool: paintPool, shares: paintShares, heap: paintHeap
   };
 
   /* Attach each picture to its use case. Narration (title, text) stays in engine-stories.js. */
@@ -745,7 +781,23 @@
       { items: [{ n: 'part-0', st: 'gone' }, { n: 'part-1', st: 'gone' }, { n: 'part-2', st: 'gone' }, { n: 'part-3', st: 'gone' }, { n: 'staged 0', st: 'staged' }, { n: 'staged 1', st: 'staged' }] },
       { items: [], failed: true },
       { items: [{ n: 'day=1', st: 'old' }, { n: 'day=2', st: 'staged' }, { n: 'day=3', st: 'old' }], dynamic: true },
-      { items: [{ n: 'day=1', st: 'old' }, { n: 'day=2', st: 'old' }, { n: 'day=3', st: 'old' }], dynamic: true, failed: true }] }
+      { items: [{ n: 'day=1', st: 'old' }, { n: 'day=2', st: 'old' }, { n: 'day=3', st: 'old' }], dynamic: true, failed: true }] },
+    'sql:3': { kind: 'rewrite', steps: [
+      { expr: 'x > 5 AND x > 3 AND 2 * 3 = 6', ops: 4 },
+      { expr: 'x > 5 AND x > 3 AND 6 = 6', ops: 3, folded: true },
+      { expr: 'x > 5 AND x > 3', ops: 2, dropped: true },
+      { expr: 'x > 5', ops: 1, dropped: true },
+      { expr: 'x > 5', ops: 1 },
+      { expr: 'x > 5', ops: 1, pushed: true }] },
+    'sql:4': { kind: 'expand', steps: [
+      { view: 'input' }, { view: 'expand' }, { view: 'group' }, { view: 'count' }, { view: 'combine' }, { view: 'cost' }] },
+    'sql:5': { kind: 'swarm', steps: [
+      { tasks: 0, mb: 10 },
+      { tasks: 200, mb: 10 },
+      { tasks: 200, mb: 10, tiny: true },
+      { tasks: 200, mb: 10, overhead: true },
+      { tasks: 8, mb: 10, merged: true },
+      { tasks: 200, mb: 2000, big: true }] }
   };
   const SD = root.SparkSystemDesign || (typeof require === "function" ? require("./engine-sysdesign.js") : null);
   for (const [key, spec] of Object.entries(DATA)) {

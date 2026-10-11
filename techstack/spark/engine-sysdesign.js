@@ -697,7 +697,21 @@
   B -- "yes" --> C["Aggregate in place, no exchange"]
   B -- "no" --> D["Partial aggregate per task"]
   D --> E["Exchange by city hash"]
-  E --> F["Final aggregate"]` }] }
+  E --> F["Final aggregate"]` }] },
+      { title: 'UC-03 · Simplify conditions before reading rows', intro: 'The optimizer folds constants and removes conditions that cannot change the answer. Fewer comparisons run for every row, and a simple filter can be pushed down to the reader.', diagrams: [{ kind: FLOW, title: 'Rewrite rules applied', src: `flowchart TD
+  A["x > 5 AND x > 3 AND 2 * 3 = 6"] --> B["Fold constants: 2 * 3 becomes 6"]
+  B --> C["Drop TRUE: 6 = 6 is always true"]
+  C --> D["Keep the stronger: x > 5 implies x > 3"]
+  D --> E["x > 5, pushed down to the reader"]` }] },
+      { title: 'UC-04 · Two distinct counts need an expand step', intro: 'Counting distinct values of two different columns in one aggregation needs a separate grouping for each column. Spark copies each row once per distinct column before it aggregates.', diagrams: [{ kind: FLOW, title: 'Expand, group, combine', src: `flowchart LR
+  I["Input rows"] --> X["Expand: one copy per distinct column"]
+  X --> G["Group by day and column"]
+  G --> C["Count distinct within each group"]
+  C --> R["One row per day with both counts"]` }] },
+      { title: 'UC-05 · Shuffles default to 200 partitions', intro: 'Every shuffle in a SQL query uses spark.sql.shuffle.partitions reduce tasks, 200 by default. For a small input, most of those tasks have almost nothing to do.', diagrams: [{ kind: FLOW, title: 'Where the 200 comes from', src: `flowchart LR
+  S["Shuffle in a SQL stage"] --> P["spark.sql.shuffle.partitions = 200"]
+  P --> T["200 reduce tasks"]
+  T --> A["Adaptive execution: merge small partitions at run time"]` }] }
     ],
     hard: null
   };
