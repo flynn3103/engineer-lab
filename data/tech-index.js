@@ -746,168 +746,143 @@ window.SITE_TECH_INDEX = [
 {
 "type": "Tour",
 "system": "k8s",
-"title": "Kubernetes internals, end to end",
-"summary": "Keep 600 containers running on 120 machines through 50 deploys a day and a machine failing every other day, with no human in the loop.",
-"body": "kubectl apply, API server admission, etcd and watches, controllers, scheduler, kubelet, probes, services, rolling updates, HPA, node failure.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html",
+"title": "Kubernetes · Design a container orchestrator",
+"summary": "Keep 600 containers running on 120 machines through 50 deploys a day and a machine failing every other day, with no human in the loop: declared state in etcd, level-triggered controllers, a filter-and-score scheduler, rolling updates, autoscaling and self-healing.",
+"body": "kubectl apply path, authentication, RBAC and admission, resourceVersion and watch, reconcile loops, work queues, owner references, scheduler filter score bind, Pending reasons, requests limits and QoS, pod lifecycle, probes, CrashLoopBackOff, Services and EndpointSlices, graceful shutdown, DNS ndots, rolling updates, rollback, PodDisruptionBudget, HPA, metrics pipeline, cluster autoscaler, node failure and eviction, StatefulSet identity, node-pressure eviction, etcd quorum, leader election by Lease.",
+"url": "techstack/k8s/course.html",
 "tags": [
 "tour",
-"interactive"
+"system design",
+"use cases",
+"animations"
 ],
 "id": 61
 },
 {
 "type": "Chapter",
 "system": "k8s",
-"title": "Kubernetes · 1. kubectl apply, End to End",
-"summary": "kubectl apply returns in 200 ms and says \"configured\", yet the new pods appear 20 seconds later or never. Who actually starts the containers?",
-"body": "Desired state in one store. Every object is {apiVersion, kind, metadata, spec, status}. spec is what you want; status is what controllers observed. Watch, do not call. Components never call each other. Each one watches the API server for the kinds it owns and writes the next object.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch0",
+"title": "Kubernetes · 1. API server, admission and etcd",
+"summary": "One API server stores declared state in etcd, checks who may change it, and lets everyone watch.",
+"body": "Accept changes safely, store them consistently, and tell watchers. Authenticate and authorise each request. Validate and store objects in etcd. Reject a write based on a stale version. Stream changes to watchers from a revision. Only the API server writes to etcd. An update carries a resourceVersion and conflicts return 409. A watch can resume from a recent revision, otherwise the client re-lists. kubectl apply: who actually starts the containers kubectl apply returns in about 200 ms and says \"configured\", yet the pods appear seconds later. See which component does each step. You run kubectl apply -f web.yaml for a Deployment of 3 replicas (example). kubectl only stores the Deployment. Controllers, the scheduler and the kubelet each react to what they watch and write the next object. Components never call each other: each watches the API server for the objects it owns and writes the next object. Authentication, RBAC and admission Before a request is stored it passes three gates. A CI token that can delete namespaces, or a broken webhook that blocks every deploy, is a failure at one of them. A CI pipeline deploys with a service account token, and a new validating webhook is installed that is not responding (example). Authentication names the caller, RBAC allows or refuses the action, and admission can change or reject the object, before anything reaches etcd. A write reaches etcd only after authentication, authorization and admission all pass; RBAC has no deny rules. resourceVersion: how two writers do not overwrite each other Two controllers read the same Deployment and each changes a different field. Step through what etcd does with and without the version check, then see a watch and what happens when its history is gone. Two controllers update the same Deployment at the same moment and one change silently disappears (example). An update that carries a stale resourceVersion is refused with 409, so the client re-reads and retries. A watch resumes from a revision, or fails with 410 Gone when that history is compacted. A write succeeds only if the resourceVersion it carries still matches the stored object; otherwise nothing is overwritten.",
+"url": "techstack/k8s/course.html#/f/1",
 "tags": [
-"desired state",
-"watch chain"
+"API and store",
+"system design",
+"use cases"
 ],
 "id": 62
 },
 {
 "type": "Chapter",
 "system": "k8s",
-"title": "Kubernetes · 2. API Server: Authentication, RBAC, Admission",
-"summary": "A CI token can delete production namespaces, and one broken admission webhook blocks every deploy. What decides whether a request is stored?",
-"body": "Authentication maps a token, certificate or OIDC identity to a user and groups, or answers 401. RBAC authorization checks Role/ClusterRole rules bound by RoleBinding/ClusterRoleBinding for a verb on a resource in a namespace, or answers 403. There is no deny rule, only allows.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch1",
+"title": "Kubernetes · 2. Controllers and reconcile loops",
+"summary": "Each controller compares desired with observed state and fixes one gap, from a cache and a work queue.",
+"body": "Converge to the desired state from any starting point. Cache objects locally through list and watch. Queue keys, not events, and reconcile one at a time. Delete dependents when an owner is deleted. A lost event never leaves drift for ever. Many events for one key cost one reconcile. Failures retry with backoff. Level-triggered: a missed event does not matter Crash the controller, delete a pod while it is away, and restart it. A controller that compares desired with observed state repairs the drift. One that only reacts to events never notices. A pod is deleted while the controller is restarting, and the delete event is lost. Will the pod ever be replaced? (example) After a restart the controller lists all pods, compares the count with the spec, and creates the missing one, though it never saw the delete. A controller's action depends only on the current desired state and the current observed state, never on which events it happened to see. Work queue: many events, one reconcile, bounded retries A controller does not process events. It queues the key of the object that changed, and processes each key once at a time, retrying failures with growing delays. A burst of 5 updates to the Deployment web arrives in 10 ms, and then a reconcile fails because the API server is busy (example). The five events become one queued key and one reconcile. A failed reconcile is retried after 5 ms, then 10 ms, 20 ms and so on, up to a cap. Many events for one object collapse into one queued key, and a key is reconciled by at most one worker at a time. Owner references and garbage collection A Deployment owns ReplicaSets, which own pods. Deleting the owner decides what happens to the rest, in one of three modes. You delete a Deployment and want to know what happens to its ReplicaSets and pods (example). By default the Deployment disappears at once and the garbage collector deletes the dependents. Orphan mode leaves them running. A dependent with an owner reference is deleted by the garbage collector when its owner is deleted, unless the delete was an orphan delete.",
+"url": "techstack/k8s/course.html#/f/2",
 "tags": [
-"authn",
-"authz",
-"admission",
-"validation"
+"controllers",
+"system design",
+"use cases"
 ],
 "id": 63
 },
 {
 "type": "Chapter",
 "system": "k8s",
-"title": "Kubernetes · 3. etcd, resourceVersion and Watch",
-"summary": "Two controllers update the same Deployment at the same moment and one change silently disappears. How does the store stop that?",
-"body": "Global revision. etcd keeps MVCC history; every write increments one revision, exposed as metadata.resourceVersion. Optimistic concurrency. An update that carries a resourceVersion only succeeds if it still matches; otherwise HTTP 409. Watch from a revision.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch2",
+"title": "Kubernetes · 3. Scheduler",
+"summary": "The scheduler filters nodes that cannot run a pod, scores the rest and binds the pod.",
+"body": "Place each pod where it fits and the cluster stays balanced. Filter nodes by resources, selectors and taints. Score feasible nodes and bind the best. Explain why no node fits. Placement uses requests, not actual use. Binding only sets a node name. A pod that fits nowhere stays Pending and is retried. Filter, score, bind Pick a pod and watch the scheduler first discard nodes that cannot run it, then rank the rest and bind the winner. Try a pod that needs an SSD node that has no room. A new pod asks for 200m CPU and an SSD node, yet it sits Pending while 120 nodes look half empty (example). Nodes that fail a filter are never scored. If none passes, the pod stays Pending with a message counting the reasons. A pod is bound only to a node that passed every filter, and among those, to the one with the highest score. Why a pod stays Pending The scheduler records one reason per rejected node. Reading the counts tells you which constraint to change. Pods sit Pending and the events say \"0/6 nodes are available\" (example message). Each reason in the message names a filter that rejected some nodes: resources, a selector, a taint, a volume or an anti-affinity rule. A Pending pod's event lists, per node, the first filter that rejected it; no node passed them all. Requests, limits and who is killed first Requests decide placement, limits decide throttling and killing, and the relation between them decides which pod is evicted first under pressure. A node runs out of memory and some pods are killed while others survive (example). Going over a CPU limit only slows the container; going over a memory limit kills it. Under node pressure, BestEffort pods go first, then Burstable above their requests, and Guaranteed last. Over a CPU limit a container is slowed; over a memory limit it is killed; under node pressure the QoS class decides who is evicted first.",
+"url": "techstack/k8s/course.html#/f/3",
 "tags": [
-"revisions",
-"conflicts",
-"watch"
+"scheduling",
+"system design",
+"use cases"
 ],
 "id": 64
 },
 {
 "type": "Chapter",
 "system": "k8s",
-"title": "Kubernetes · 4. Controllers and Reconcile Loops",
-"summary": "A pod is deleted while the controller is restarting and the delete event is lost. Will the pod ever be replaced?",
-"body": "Reflector and informer. A reflector does LIST then WATCH and fills a local cache, so controllers read from memory instead of the API server. Work queue. Event handlers enqueue only the object key.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch3",
+"title": "Kubernetes · 4. Kubelet and probes",
+"summary": "The kubelet turns a bound pod into running containers, checks health with probes and reports status.",
+"body": "Run the pods assigned to this node and report their real state. Pull images and start containers. Run probes and act on their result. Restart failed containers with backoff. A failing liveness probe restarts the container; a failing readiness probe only removes it from traffic. Restart delay grows to five minutes. Status reflects what the kubelet observed. From Bound to Ready: what the kubelet reports A pod is bound to a node but never becomes Running, or restarts every few minutes. See what the kubelet does at each stage and what it writes back. The pod is bound to node-1, but kubectl get pod shows Pending, then ContainerCreating, then CrashLoopBackOff (example). The kubelet reports each step: Pending while the image is pulled, Running once a container starts, and Ready only after its readiness probe passes. The kubelet writes a pod's phase and conditions from what it observes on the node; Ready becomes true only after the readiness probe succeeds. Liveness, readiness and startup: three different questions A short database outage must not restart every replica. See why liveness must not depend on a dependency, and what readiness does instead. During a short database blip every replica restarts at once and the outage gets longer (example). A failing readiness probe only removes the pod from traffic. A failing liveness probe restarts the container, which is wrong for a dependency problem. A failed readiness probe removes a pod from traffic without restarting it; a failed liveness probe restarts the container. CrashLoopBackOff: the restart delay A container that keeps crashing is restarted with a doubling delay. CrashLoopBackOff is the waiting state between restarts, not the crash. A pod restarts every few minutes with status CrashLoopBackOff, because it exits right after start (example). The kubelet restarts after 10 s, then 20, 40, 80, 160 and then every 5 minutes, and resets the delay after the container runs 10 minutes. The restart delay doubles from 10 s up to a cap of 5 minutes and resets after 10 minutes of the container running.",
+"url": "techstack/k8s/course.html#/f/4",
 "tags": [
-"informers",
-"work queue",
-"level-triggered"
+"node agent",
+"system design",
+"use cases"
 ],
 "id": 65
 },
 {
 "type": "Chapter",
 "system": "k8s",
-"title": "Kubernetes · 5. Scheduler: Filter, Score, Bind",
-"summary": "A new pod asks for 200m CPU and an SSD node, yet it sits Pending while 120 nodes look half empty. Why can the scheduler not place it?",
-"body": "Filter removes infeasible nodes. NodeResourcesFit checks requests against allocatable, TaintToleration checks taints, NodeAffinity checks nodeSelector and affinity, InterPodAffinity checks pod (anti-)affinity.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch4",
+"title": "Kubernetes · 5. Services, endpoints and DNS",
+"summary": "A Service is a stable virtual IP over the ready pods, kept current by EndpointSlices and kube-proxy.",
+"body": "Let clients reach a changing set of pods by one stable name. Map a Service to the pods that match and are ready. Stop sending traffic to a terminating pod. Resolve Service names. Only ready pods are in the endpoints. Removal from endpoints and SIGTERM race, so pods must drain. DNS names resolve inside the cluster. A Service is a virtual IP over ready pods Pod IPs change on every deploy, but clients use one stable address. See how that address reaches a ready pod and how the set of pods is kept current. A client calls the Service web at its ClusterIP while pods are replaced by a deploy (example addresses). The ClusterIP belongs to no interface: node rules rewrite it to a ready pod IP per connection, and a pod that fails readiness leaves the rules. Only pods that match the selector and are Ready are in the EndpointSlice, and kube-proxy makes the ClusterIP reach exactly those. Graceful shutdown: the endpoint race When a pod is deleted, its removal from the endpoints and the SIGTERM to its container start at the same time. Requests can still arrive for a few seconds after the app has stopped. During a scale-down users see 502 errors for a few seconds (example). A short preStop sleep and an application that finishes in-flight requests on SIGTERM remove the errors. Removing a pod from the endpoints and stopping its container start together, so a pod must keep serving until the endpoints have caught up. DNS names, search paths and ndots A Service name is resolved by CoreDNS, and the pod's resolver tries a list of suffixes before the plain name. External names can cost several extra queries. A pod in the namespace shop calls orders and also api.example.com (example). A short Service name resolves on the first query. An external name with fewer than 5 dots tries each search suffix first. A name with fewer dots than ndots is tried with every search suffix before the name itself.",
+"url": "techstack/k8s/course.html#/f/5",
 "tags": [
-"requests",
-"taints",
-"affinity"
+"networking",
+"system design",
+"use cases"
 ],
 "id": 66
 },
 {
 "type": "Chapter",
 "system": "k8s",
-"title": "Kubernetes · 6. Kubelet and Pod Lifecycle",
-"summary": "The pod is bound to node-1 but never becomes Running, or it restarts every few minutes. What does the node agent do, and what does it report?",
-"body": "Pod phase and container state. Phases are Pending, Running, Succeeded, Failed, Unknown. Each container is Waiting (with a reason), Running or Terminated. CRI.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch5",
+"title": "Kubernetes · 6. Deployments and rollouts",
+"summary": "A Deployment moves pods between ReplicaSets within a surge and an unavailability budget.",
+"body": "Ship a new version without losing capacity, and undo it when it fails. Create a ReplicaSet per pod template. Scale old and new within the bounds. Keep history for rollback. Total pods stay at most replicas + maxSurge. Ready pods stay at least replicas - maxUnavailable. A stalled rollout is reported after 600 s. Rolling update: surge, unavailable and capacity Change the surge and unavailable limits, or ship a broken image, and watch the Deployment move pods between ReplicaSets while two counters guard capacity. How do you ship version 2 to every pod without dropping below full capacity, when yesterday's rollout fell to 50%? Four replicas here (example). Total pods stay at or below replicas + maxSurge and ready pods at or above replicas - maxUnavailable. A new pod that never becomes ready stops the rollout without dropping capacity. During a rolling update, total pods never exceed replicas + maxSurge and ready pods never fall below replicas - maxUnavailable. Rollback, history and the progress deadline Every pod template change creates a ReplicaSet and the old ones are kept, so a rollback is another rolling update towards an existing ReplicaSet. A rollout to a broken image stalled halfway. You need to see the history and go back (example). The Deployment keeps up to 10 old ReplicaSets (scaled to 0), reports a stalled rollout after 600 s, and does not roll back by itself. Each pod template has its own ReplicaSet, and a rollback scales an existing one up. PodDisruptionBudget: draining without an outage Draining a node evicts its pods. A PodDisruptionBudget limits how many pods of a workload can be taken down by such voluntary actions at once. Operators drain nodes for an upgrade while a service of 6 pods must keep at least 5 ready (example). The eviction API refuses an eviction that would leave fewer than 5 ready pods, so the drain waits until a replacement is ready. The eviction API allows a voluntary eviction only while ready pods stay at or above minAvailable.",
+"url": "techstack/k8s/course.html#/f/6",
 "tags": [
-"cri",
-"restarts",
-"limits"
+"rollouts",
+"system design",
+"use cases"
 ],
 "id": 67
 },
 {
 "type": "Chapter",
 "system": "k8s",
-"title": "Kubernetes · 7. Probes and Readiness",
-"summary": "During a short database blip every replica restarts at once and the outage gets longer. How does the kubelet decide to restart a container or to stop sending it traffic?",
-"body": "Liveness answers \"is this process stuck?\". After failureThreshold consecutive failures the kubelet restarts the container. Readiness answers \"can I take traffic now?\". It sets the pod's Ready condition and removes it from or returns it to endpoints.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch6",
+"title": "Kubernetes · 7. Autoscaling",
+"summary": "The HPA turns average utilization into a replica count, and the cluster autoscaler adds nodes for pods that do not fit.",
+"body": "Follow the load with the least pods that keep utilization near a target. Compute desired replicas from a metric. Limit how fast replicas change. Add nodes when pods are unschedulable. Utilization is relative to requests, so a request is required. A 10% tolerance prevents flapping. Scale-down waits for a 300 s window. The HPA: from CPU to a replica count Change the load and step the 15-second clock. See the formula the HPA applies, how fast it may add pods, why new pods do not help for a moment, and why scale-down is slower than scale-up. Traffic jumps 7 times at 8 p.m. How many replicas do you need, how fast, and when do you scale back without flapping? Each pod requests 200m CPU with a 50% target (example). desired = ceil(ready pods × current use ÷ target). Scale-up is fast (up to doubling per step), scale-down waits for a 5 minute stabilization window. The HPA computes desired replicas from ready pods, utilization and the target, clamps it to min and max, and limits how fast it changes. The metrics pipeline and why requests are required The HPA does not measure anything. It reads numbers produced by the kubelet and served by metrics-server, and divides them by the pod's requests. An HPA shows unknown for its target and never scales, though the pods are busy (example). Utilization is usage divided by request, so a container with no CPU request has no utilization and the HPA reports an error. CPU utilization = measured use ÷ requested CPU, so autoscaling on CPU needs a CPU request on the containers. The cluster autoscaler: adding nodes for pending pods An HPA can create more pods than the cluster has room for. The cluster autoscaler reacts to the pods that cannot be placed, not to utilization. The HPA adds 10 pods and they stay Pending because every node is full (example). The autoscaler adds a node when pods are unschedulable and a new node would fit them, and removes nodes that stay underused. The cluster autoscaler adds nodes only for pods the scheduler could not place, and removes nodes only when their pods can safely move.",
+"url": "techstack/k8s/course.html#/f/7",
 "tags": [
-"liveness",
-"readiness",
-"startup"
+"autoscaling",
+"system design",
+"use cases"
 ],
 "id": 68
 },
 {
 "type": "Chapter",
 "system": "k8s",
-"title": "Kubernetes · 8. Services, EndpointSlices and kube-proxy",
-"summary": "Pod IPs change on every deploy, and during scale-down users see 502 errors for a few seconds. How does traffic find the right pods?",
-"body": "Service has a selector and a stable virtual IP (ClusterIP) that does not belong to any interface. EndpointSlices list the IPs of pods that match the selector and are ready; a terminating pod is marked not ready.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch7",
+"title": "Kubernetes · 8. Node failure and self-healing",
+"summary": "Missed heartbeats become taints, taints become evictions, and controllers replace the pods.",
+"body": "Move work off a dead node without a human, and without running a stateful pod twice. Detect a silent node. Evict pods after a toleration window. Keep at most one pod per StatefulSet identity. Evict by pressure when a node runs low. Detection takes about 40 to 50 s. Default toleration is 300 s. A StatefulSet pod is not replaced until the old one is known gone. A machine loses power: the timeline of recovery A node dies at 3 a.m. See how silence becomes a taint, a taint becomes an eviction, and a replacement pod runs elsewhere, and why it takes about six minutes. A machine loses power with 6 pods of a Deployment on it (example). After about 50 seconds the node is marked Unknown and tainted. Its pods are evicted 5 minutes later by default, and replacements start elsewhere. A silent node becomes Unknown and tainted after the grace period, and its pods are evicted only after their toleration expires. Why the StatefulSet pod did not come back A Deployment pod is replaced at once because any pod will do. A StatefulSet pod has an identity, and running two pods with one identity can corrupt data. The node with db-0 dies. The Deployment pods reappear on other nodes, but db-0 stays Terminating (example). The StatefulSet controller will not start a second db-0 until the first is confirmed gone, so it waits, safely, for a person or the out-of-service taint. A StatefulSet never starts a pod with an identity while another pod with that identity might still be running. Memory pressure: eviction before the kernel kills When a node runs low on memory the kubelet evicts pods itself, in a chosen order, before the kernel's out-of-memory killer acts at random. Pods on a node grow in memory and available memory falls (example MiB). Below the hard threshold the node reports MemoryPressure, new BestEffort pods are kept away, and the kubelet evicts pods using more than they requested, lowest priority first. Under memory pressure the kubelet evicts by usage above requests and priority; Guaranteed pods within their requests are evicted last.",
+"url": "techstack/k8s/course.html#/f/8",
 "tags": [
-"virtual ip",
-"endpoints",
-"nat rules"
+"self-healing",
+"system design",
+"use cases"
 ],
 "id": 69
 },
 {
 "type": "Chapter",
 "system": "k8s",
-"title": "Kubernetes · 9. Rolling Update",
-"summary": "How do you ship version 2 to every pod without dropping below full capacity, when yesterday's rollout fell to 50%?",
-"body": "One ReplicaSet per template. A new spec.template gets a new pod-template hash and a new ReplicaSet; old ones are kept (scaled to 0) for rollback. Bounds. Total pods stay at most replicas + maxSurge; Ready pods stay at least replicas - maxUnavailable. Both default to 25%. They cannot both be 0.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch8",
+"title": "Kubernetes · 9. Control plane and etcd",
+"summary": "etcd replicates with Raft, and replicated controllers use a lease so only one acts at a time.",
+"body": "Keep the record of truth and the controllers available through failures. Replicate every write to a majority of etcd members. Elect one active controller-manager and scheduler. Keep the API stateless and replicated. A write is committed once a majority stores it. With no quorum the store is read-only or unavailable. Leader election tolerates a stalled leader within the lease duration. etcd members elect a leader etcd keeps every Kubernetes object, replicated by Raft across three members. Crash the leader or isolate a member and see which side may keep working. One etcd member dies. Does the cluster stop, and what happens if two are lost? Three members (example). With 2 of 3 members up a new leader is elected and writes continue. With 1 of 3 no leader can be elected and writes stop. A write is committed only when a majority of members store it, and there is at most one leader per term. Writes need a majority: partitions and lost quorum Send writes to the leader, cut it off from the others, and then lose two members. Only a side that holds a majority can commit a write. A network partition isolates the etcd leader from the other two members (example). The isolated leader can accept an entry but cannot commit it. The side with two members elects a new leader and continues; the old leader's entry is discarded after the heal. A minority side cannot commit: its uncommitted entries are overwritten when it rejoins the majority. Leader election by lease: one active controller The scheduler and the controller manager run as several replicas for availability, but only one may act. They agree through a Lease object. The active kube-scheduler stalls for 20 seconds in a long garbage collection pause (example). A standby takes the lease once it has not been renewed for 15 s, and the stalled instance stops acting when it finds the lease taken. Only the holder of an unexpired Lease acts, and a standby can acquire it only after the lease duration without a renewal.",
+"url": "techstack/k8s/course.html#/f/9",
 "tags": [
-"replicasets",
-"maxsurge",
-"maxunavailable"
+"control plane",
+"system design",
+"use cases"
 ],
 "id": 70
-},
-{
-"type": "Chapter",
-"system": "k8s",
-"title": "Kubernetes · 10. Horizontal Pod Autoscaler",
-"summary": "Traffic jumps 7 times at 8 p.m. How many replicas do you need, how fast, and when do you scale back without flapping?",
-"body": "Metrics pipeline. The kubelet exposes usage, metrics-server serves it through the metrics.k8s.io API, and the HPA controller queries it every 15 s by default. Utilisation is relative to requests. No CPU request on a container means no utilisation, so no scaling decision. Tolerance.",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch9",
-"tags": [
-"target utilisation",
-"stabilisation"
-],
-"id": 71
-},
-{
-"type": "Chapter",
-"system": "k8s",
-"title": "Kubernetes · 11. Node Failure and Self-Healing",
-"summary": "A machine loses power at 3 a.m. How does the cluster notice and heal, and why did the StatefulSet pod not come back?",
-"body": "Lease heartbeats. Each kubelet renews a Lease in kube-node-lease (about every 10 s); the node lifecycle controller marks a node Unknown after node-monitor-grace-period (40 s; 50 s from 1.32). Taints. It adds node.kubernetes.io/unreachable:NoExecute (or not-ready).",
-"url": "techstack/k8s/01-k8s-internals-end-to-end.html#ch10",
-"tags": [
-"leases",
-"taints",
-"eviction"
-],
-"id": 72
 },
 {
   "type": "Tour",

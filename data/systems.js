@@ -15,7 +15,7 @@ window.SITE_SYSTEMS = [
   { id:'postgres', name:'PostgreSQL', color:'#336791', kind:'Relational database', chapters:8,
     url:'techstack/postgres/course.html',
     topics:'System design, 8 features, 24 use cases, B+tree animation.' },
-  { id:'k8s', name:'Kubernetes', color:'#326ce5', kind:'Container orchestration', chapters:11,
-    url:'techstack/k8s/01-k8s-internals-end-to-end.html',
-    topics:'API server, etcd, scheduler, kubelet, rollouts.' }
+  { id:'k8s', name:'Kubernetes', color:'#326ce5', kind:'Container orchestration', chapters:9,
+    url:'techstack/k8s/course.html',
+    topics:'System design, 9 features, 27 use cases, etcd, reconcile, scheduler, rollout and HPA animations.' }
 ];

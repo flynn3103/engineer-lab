@@ -24,7 +24,9 @@ Each system has its own folder with an interactive course. Lessons follow a Prob
 | Redis | `techstack/redis/` | 9 features |
 | Apache Kafka | `techstack/kafka/` | 9 features |
 | PostgreSQL | `techstack/postgres/` | 8 features |
-| Kubernetes | `techstack/k8s/` | 11 |
+| Kubernetes | `techstack/k8s/` | 9 features |
+
+Kubernetes’ course at `techstack/k8s/course.html` uses the same layout: 9 features and 27 use cases, with computed, interactive animations for etcd resourceVersion and watch (`etcd.js`), reconcile loops (`reconcile.js`), scheduler filter and score (`scheduler.js`), rolling updates (`rollout.js`) and the HPA (`hpa.js`), plus the Raft model for etcd.
 
 Kafka’s course at `techstack/kafka/course.html` uses the same layout: 9 features and 27 use cases, with computed, interactive animations for key partitioning with Kafka’s own murmur2 (`klog.js`), ISR replication and the high watermark (`isr.js`), consumer group rebalance (`kgroup.js`), and the Raft model reused for KRaft.
 
@@ -36,7 +38,7 @@ Redis’s course at `techstack/redis/course.html` follows a top-down system desi
 
 ### Course framework (`assets/course/`)
 
-System-design courses share one framework so their style, diagrams and data layout stay consistent. The look is the Spark course's. A course page is a thin `course.html` plus course data files (`spec.js`, `uc-*.js`, `diagrams.js`, `paint.js`) and ends with `Course.mount(CourseData)`. See `assets/course/README.md` for the data contract, the picture kit and the checks, and `tools/course/` for the scaffold, validator and browser checker. The Spark and Redis courses both run on it. Spark and Redis use the same `spec.js`, `uc-*.js`, `diagrams.js`, and `paint.js` layout. Spark's 14 features and 67 use cases keep their scene data in these course files; reusable scene painters, animation controls, and 27 interactive animation forms (including the B+tree, token ring, quorum, LSM, Raft, partitioned log, ISR and consumer group) live in `assets/course/`. Courses are built with the `learn-technology-from-scratch` skill, which ships the same framework.
+System-design courses share one framework so their style, diagrams and data layout stay consistent. The look is the Spark course's. A course page is a thin `course.html` plus course data files (`spec.js`, `uc-*.js`, `diagrams.js`, `paint.js`) and ends with `Course.mount(CourseData)`. See `assets/course/README.md` for the data contract, the picture kit and the checks, and `tools/course/` for the scaffold, validator and browser checker. The Spark and Redis courses both run on it. Spark and Redis use the same `spec.js`, `uc-*.js`, `diagrams.js`, and `paint.js` layout. Spark's 14 features and 67 use cases keep their scene data in these course files; reusable scene painters, animation controls, and 32 interactive animation forms (including the B+tree, token ring, quorum, LSM, Raft, partitioned log, ISR, consumer group, etcd, reconcile loop, scheduler, rolling update and HPA) live in `assets/course/`. Courses are built with the `learn-technology-from-scratch` skill, which ships the same framework.
 
 Each course's entry point is `course.html`. Legacy lesson content lives in `course.js` and per-chapter files in `chapters/chNN.js`; Redis uses `spec.js`, `uc-*.js`, `diagrams.js` and `paint.js` with the shared course framework. Chapter numbers are zero-based in code and URLs; lessons are displayed starting at 1.
 
