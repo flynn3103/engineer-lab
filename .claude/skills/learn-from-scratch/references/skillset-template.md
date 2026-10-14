@@ -73,7 +73,7 @@ Once modules are `ready` and each has `skillName` and `skillDescription`, genera
 ```
 node .claude/skills/learn-from-scratch/scripts/export-plugin-skills.js skillset/<role>/course.html <plugin>/skills [--only id,id]
 ```
-Each module becomes `<skillName>/SKILL.md` (when to use, output, procedure, checklist, review questions and red flags) plus `references/lessons.md` (the full lessons with diagrams). Do not hand-edit the output; change the course and re-export. The agent file (the persona) is written by hand. Validate with `claude plugin validate <plugin>`.
+Each module becomes `<skillName>/SKILL.md` (when to use, output, procedure, checklist, review questions and red flags). Add `--with-references` to also write `references/lessons.md` (the full lessons with diagrams); it is off by default so the skill stays small. Do not hand-edit the output; change the course and re-export. The agent file (the persona) is written by hand. Validate with `claude plugin validate <plugin>`.
 
 ## Curriculum layout first
 A course can ship as a **layout** before any lesson is written: every module has `status: 'planned'`, an `outline` (3 to 8 lesson titles) and an `artifact`. The overview then shows a curriculum table of the whole course. Write modules one at a time and flip each to `ready` when its lessons, diagrams and review questions pass `check.js`. Eight layouts exist (`skillset/ui-ux-design`, `frontend-engineer`, `devops`, `qa-qc`, `product-management`, `data-engineer`, `data-analytics`, `data-science`) as templates. Every role gets module 01, "Mindset and review method", first, because the reader is a reviewer of agent output.
