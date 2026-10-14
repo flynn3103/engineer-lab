@@ -35,11 +35,11 @@ for (const m of D.modules) {
   if (!m.skillName || !m.skillDescription) { console.log('skip ' + m.id + ': needs skillName and skillDescription'); continue; }
   const L = D.lessons[m.id], sd = path.join(out, m.skillName); fs.mkdirSync(sd, { recursive: true });
   const desc = JSON.stringify(oneLine(m.skillDescription));
-  let s = `---\nname: ${m.skillName}\ndescription: ${desc}\nmetadata:\n  course: ${D.config.id}/${m.id}\n---\n\n# ${oneLine(m.name)}\n\n${md(m.goal)}\n\n`;
+  let s = `---\nname: ${m.skillName}\ndescription: ${desc}\n---\n\n# ${oneLine(m.name)}\n\n${md(m.goal)}\n\n`;
   s += `## When to use\n${L.map(l => '- ' + oneLine(l.title) + ': ' + oneLine(l.short)).join('\n')}\n\n`;
   s += `## Output\n${md(m.artifact)}\n\n`;
   s += `## How you work (intended behavior of the agent with this skill)\n${md(m.agent)}\n\n`;
-  s += `## Procedure\nWork through the lessons that apply. Each step is one move; do not skip the evidence.\n\n`;
+  s += `## Procedure\nWork through the steps that apply. Each step is one move; do not skip the evidence.\n\n`;
   L.forEach((l, i) => { s += `### ${i + 1}. ${oneLine(l.title)}\n${l.technique.map((t, k) => `${k + 1}. **${oneLine(t.t)}**. ${oneLine(t.x)}`).join('\n')}\n\n`; });
   s += `## Checklist before you call it done\n${L.map(l => `**${oneLine(l.title)}**\n${l.checklist.map(c => '- [ ] ' + oneLine(c)).join('\n')}`).join('\n\n')}\n\n`;
   s += `## Questions to ask and red flags to look for (when reviewing)\n${L.map(l => `**${oneLine(l.title)}**\n${l.review.map(q => '- ' + oneLine(q)).join('\n')}`).join('\n\n')}\n\n`;
