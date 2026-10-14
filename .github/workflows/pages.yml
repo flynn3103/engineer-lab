@@ -47,7 +47,7 @@ jobs:
           [ "$missing" = 0 ] || exit 1
           mkdir -p _site
           cp ./*.html _site/
-          cp -r assets data techstack _site/
+          cp -r assets data techstack skillset _site/
           mkdir -p _site/cv
           cp cv/Linh-Tran-Nhat-CV.pdf _site/cv/
           touch _site/.nojekyll
