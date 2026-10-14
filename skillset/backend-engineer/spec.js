@@ -44,7 +44,7 @@ SkillData.spec = {
     [`02 Functional spec`, `A requirements list with acceptance criteria, a glossary and out-of-scope.`, `The <code>functional-spec</code> skill flags vague or untestable lines and names the entities for the data model.`],
     [`03 Architecture`, `A problem statement, estimates, a component diagram and decision records.`, `The <code>system-design</code> skill checks that each requirement lands on a component and each decision states its trade-off.`],
     [`04 Data modeling`, `A data model document: ER diagram, table spec, keys, indexes, access patterns and a migration plan.`, `The <code>data-modeling</code> skill reviews it against the lesson checklists and drafts the DDL and migrations.`],
-    [`05 API`, `An API contract (OpenAPI) and an error model.`, `The <code>api-design</code> skill checks the contract against the data model and flags breaking changes.`],
+    [`05 API`, `An API contract (OpenAPI, and protobuf with a gRPC service definition for internal calls) and an error model.`, `The <code>api-design</code> skill checks the contract against the data model and flags breaking changes.`],
     [`06 Security`, `A threat list and a security review record.`, `The <code>security-review</code> skill runs the object-level and function-level authorization checks and the injection checks.`],
     [`07 Performance`, `A performance report with p95 and p99 evidence.`, `The <code>performance-review</code> skill asks for plans and percentiles and rejects claims without them.`],
     [`08 Async and messaging`, `A messaging design: queues or topics, delivery rules, failure handling.`, `The <code>messaging-design</code> skill checks idempotency, ordering and dead-letter handling.`],

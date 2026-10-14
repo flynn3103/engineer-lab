@@ -425,5 +425,175 @@ Good:  { "type": "https://api.market.example/errors/validation",
   artifact: `The finished <b>API contract</b>: an OpenAPI document with an error model, plus the five sections from the earlier lessons and a changelog of breaking changes.`,
   agent: `The agent writes the OpenAPI document first, runs a linter and a breaking-change diff, generates contract tests, and lists any change it considers breaking for your approval with a deprecation plan.`,
   src: `OpenAPI Specification 3.x, OpenAPI Initiative (paths, components, security schemes, deprecated). RFC 9457 (error model referenced by the contract). Semantic Versioning 2.0.0 for the meaning of compatible and breaking changes. Backend from First Principles, chapter 24 (OpenAPI) chapter topic only, text not read.`
+},
+{
+  title: `Protocol Buffers: schema design and evolution`,
+  short: `A .proto file is a contract with a wire format: field numbers are identity, and the rules for changing it safely are strict.`,
+  why: `Protobuf is compact and fast, and the generated code makes calls feel local, so teams adopt it quickly. The danger is that the schema is also a compatibility promise to every deployed client and server, and an agent can produce a .proto that compiles and still breaks production the day one side is deployed before the other.`,
+  concept: [
+    `A <b>message</b> is a set of typed fields. On the wire each field is identified by its <b>field number</b>, not its name. Numbers 1 to 15 take one byte for the tag and 16 to 2047 take two, so put the most frequent fields in the low numbers. The number is permanent: once a number has been released in a version that anyone has deployed, it must never mean something else.`,
+    `<b>Compatible changes</b> (in general): add a new field with a new number, add a new enum value, add a new message or service method, and rename a field (the wire does not carry names, but generated code and the JSON mapping do change, so treat a rename as a breaking change for code and JSON users). <b>Breaking changes</b>: reuse or renumber a field, change a field's type in an incompatible way, change a field between singular and repeated or into a oneof, remove a required behavior, and remove an enum value that is still in use. When a field is deleted, mark its number and name as <code>reserved</code> so nobody reuses them.`,
+    `<b>Defaults and presence.</b> In proto3 a plain scalar field that is not set reads as its zero value (0, empty string, false) and the zero value is not sent, so you cannot tell "unset" from "zero". Use the <code>optional</code> keyword when the difference matters, or a wrapper or message type. Every enum should start with a zero value named like <code>AD_STATUS_UNSPECIFIED = 0</code>, so an unset enum is never silently a real state.`,
+    `<b>Unknown fields.</b> A receiver that does not know a field number keeps or ignores it instead of failing, which is what lets old and new versions talk to each other. That is also why a typo in a field number is a silent bug, not a crash.`,
+    `<b>Choose types on purpose.</b> Use int64 minor units or a money message for amounts, never float. Use <code>google.protobuf.Timestamp</code> and <code>Duration</code> for time instead of bare integers. Put the major version in the package (<code>marketplace.ads.v1</code>) so a real breaking change becomes a new package. Tools such as <code>buf</code> can lint a schema and compare it with the previous release to report breaking changes, which is the protobuf equivalent of an OpenAPI diff.`
+  ],
+  terms: [
+    [`Field number`, `The permanent integer that identifies a field on the wire.`],
+    [`reserved`, `A declaration that a number or name was used before and must not be reused.`],
+    [`Presence`, `Whether a field was set, as opposed to holding its default value.`],
+    [`oneof`, `A group of fields where at most one is set at a time.`],
+    [`Wire compatible`, `Old and new binaries can exchange the message without error.`]
+  ],
+  example: {
+    setup: `The marketplace has an internal Ad service that Search, Chat and Moderation call. The agent proposes the first version of the message. The names, numbers and prices are invented examples.`,
+    body: [
+      `<pre>syntax = "proto3";
+package marketplace.ads.v1;
+
+enum AdStatus {
+  AD_STATUS_UNSPECIFIED = 0;
+  AD_STATUS_DRAFT = 1;
+  AD_STATUS_PUBLISHED = 2;
+  AD_STATUS_REMOVED = 3;
 }
+
+message Ad {
+  int64 ad_id = 1;
+  int64 member_id = 2;
+  int32 category_id = 3;
+  string title = 4;
+  int64 price_vnd = 5;
+  AdStatus status = 6;
+  google.protobuf.Timestamp created_at = 7;
+}</pre>`,
+      `Later, product wants a price currency and wants to drop the old status field in favor of a soft-delete timestamp. The safe edit adds <code>string currency_code = 8</code> and a <code>google.protobuf.Timestamp removed_at = 9</code>, stops using field 6, and writes <code>reserved 6; reserved "status";</code> after both sides no longer read it. The unsafe edit, which an agent may well produce, changes <code>int64 price_vnd = 5</code> to <code>double price = 5</code>: it compiles, but old clients now misread the bytes.`
+    ],
+    table: {
+      head: [`Change`, `Safe?`, `Why`],
+      rows: [
+        [`Add field 8 currency_code`, `Yes`, `Old readers ignore it, new readers get a default from old writers`],
+        [`Add enum value AD_STATUS_EXPIRED = 4`, `Yes, with care`, `Old code sees an unknown value, so it must handle that case`],
+        [`Change field 5 from int64 to double`, `No`, `The bytes mean something different to old and new code`],
+        [`Reuse number 6 for a different field`, `No`, `Old data and old clients read the new meaning as the old one`],
+        [`Rename title to name`, `Wire yes, code and JSON no`, `Generated names and the JSON mapping change for every user`]
+      ]
+    }
+  },
+  technique: [
+    { t: `Write the package with a major version`, x: `Name it for the domain and version, for example marketplace.ads.v1. A breaking redesign becomes v2, served next to v1.` },
+    { t: `Assign numbers by frequency, then freeze them`, x: `Hot fields get 1 to 15. After a release, a number never changes meaning.` },
+    { t: `Make presence explicit`, x: `Use optional or a wrapper where unset differs from zero. Start every enum with an UNSPECIFIED zero value.` },
+    { t: `Pick types for the data`, x: `Integer minor units or a money type for amounts, Timestamp and Duration for time, strings for opaque ids that may change format.` },
+    { t: `Retire with reserved`, x: `When removing a field, reserve its number and name, after confirming nothing reads it.` },
+    { t: `Lint and diff in the pipeline`, x: `Run a schema linter and a breaking-change check against the last released schema on every change, and fail the build on a break.` }
+  ],
+  mistakes: [
+    { t: `Reusing or renumbering a field`, ctx: `A cleanup renumbers fields 1 to 7 to be tidy. Old clients keep working until the first message arrives, then every field is decoded into the wrong place.`, fix: `Numbers are permanent. Leave gaps, and reserve what you delete.` },
+    { t: `Treating zero as unset`, ctx: `A price of 0 and a missing price look the same, so a free ad and an ad with no price are shown alike.`, fix: `Mark the field optional (or use a wrapper) when absence has a meaning, and say what absence means in a comment.` },
+    { t: `Using float or an unversioned package`, ctx: `Prices are stored as doubles and rounding errors appear in totals. The package has no version, so the first breaking change has nowhere to go.`, fix: `Integer minor units or a money type, and a versioned package from the first commit.` }
+  ],
+  review: [
+    `Is every field number new, never reused, and is every deleted field in a reserved list?`,
+    `Where does an unset value differ from zero, and is that field marked optional?`,
+    `Does the enum start with an UNSPECIFIED zero value, and does consuming code handle unknown values?`,
+    `Ask for the breaking-change report against the last released schema. Which tool produced it?`,
+    `Red flag: a changed type or renumbered field described as a harmless refactor, or a schema with no version in the package.`
+  ],
+  exercise: {
+    prompt: `The agent changes <code>int32 category_id = 3</code> to <code>string category_slug = 3</code> and deploys the server first. Explain what happens and give the safe plan.`,
+    answer: `<p>Field 3 changes meaning and wire type: an old client sends a varint for 3 and the new server reads it as a string field, which is a parse error or an ignored field. An old client reading a new response gets wrong or missing data. Both directions are unsafe.</p><p>Safe plan: add <code>string category_slug = 9</code> and keep <code>category_id = 3</code>. Have the server fill both. Move clients to read the slug. When no client reads field 3, write <code>reserved 3; reserved "category_id";</code> in a later release. Run the breaking-change check to prove the first step is compatible.</p>`
+  },
+  checklist: [
+    `The package carries a major version.`,
+    `Every released field number is permanent, and removed ones are reserved.`,
+    `Presence is explicit where unset differs from zero, and enums start with UNSPECIFIED.`,
+    `Amounts and time use suitable types, not float or bare integers.`,
+    `A lint and breaking-change check runs on every schema change.`
+  ],
+  artifact: `The <b>schema section</b> of the API contract for service-to-service calls: the .proto files with comments, the field number table with reserved entries, the presence rules, and the latest breaking-change report.`,
+  agent: `The agent writes the schema with explicit presence and an UNSPECIFIED enum zero, never reuses or renumbers a field, reserves removed ones, and attaches the lint and breaking-change output for every change.`,
+  src: `Protocol Buffers Language Guide (proto3) at protobuf.dev: field numbers, reserved, enums, optional, oneof, updating a message type. Protocol Buffers Style Guide. Google API Design Guide and API Improvement Proposals at google.aip.dev for naming and versioning. Buf documentation for lint and breaking-change rules. Prices, numbers and names are invented examples.`
+},
+{
+  title: `gRPC services: when to use them and how to design them`,
+  short: `Choose gRPC for the right callers, shape methods and streams around the work, and keep errors, versions and browsers in view.`,
+  why: `gRPC is attractive for internal calls: typed clients, a compact format, and streaming. It is also easy to pick for the wrong caller, to design chatty methods, or to hide errors in a generic status. A reviewer decides whether gRPC fits, and whether the service definition is a good contract.`,
+  concept: [
+    `<b>gRPC</b> runs on HTTP/2 and sends Protocol Buffers messages by default. A service definition lists methods, and generated code gives each side a client and a server stub. There are four call shapes: <b>unary</b> (one request, one response), <b>server streaming</b> (one request, a stream of responses), <b>client streaming</b>, and <b>bidirectional streaming</b>.`,
+    `<b>When it fits.</b> Internal service-to-service calls, strongly typed contracts shared by many languages, low latency and high call volume, and streaming. <b>When REST and JSON fit better.</b> Public APIs and partners, browsers, simple CRUD that benefits from HTTP caching and easy debugging with curl, and teams that need to read traffic with plain tools. Browsers cannot speak native gRPC, so they need gRPC-Web, a proxy, or a REST gateway generated from annotations on the service.`,
+    `<b>Design the methods around the work.</b> One coarse call that returns what the caller needs beats five fine calls in a loop (the network is not a function call). Name methods with verbs on a resource (<code>GetAd</code>, <code>ListAds</code>, <code>CreateAd</code>). Paginate list methods with a page size and an opaque page token, as REST does. Use a stream when the data really is a sequence over time, for example price updates, and not as a way to avoid pagination.`,
+    `<b>Errors.</b> gRPC has its own status codes (for example <code>INVALID_ARGUMENT</code>, <code>NOT_FOUND</code>, <code>PERMISSION_DENIED</code>, <code>RESOURCE_EXHAUSTED</code>, <code>FAILED_PRECONDITION</code>, <code>UNAVAILABLE</code>, <code>DEADLINE_EXCEEDED</code>). Pick the code that tells the caller what to do: retry later (<code>UNAVAILABLE</code>), fix the request (<code>INVALID_ARGUMENT</code>), or give up. Put structured details (which field was invalid) in the error details, not in a free-text message. Never return <code>UNKNOWN</code> or <code>INTERNAL</code> for an error the caller caused.`,
+    `<b>Operating it.</b> Deadlines, retries and idempotency are covered in the Async work and messaging module; the same rules apply: every call carries a deadline, and only idempotent methods are retried. HTTP/2 keeps long-lived connections, so a plain layer-4 load balancer can send most traffic to one backend. Use a gRPC-aware proxy or client-side balancing. Version the service by package (<code>marketplace.ads.v1</code>) and keep the old version running during migration. Enable the standard health-checking service so orchestrators can probe it.`
+  ],
+  terms: [
+    [`Unary`, `One request and one response, like a normal function call.`],
+    [`Server streaming`, `One request, and the server sends many responses over time.`],
+    [`Status code`, `gRPC's result category, set on every call.`],
+    [`Stub`, `The generated client or server code for a service.`],
+    [`gRPC-Web`, `A variant that lets browsers call gRPC services through a proxy.`]
+  ],
+  example: {
+    setup: `Search needs ad data in bulk, Chat needs a few ad fields per conversation, and a dashboard wants live price changes. The Ad service is internal. The agent proposes a service definition.`,
+    body: [
+      `<pre>service AdService {
+  rpc GetAd(GetAdRequest) returns (Ad);
+  rpc BatchGetAds(BatchGetAdsRequest) returns (BatchGetAdsResponse);
+  rpc ListAds(ListAdsRequest) returns (ListAdsResponse);
+  rpc WatchPriceChanges(WatchPriceChangesRequest)
+      returns (stream PriceChange);
+}
+
+message BatchGetAdsRequest { repeated int64 ad_ids = 1; }
+message ListAdsRequest {
+  int32 category_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}</pre>`,
+      `The review finds three things. <code>BatchGetAds</code> must cap the list (for example 100 ids) or one call can ask for a million. <code>ListAds</code> is paginated with a token, which is right. <code>WatchPriceChanges</code> is a true stream, but the service must say what happens when the client falls behind and how it resumes after a disconnect. The agent also returned <code>INTERNAL</code> for an unknown ad id: the correct code is <code>NOT_FOUND</code>.`
+    ],
+    table: {
+      head: [`Caller`, `Protocol`, `Why`],
+      rows: [
+        [`Search, Chat, Moderation (internal)`, `gRPC`, `Typed clients, many languages, high call rate`],
+        [`Mobile and web apps`, `REST and JSON, or gRPC-Web through a gateway`, `Browsers and public clients need HTTP-friendly access`],
+        [`Partners`, `REST and JSON with OpenAPI`, `Easy to read, cache and debug without special tools`]
+      ]
+    }
+  },
+  technique: [
+    { t: `Decide the protocol by caller`, x: `List the callers. Internal and typed: gRPC. Browsers, partners and public: REST, or a gateway in front of gRPC.` },
+    { t: `Design coarse methods`, x: `For each use, ask whether one call can return what the caller needs. Add batch methods with a cap, and paginate lists.` },
+    { t: `Choose the call shape`, x: `Use unary by default. Use a stream only for a real sequence over time, and define backpressure and resume rules.` },
+    { t: `Map errors to codes`, x: `For each failure, pick the status code that tells the caller what to do, and put structured details in the error details.` },
+    { t: `Set the operating rules`, x: `Deadline on every call, retries only for idempotent methods, version in the package, health service enabled, balancing that understands HTTP/2.` },
+    { t: `Test the contract`, x: `Generate clients in two languages, call with a CLI tool, and run the schema breaking-change check on every change.` }
+  ],
+  mistakes: [
+    { t: `Chatty fine-grained methods`, ctx: `Chat calls GetAd once per conversation in a loop of 200. Each call is fast, but the sum breaks the latency budget.`, fix: `Add BatchGetAds with a cap, and design methods around what the caller needs.` },
+    { t: `One generic error`, ctx: `Every failure is returned as UNKNOWN with a message string. Callers retry bad requests and cannot tell a missing ad from an outage.`, fix: `Use specific codes, and structured error details for the field-level cause.` },
+    { t: `gRPC for everything`, ctx: `A public partner API is built on gRPC. Partners cannot easily debug it and browsers cannot call it.`, fix: `Expose REST and JSON (or a generated gateway) at the edge, and keep gRPC inside.` }
+  ],
+  review: [
+    `Who calls this, and does gRPC fit each of them? Where is the REST or gateway edge?`,
+    `Are list and batch methods capped and paginated, and are streams given a resume and a slow-consumer rule?`,
+    `Does each failure map to a status code that tells the caller what to do?`,
+    `How is the service balanced across instances, and where is the health service and the version in the package?`,
+    `Red flag: every error is UNKNOWN or INTERNAL, a method returns unbounded data, or gRPC is chosen for a browser or partner without a gateway.`
+  ],
+  exercise: {
+    prompt: `A mobile app needs the same ad data that Search gets over gRPC. Choose how to serve it and say what you must add to the service definition.`,
+    answer: `<p>Do not expose the internal gRPC service to the app. Put an API layer at the edge that speaks REST and JSON (documented in OpenAPI) and calls the Ad service over gRPC. Alternatively, generate a gateway from HTTP annotations on the service definition so the same methods are reachable as REST, or use gRPC-Web through a proxy.</p><p>Add to the definition: HTTP annotations if you use a gateway, field-level authorization at the edge (the app must only see its allowed fields), pagination on list methods, caps on batch methods, and error codes that the edge maps to HTTP status codes and a Problem Details body.</p>`
+  },
+  checklist: [
+    `Each caller has a protocol choice with a reason.`,
+    `Methods are coarse, batch and list methods are capped, and lists are paginated.`,
+    `Streams define resume and slow-consumer behavior.`,
+    `Every failure maps to a specific status code with structured details.`,
+    `Deadlines, versioning, balancing and the health service are specified.`
+  ],
+  artifact: `The <b>service definition section</b> of the API contract: the service and message definitions, a caller and protocol table, an error and status-code table, and the operating rules (deadlines, retries, versioning, balancing, health).`,
+  agent: `The agent picks the protocol per caller, designs coarse capped methods, maps every failure to a status code with details, adds a REST or gateway edge for browsers and partners, and attaches generated clients and contract tests.`,
+  src: `gRPC documentation at grpc.io: core concepts, status codes, deadlines, health checking, load balancing, gRPC-Web. Protocol Buffers documentation at protobuf.dev. Google API Improvement Proposals (pagination, errors, standard methods) at google.aip.dev. This course: Async work and messaging, lesson on gRPC and service-to-service calls (deadlines, retries). Names and numbers are invented examples.`
+}
+
 ];

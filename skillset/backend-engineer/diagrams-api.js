@@ -68,3 +68,36 @@ SkillData.diagrams['api:6'] = [
   G --> H
   H --> I["Publish docs and clients"]` }
 ];
+SkillData.diagrams['api:7'] = [
+  { kind: 'Flow', title: 'Changing a protobuf message: safe or breaking', src: `flowchart TD
+  A["Proposed schema change"] --> B{"What kind of change?"}
+  B -- "add a field with a new number" --> S1["Safe: old readers ignore it"]
+  B -- "add an enum value" --> S2["Safe, but callers must handle unknown values"]
+  B -- "remove a field" --> R["Stop using it, then reserve its number and name"]
+  B -- "rename a field" --> W["Wire safe, breaks generated code and JSON"]
+  B -- "reuse a number or change a type" --> X["Breaking: new field and new number instead"]
+  R --> L["Lint and breaking-change check in CI"]
+  S1 --> L
+  S2 --> L
+  W --> L
+  X --> L` }
+];
+SkillData.diagrams['api:8'] = [
+  { kind: 'Flow', title: 'Which protocol for which caller', src: `flowchart TD
+  C["A caller of the Ad service"] --> Q{"Who is the caller?"}
+  Q -- "internal service" --> G["gRPC with generated clients"]
+  Q -- "browser or mobile app" --> E["REST and JSON at the edge, or gRPC-Web through a proxy"]
+  Q -- "partner or public" --> O["REST and JSON with an OpenAPI contract"]
+  E --> G
+  O --> G
+  G --> OP["Deadline, retry rules, versioned package, health service"]` },
+  { kind: 'Sequence', title: 'A unary call with a deadline and an error status', src: `sequenceDiagram
+  participant S as Search service
+  participant A as Ad service
+  S->>A: GetAd(ad_id) with a 200 ms deadline
+  A-->>S: NOT_FOUND with details
+  Note over S: Do not retry, the ad does not exist
+  S->>A: GetAd(ad_id) with a 200 ms deadline
+  A--xS: no answer before the deadline
+  Note over S: DEADLINE_EXCEEDED, retry once if idempotent` }
+];
