@@ -35,8 +35,6 @@
     <div class="cur-status"><span id="status" aria-live="polite"></span> · <span class="live" id="live"><i></i><span>bundled snapshot</span></span> · <a id="repo" href="#">Repository ↗</a></div>
   </header>
   <main>
-    <h2 style="font:700 15px var(--mono);margin:26px 0 0">Skill-set courses by team <span id="courses-count" style="font-weight:400;color:var(--mut)"></span></h2>
-    <p style="color:var(--mut);margin:6px 0 0;max-width:72ch">Each role has a course that teaches the skill and the mindset to review what an agent produces. Courses marked curriculum layout have the module and lesson list drawn, with lessons to be written. The matching plugins live in the agent-skills marketplace, one plugin per role, grouped the same way.</p>
     <div id="courses"></div>
     <section id="skills-sec" hidden>
       <h2 style="font:700 15px var(--mono);margin:30px 0 0">Agent skills</h2>
@@ -89,7 +87,6 @@
     /* the search box filters the skill-set courses (and agent skills, when the repo lists any) */
     const hitsC=search(COURSES,q,[['name',6],['tag',4],['role',3],['text',1]]);
     $('courses').innerHTML=hitsC.length?TEAMS.map(t=>{const hs=hitsC.filter(({item:c})=>c.team===t.id);return hs.length?`<section class="team" aria-labelledby="team-${t.id}"><h3 id="team-${t.id}" style="font:700 14px var(--mono);margin:26px 0 0">${esc(t.name)} <span style="font-weight:400;color:var(--mut)">${hs.length} ${hs.length>1?'courses':'course'}</span></h3><p style="color:var(--mut);margin:4px 0 0;max-width:72ch;font-size:14px">${esc(t.blurb)}</p><div class="cgrid" style="margin-top:12px">${hs.map(({item:c},k)=>cardHTML(c,k)).join('')}</div></section>`:''}).join(''):`<div class="empty" style="margin-top:14px"><b>No course matches</b>Try another word.</div>`;
-    $('courses-count').textContent=hitsC.length+' of '+COURSES.length+' courses';
     const pool=D.skills.filter(s=>!on.size||(s.tags||[]).some(t=>on.has(t)));
     const hits=search(pool,q,[['name',6],['tags',4],['description',1]]);
     $('skills-sec').hidden=!D.skills.length;
