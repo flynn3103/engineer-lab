@@ -7,7 +7,7 @@ SkillData.config = {
   "role": "Data analyst",
   "root": "../../",
   "plugin": {
-    "name": "data-analytics",
+    "name": "data-analyst",
     "agent": "data-analyst"
   },
   "related": []

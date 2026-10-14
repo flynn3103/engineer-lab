@@ -7,7 +7,7 @@ SkillData.config = {
   "role": "UI/UX designer",
   "root": "../../",
   "plugin": {
-    "name": "ui-engineer",
+    "name": "ui-ux-designer",
     "agent": "ui-ux-designer"
   },
   "related": []

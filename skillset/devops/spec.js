@@ -7,7 +7,7 @@ SkillData.config = {
   "role": "DevOps engineer",
   "root": "../../",
   "plugin": {
-    "name": "platform-engineer",
+    "name": "devops-engineer",
     "agent": "devops-engineer"
   },
   "related": []

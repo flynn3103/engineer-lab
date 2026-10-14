@@ -7,7 +7,7 @@ SkillData.config = {
   "role": "QA/QC engineer",
   "root": "../../",
   "plugin": {
-    "name": "quality-engineer",
+    "name": "qa-engineer",
     "agent": "qa-engineer"
   },
   "related": []

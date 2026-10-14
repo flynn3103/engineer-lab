@@ -35,9 +35,9 @@
     <div class="cur-status"><span id="status" aria-live="polite"></span> · <span class="live" id="live"><i></i><span>bundled snapshot</span></span> · <a id="repo" href="#">Repository ↗</a></div>
   </header>
   <main>
-    <h2 style="font:700 15px var(--mono);margin:26px 0 0">Skill-set courses <span id="courses-count" style="font-weight:400;color:var(--mut)"></span></h2>
-    <p style="color:var(--mut);margin:6px 0 0;max-width:70ch">Courses that teach the skill a plugin assumes. Each module ends in an artifact the plugin agent checks. Courses marked curriculum layout have their module and lesson list drawn, with lessons to be written.</p>
-    <div class="cgrid" id="courses" style="margin-top:14px"></div>
+    <h2 style="font:700 15px var(--mono);margin:26px 0 0">Skill-set courses by team <span id="courses-count" style="font-weight:400;color:var(--mut)"></span></h2>
+    <p style="color:var(--mut);margin:6px 0 0;max-width:72ch">Each role has a course that teaches the skill and the mindset to review what an agent produces. Courses marked curriculum layout have the module and lesson list drawn, with lessons to be written. The matching plugins live in the agent-skills marketplace, one plugin per role, grouped the same way.</p>
+    <div id="courses"></div>
     <section id="skills-sec" hidden>
       <h2 style="font:700 15px var(--mono);margin:30px 0 0">Agent skills</h2>
       <div class="cgrid" id="skills" style="margin-top:14px"></div>
@@ -61,23 +61,34 @@
   function tagBar(){const t=[...new Set(D.skills.flatMap(s=>s.tags||[]))].sort();$('tags').innerHTML=t.map(x=>`<button type="button" aria-pressed="${on.has(x)}" data-k="${esc(x)}" style="font:13px var(--mono);border:1px solid var(--ink);border-radius:999px;padding:3px 11px;background:${on.has(x)?'var(--ink)':'var(--card)'};color:${on.has(x)?'var(--bg)':'var(--ink)'};min-height:0">${esc(x)}</button>`).join('')}
   $('tags').onclick=e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k;on.has(k)?on.delete(k):on.add(k);tagBar();render()};
   /* Skill-set courses (skillset/<id>/course.html). Add a row here when a new course is created. */
+  const TEAMS=[
+    {id:'business',name:'Business team',blurb:'Roles that decide what to build and why, win customers and money, and keep the company within the rules.'},
+    {id:'platform',name:'Platform team',blurb:'Roles that build, run and check the product itself.'},
+    {id:'data',name:'Data team',blurb:'Roles that move, analyse and model data.'}
+  ];
+  const TEAM_OF={'product-management':'business','sales':'business','marketing':'business','finance':'business','legal':'business','backend-engineer':'platform','frontend-engineer':'platform','ui-ux-design':'platform','devops':'platform','qa-qc':'platform','data-engineer':'data','data-analytics':'data','data-science':'data'};
   const COURSES0=[
     {id:'backend-engineer',tag:'BACKEND ENG',name:'Backend engineer',hash:'#/m/1',desc:'Backend skill set and the mindset to review an AI agent: 13 modules and 75 lessons, from requirements and data modeling to security, scaling and delivery.',chips:['13 modules written','plugin: backend-engineer']},
-    {id:'ui-ux-design',tag:'UI/UX',name:'UI/UX designer',desc:'From a user problem to a design contract: discovery, flows, visual system, accessibility, handoff.',chips:['curriculum layout','12 modules planned','plugin: ui-engineer']},
-    {id:'frontend-engineer',tag:'FRONTEND',name:'Frontend engineer',desc:'Components, state, rendering, accessibility, performance and testing, built from a design contract.',chips:['curriculum layout','12 modules planned','plugin: ui-engineer']},
-    {id:'devops',tag:'DEVOPS',name:'DevOps engineer',desc:'Containers, CI/CD, infrastructure as code, observability, reliability and secure operations.',chips:['curriculum layout','12 modules planned','plugin: platform-engineer']},
-    {id:'qa-qc',tag:'QA/QC',name:'QA and QC engineer',desc:'Requirements to tests, risk-based strategy, automation, metrics and release readiness.',chips:['curriculum layout','11 modules planned','plugin: quality-engineer']},
+    {id:'ui-ux-design',tag:'UI/UX',name:'UI/UX designer',desc:'From a user problem to a design contract: discovery, flows, visual system, accessibility, handoff.',chips:['curriculum layout','12 modules planned','plugin: ui-ux-designer']},
+    {id:'frontend-engineer',tag:'FRONTEND',name:'Frontend engineer',desc:'Components, state, rendering, accessibility, performance and testing, built from a design contract.',chips:['curriculum layout','12 modules planned','plugin: frontend-engineer']},
+    {id:'devops',tag:'DEVOPS',name:'DevOps engineer',desc:'Containers, CI/CD, infrastructure as code, observability, reliability and secure operations.',chips:['curriculum layout','12 modules planned','plugin: devops-engineer']},
+    {id:'qa-qc',tag:'QA/QC',name:'QA and QC engineer',desc:'Requirements to tests, risk-based strategy, automation, metrics and release readiness.',chips:['curriculum layout','11 modules planned','plugin: qa-engineer']},
     {id:'product-management',tag:'PRODUCT',name:'Product manager',desc:'Discovery, strategy, PRDs, prioritization, metrics, experiments and launch.',chips:['curriculum layout','12 modules planned','plugin: product-manager']},
-    {id:'data-engineer',tag:'DATA ENG',name:'Data engineer',desc:'Ingestion, batch and streaming pipelines, warehouse modeling, data quality, governance and operations.',chips:['curriculum layout','12 modules planned','plugin: data-engineering']},
-    {id:'data-analytics',tag:'ANALYTICS',name:'Data analyst',desc:'Questions and metrics, SQL, cleaning, statistics, experiments, dashboards and recommendations.',chips:['curriculum layout','11 modules planned','plugin: data-analytics']},
-    {id:'data-science',tag:'DATA SCI',name:'Data scientist',desc:'Problem framing, features, supervised and unsupervised learning, evaluation, MLOps and responsible ML.',chips:['curriculum layout','13 modules planned','plugin: data-science']}
+    {id:'data-engineer',tag:'DATA ENG',name:'Data engineer',desc:'Ingestion, batch and streaming pipelines, warehouse modeling, data quality, governance and operations.',chips:['curriculum layout','12 modules planned','plugin: data-engineer']},
+    {id:'data-analytics',tag:'ANALYTICS',name:'Data analyst',desc:'Questions and metrics, SQL, cleaning, statistics, experiments, dashboards and recommendations.',chips:['curriculum layout','11 modules planned','plugin: data-analyst']},
+    {id:'sales',tag:'SALES',name:'Sales',desc:'Ideal customer, prospecting, discovery, negotiation, pipeline and forecasting, and account growth.',chips:['curriculum layout','11 modules planned','plugin: sales-manager']},
+    {id:'marketing',tag:'MARKETING',name:'Marketing',desc:'Positioning, messaging, channels, content and SEO, lifecycle, attribution and budgets.',chips:['curriculum layout','12 modules planned','plugin: marketing-manager']},
+    {id:'finance',tag:'FINANCE',name:'Finance',desc:'Accounting foundations, reporting, forecasting, unit economics, cash, business cases and controls.',chips:['curriculum layout','11 modules planned','plugin: finance-analyst']},
+    {id:'legal',tag:'LEGAL',name:'Legal',desc:'Contracts, platform terms, privacy, IP, consumer rules, regulatory risk and incident response.',chips:['curriculum layout','11 modules planned','plugin: legal-counsel']},
+    {id:'data-science',tag:'DATA SCI',name:'Data scientist',desc:'Problem framing, features, supervised and unsupervised learning, evaluation, MLOps and responsible ML.',chips:['curriculum layout','13 modules planned','plugin: data-scientist']}
   ];
-  const COURSES=COURSES0.map(c=>({...c,role:c.name,text:c.desc+' '+c.chips.join(' ')}));
+  const COURSES=COURSES0.map(c=>({...c,team:TEAM_OF[c.id],role:c.name,text:c.desc+' '+c.chips.join(' ')}));
+  const cardHTML=(c,i)=>`<a class="ccard" href="skillset/${c.id}/course.html${c.hash||''}" style="--p:var(--p${i%8})"><div class="art"><svg viewBox="0 0 200 90" aria-hidden="true"><rect x="22" y="22" width="156" height="46" rx="10" fill="var(--card)" stroke="var(--ink)" stroke-width="2"/><text x="100" y="51" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="15" font-weight="700" fill="var(--ink)">${esc(c.tag)}</text></svg></div><div class="body"><h3>${esc(c.name)}</h3><p>${esc(c.desc)}</p><div class="chips">${c.chips.map(x=>`<span>${esc(x)}</span>`).join('')}</div></div></a>`;
   function render(){
     const q=$('q').value,toks=norm(q).split(/\s+/).filter(Boolean);
     /* the search box filters the skill-set courses (and agent skills, when the repo lists any) */
     const hitsC=search(COURSES,q,[['name',6],['tag',4],['role',3],['text',1]]);
-    $('courses').innerHTML=hitsC.length?hitsC.map(({item:c},i)=>`<a class="ccard" href="skillset/${c.id}/course.html${c.hash||''}" style="--p:var(--p${i%8})"><div class="art"><svg viewBox="0 0 200 90" aria-hidden="true"><rect x="22" y="22" width="156" height="46" rx="10" fill="var(--card)" stroke="var(--ink)" stroke-width="2"/><text x="100" y="51" text-anchor="middle" font-family="ui-monospace,Menlo,monospace" font-size="15" font-weight="700" fill="var(--ink)">${esc(c.tag)}</text></svg></div><div class="body"><h3>${esc(c.name)}</h3><p>${esc(c.desc)}</p><div class="chips">${c.chips.map(x=>`<span>${esc(x)}</span>`).join('')}</div></div></a>`).join(''):`<div class="empty" style="grid-column:1/-1"><b>No course matches</b>Try another word.</div>`;
+    $('courses').innerHTML=hitsC.length?TEAMS.map(t=>{const hs=hitsC.filter(({item:c})=>c.team===t.id);return hs.length?`<section class="team" aria-labelledby="team-${t.id}"><h3 id="team-${t.id}" style="font:700 14px var(--mono);margin:26px 0 0">${esc(t.name)} <span style="font-weight:400;color:var(--mut)">${hs.length} ${hs.length>1?'courses':'course'}</span></h3><p style="color:var(--mut);margin:4px 0 0;max-width:72ch;font-size:14px">${esc(t.blurb)}</p><div class="cgrid" style="margin-top:12px">${hs.map(({item:c},k)=>cardHTML(c,k)).join('')}</div></section>`:''}).join(''):`<div class="empty" style="margin-top:14px"><b>No course matches</b>Try another word.</div>`;
     $('courses-count').textContent=hitsC.length+' of '+COURSES.length+' courses';
     const pool=D.skills.filter(s=>!on.size||(s.tags||[]).some(t=>on.has(t)));
     const hits=search(pool,q,[['name',6],['tags',4],['description',1]]);

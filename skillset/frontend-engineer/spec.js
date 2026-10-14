@@ -7,7 +7,7 @@ SkillData.config = {
   "role": "Frontend engineer",
   "root": "../../",
   "plugin": {
-    "name": "ui-engineer",
+    "name": "frontend-engineer",
     "agent": "frontend-engineer"
   },
   "related": []

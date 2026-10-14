@@ -7,8 +7,8 @@ SkillData.config = {
   "role": "Data engineer",
   "root": "../../",
   "plugin": {
-    "name": "data-engineering",
-    "agent": "pipeline-engineer"
+    "name": "data-engineer",
+    "agent": "data-engineer"
   },
   "related": []
 };
@@ -22,7 +22,7 @@ SkillData.spec = {
   ],
   "audience": [
     "You build or own data pipelines and want a method that holds up in production.",
-    "You will use the <b>pipeline-engineer</b> agent and must judge pipelines and SQL with evidence.",
+    "You will use the <b>data-engineer</b> agent and must judge pipelines and SQL with evidence.",
     "You review data changes where a silent error spreads to every report."
   ],
   "outcomes": [
