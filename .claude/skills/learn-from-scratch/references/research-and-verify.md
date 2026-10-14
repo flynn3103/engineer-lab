@@ -25,7 +25,7 @@ When a number in a picture can be computed (a hash slot, a checksum, a size), co
 
 ## When the environment blocks sources
 - Docs sites or search may be unreachable and return only secondary pages. Still write the use case, but say so in the report, list each default so a reader can check it, and never present an unconfirmed number as verified.
-- The skill itself may not be in the session's skill list: look in the skill repository (for example `flynn3103/agent-skills`, attach it with `add_repo`) before deciding it is missing.
+- The skill itself may not be in the session's skill list: look in the skill repository (for example `flynn3103/agent-team`, attach it with `add_repo`) before deciding it is missing.
 - The Mermaid CDN may be blocked: `npm install mermaid@10.9.1` into a temp folder and serve it for the CDN URL (`tools/course/browse.js` does this automatically).
 
 ## Facts to pin for each use case

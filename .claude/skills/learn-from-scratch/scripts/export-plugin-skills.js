@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* Export a skill-set course into Claude Code plugin skills: one skill per ready module.
  *   node export-plugin-skills.js <course.html> <outDir> [--only id1,id2] [--with-references]
- *   node export-plugin-skills.js skillset/backend-engineer/course.html ../agent-skills/plugins/platform-team/backend-engineer/skills
+ *   node export-plugin-skills.js skillset/backend-engineer/course.html ../agent-team/plugins/platform-team/backend-engineer/skills
  * For each ready module it writes <outDir>/<skillName>/SKILL.md (when to use, output, procedure, checklist, review questions and red flags)
  * With --with-references it also writes <outDir>/<skillName>/references/lessons.md (the full lessons); by default it does not.
  * The course data stays the single source of truth: edit the course, then re-run this script. Needs module.skillName and

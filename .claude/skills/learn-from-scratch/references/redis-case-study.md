@@ -17,7 +17,7 @@ Scope default used: internals, one marketplace scenario (sessions, carts, leader
 | End to end (capstone) | one SET across every layer (`flow`) |
 
 ## How it was built, in rounds
-1. Found the skill in `flynn3103/agent-skills` (it was not in the session's skill list), read `SKILL.md` and its references.
+1. Found the skill in `flynn3103/agent-team` (it was not in the session's skill list), read `SKILL.md` and its references.
 2. Pinned facts: fetched `redis.conf`, `sentinel.conf` and `src/{config,dict,expire,evict,server,multi,cluster,t_hash,replication}.c` from the 7.2 branch, grepped each default.
 3. Wrote spec, 25 use cases, 25 painters, a data-driven page; validated in Node (every step painted, forms unique) and in a browser.
 4. Added the Mermaid layer after noticing Spark has it (36 diagrams: 1 overall, 9 feature, 26 use case).
@@ -36,7 +36,7 @@ Stream and consumer-group semantics, Sentinel replica-selection order, the "up t
 ## Mistakes made, so you do not repeat them
 | Mistake | Fix and rule |
 | --- | --- |
-| Assumed the skill was installed; it was not | Search the skill repo (`flynn3103/agent-skills`, `add_repo`) before concluding a skill is missing. |
+| Assumed the skill was installed; it was not | Search the skill repo (`flynn3103/agent-team`, `add_repo`) before concluding a skill is missing. |
 | Left out the Mermaid diagram layer and said "step pictures instead" | The diagram per use case and per feature is required. `check.js` now fails without it. |
 | Styled the page my own way, then claimed it matched | Open the reference course next to yours and compare screenshots before saying it is consistent. |
 | Picture classes `.lab`, `.row`, `.chip`, `.bar`, `.box` inherited styles from `assets/lab.css` | Use the kit's unique class names (`cap strip tag meter panel hero faint`), styled only under `.pv`. |
