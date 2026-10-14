@@ -8,7 +8,7 @@
     <a class="brand" href="index.html" aria-label="Home"><i>◆</i></a>
     <nav aria-label="Main">${PAGES.map(([h, t]) => `<a href="${h}"${h === here ? ' aria-current="page"' : ''}>${t}</a>`).join('')}</nav></div></header>`;
   const foot = document.getElementById('site-foot');
-  if (foot) foot.outerHTML = `<footer class="foot"><div class="wrap">© ${new Date().getFullYear()} ${P.name || ''} · everything runs client-side.</div></footer>`;
+  if (foot) foot.remove();
 
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd');

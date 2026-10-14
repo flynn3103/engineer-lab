@@ -8,29 +8,6 @@
   'use strict';
   const Course = root.Course = root.Course || {};
   const MERMAID = 'https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js';
-  Course.mount = function (RD, opts) {
-  opts = opts || {};
-  const cfg = RD.config;
-  const app = opts.el || document.getElementById('app');
-  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  // Narration and spec text carry a little inline markup (<code>, <b>) written by the author, so it is passed through.
-  const list = a => '<ul>' + a.map(x => '<li>' + x + '</li>').join('') + '</ul>';
-  const table = (head, rows) => '<div class="table-scroll"><table><thead><tr>' + head.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>' +
-    rows.map(r => '<tr>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>';
-  const feats = RD.features;
-  const ucs = f => RD.uc[f.id] || [];
-  const pad = n => String(n).padStart(2, '0');
-  const TONES = ['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6'];
-  const tone = i => 'var(--' + TONES[i % TONES.length] + ')';
-  const firstSentence = t => { const p = String(t).replace(/<[^>]+>/g, ''); return p.length <= 110 ? p : (p.match(/^.*?[.!?](\s|$)/) || [p])[0].trim(); };
-  const href = (n, m) => '#/' + (n ? 'f/' + n + (m ? '/u/' + m : '') : '');
-  const section = (id, n, title, body, sub) => '<section class="sec" id="' + id + '"><h2><span>' + pad(n) + '</span>' + title + '</h2>' + (sub ? '<p class="sub">' + sub + '</p>' : '') + body + '</section>';
-  const chips = items => '<div class="chips">' + items.map(c => '<span>' + esc(c) + '</span>').join('') + '</div>';
-  const jump = items => '<nav class="jump" aria-label="On this page">' + items.map(([id, l]) => '<a href="#' + id + '" data-jump>' + l + '</a>').join('') + '</nav>';
-
-  /* ---------- diagrams (Mermaid, loaded on demand) ---------- */
-  const diagram = (d, hero) => '<figure class="diagram' + (hero ? ' diagram-hero' : '') + '"><figcaption><b>' + esc(d.kind) + '</b>' + (d.title ? ' · ' + esc(d.title) : '') +
-    '</figcaption><div class="diagram-body" data-mermaid><pre class="diagram-src">' + esc(d.src.trim()) + '</pre></div></figure>';
   let loading;
   function loadMermaid() {
     if (window.mermaid) return Promise.resolve(window.mermaid);
@@ -85,6 +62,31 @@
       }
     }
   }
+  Course.mermaid = { draw: draw, load: loadMermaid };
+
+  Course.mount = function (RD, opts) {
+  opts = opts || {};
+  const cfg = RD.config;
+  const app = opts.el || document.getElementById('app');
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // Narration and spec text carry a little inline markup (<code>, <b>) written by the author, so it is passed through.
+  const list = a => '<ul>' + a.map(x => '<li>' + x + '</li>').join('') + '</ul>';
+  const table = (head, rows) => '<div class="table-scroll"><table><thead><tr>' + head.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>' +
+    rows.map(r => '<tr>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>';
+  const feats = RD.features;
+  const ucs = f => RD.uc[f.id] || [];
+  const pad = n => String(n).padStart(2, '0');
+  const TONES = ['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6'];
+  const tone = i => 'var(--' + TONES[i % TONES.length] + ')';
+  const firstSentence = t => { const p = String(t).replace(/<[^>]+>/g, ''); return p.length <= 110 ? p : (p.match(/^.*?[.!?](\s|$)/) || [p])[0].trim(); };
+  const href = (n, m) => '#/' + (n ? 'f/' + n + (m ? '/u/' + m : '') : '');
+  const section = (id, n, title, body, sub) => '<section class="sec" id="' + id + '"><h2><span>' + pad(n) + '</span>' + title + '</h2>' + (sub ? '<p class="sub">' + sub + '</p>' : '') + body + '</section>';
+  const chips = items => '<div class="chips">' + items.map(c => '<span>' + esc(c) + '</span>').join('') + '</div>';
+  const jump = items => '<nav class="jump" aria-label="On this page">' + items.map(([id, l]) => '<a href="#' + id + '" data-jump>' + l + '</a>').join('') + '</nav>';
+
+  /* ---------- diagrams (Mermaid, loaded on demand) ---------- */
+  const diagram = (d, hero) => '<figure class="diagram' + (hero ? ' diagram-hero' : '') + '"><figcaption><b>' + esc(d.kind) + '</b>' + (d.title ? ' · ' + esc(d.title) : '') +
+    '</figcaption><div class="diagram-body" data-mermaid><pre class="diagram-src">' + esc(d.src.trim()) + '</pre></div></figure>';
 
   /* ---------- page templates ---------- */
   const scopeList = sc => Array.isArray(sc[0]) ? sc[0].map(x => 'In scope: ' + x).concat(sc[1].map(x => 'Out of scope: ' + x)) : sc;
@@ -199,7 +201,7 @@
   app.innerHTML = '<a class="skip-link" href="#course-main">Skip to content</a>' +
     '<header class="course-top"><button id="menu-toggle" aria-label="Show navigation" aria-controls="course-sidebar" aria-expanded="false">☰</button><a id="home-link" class="home-link" href="' + esc(cfg.root) + 'index.html" aria-label="Home"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg></a><nav aria-label="Breadcrumb" id="breadcrumb"></nav><span class="course-version">SYSTEM DESIGN · ' + esc((cfg.name + ' ' + cfg.version).toUpperCase()) + '</span></header>' +
     '<div class="course-layout"><aside class="course-sidebar" id="course-sidebar"><label class="search-label" for="course-search">Find a feature</label><input id="course-search" type="search" placeholder="Search features…"><nav id="chapter-nav" aria-label="Pages"></nav></aside>' +
-    '<main id="course-main" tabindex="-1"><article id="page"></article><footer class="course-foot">' + (cfg.footer || 'A model of ' + esc(cfg.name) + ' ' + esc(cfg.version) + ' for learning. Numbers marked as examples are assumptions, not measurements.') + ' This course was built with the <a href="' + esc(cfg.root) + 'skills.html?q=learn-technology-from-scratch">learn-technology-from-scratch</a> skill.</footer></main></div>' +
+    '<main id="course-main" tabindex="-1"><article id="page"></article><footer class="course-foot">' + (cfg.footer || 'A model of ' + esc(cfg.name) + ' ' + esc(cfg.version) + ' for learning. Numbers marked as examples are assumptions, not measurements.') + ' This course was built with the learn-from-scratch skill.</footer></main></div>' +
     '<button id="sidebar-scrim" class="sidebar-scrim" aria-label="Close navigation" hidden></button>';
   const $ = id => document.getElementById(id);
   let route = { n: 0, m: 0 };
@@ -236,7 +238,7 @@
     else if (f) { page.innerHTML = feature(route.n); title = f.name; }
     else page.innerHTML = overview();
     document.title = title + ' · ' + cfg.name + ' design';
-    renderNav(); renderCrumb(); closeMenu(); window.scrollTo(0, 0); draw(page);
+    renderNav(); renderCrumb(); closeMenu(); window.scrollTo(0, 0); Course.mermaid.draw(page);
     if (cfg.afterRender) cfg.afterRender(page);
   }
 

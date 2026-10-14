@@ -23,7 +23,7 @@ function mermaidFile() {
 (async () => {
   const { chromium } = playwright(), url = 'file://' + path.resolve(page), mm = wantDiagrams ? mermaidFile() : null, errs = [];
   if (shots) fs.mkdirSync(shots, { recursive: true });
-  const b = await chromium.launch();
+  const b = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
   const runs = [['light', 1100], ['dark', 390]];
   for (const [scheme, width] of runs) {
     const ctx = await b.newContext({ viewport: { width, height: 900 }, colorScheme: scheme });
@@ -33,8 +33,15 @@ function mermaidFile() {
     p.on('pageerror', e => errs.push(`${scheme} pageerror ${e.message}`));
     p.on('console', m => { if (m.type() === 'error' && !(!wantDiagrams && /ERR_FAILED|net::/.test(m.text()))) errs.push(`${scheme} console ${m.text()}`); });
     await p.goto(url);
-    const shape = await p.evaluate(() => CourseData.features.map(f => (CourseData.uc[f.id] || []).length));
-    const routes = ['#/']; shape.forEach((n, i) => { routes.push('#/f/' + (i + 1)); for (let u = 1; u <= n; u++) routes.push('#/f/' + (i + 1) + '/u/' + u); });
+    const skill = await p.evaluate(() => typeof SkillData !== 'undefined');   /* skill-set course: modules and lessons */
+    const routes = ['#/'];
+    if (skill) {
+      const mods = await p.evaluate(() => SkillData.modules.map(m => m.status === 'ready' ? (SkillData.lessons[m.id] || []).length : -1));
+      mods.forEach((n, i) => { if (n < 0) return; routes.push('#/m/' + (i + 1)); for (let l = 1; l <= n; l++) routes.push('#/m/' + (i + 1) + '/l/' + l); });
+    } else {
+      const shape = await p.evaluate(() => CourseData.features.map(f => (CourseData.uc[f.id] || []).length));
+      shape.forEach((n, i) => { routes.push('#/f/' + (i + 1)); for (let u = 1; u <= n; u++) routes.push('#/f/' + (i + 1) + '/u/' + u); });
+    }
     let pages = 0, diagrams = 0, stepsShown = 0;
     for (const h of routes) {
       await p.goto(url + h); await p.reload(); pages++;
@@ -62,7 +69,7 @@ function mermaidFile() {
         const st = await p.$$eval('[data-mermaid]', ns => ns.map(n => n.getAttribute('data-drawn')));
         diagrams += st.filter(x => x === '1').length;
         if (st.some(x => x !== '1')) errs.push(`${scheme} ${h}: diagram states ${st.join(',')}`);
-        if (h !== '#/' && st.length === 0) errs.push(`${scheme} ${h}: no diagram on the page`);
+        if (h !== '#/' && !(skill && !/\/l\//.test(h)) && st.length === 0) errs.push(`${scheme} ${h}: no diagram on the page`);
       }
       const ow = await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       if (ow > 1) errs.push(`${scheme} ${h}: horizontal overflow ${ow}px`);

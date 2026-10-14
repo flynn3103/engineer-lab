@@ -107,5 +107,6 @@
   }
 
   Course.validate = validate;
+  Course.lintMermaid = lintMermaid;
   if (typeof module === 'object' && module.exports) module.exports = Course;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

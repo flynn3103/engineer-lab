@@ -1,0 +1,23 @@
+/* Extra styles for skill-set courses (assets/course/skillset.js). Loaded after course.css; everything sits under .skillset. */
+.skillset .sk-planned{opacity:.55;cursor:default;pointer-events:none}.skillset .sk-planned .art{filter:grayscale(.7)}
+.skillset .sk-steps{list-style:none;counter-reset:sk;margin:0;padding:0;display:grid;gap:10px;max-width:90ch}
+.skillset .sk-steps li{counter-increment:sk;display:grid;grid-template-columns:38px 1fr;gap:4px 14px;align-items:start;background:var(--card);border:var(--ink-line);border-radius:14px;padding:12px 16px;box-shadow:var(--shadow)}
+.skillset .sk-steps li::before{content:counter(sk);grid-row:span 2;font:700 15px/36px var(--mono);width:38px;height:38px;text-align:center;border:1.5px solid var(--ink);border-radius:50%;background:var(--p1);color:var(--ink)}
+.skillset .sk-steps b{font:700 14.5px/1.5 var(--mono);color:var(--ink)}.skillset .sk-steps span{font-size:15px;line-height:1.65;color:var(--ink)}
+.skillset .sk-check{list-style:none;margin:0;padding:0;display:grid;gap:8px;max-width:90ch}
+.skillset .sk-check label{display:grid;grid-template-columns:22px 1fr;gap:12px;align-items:start;background:var(--card);border:var(--ink-line);border-radius:12px;padding:10px 14px;cursor:pointer}
+.skillset .sk-check label:hover{background:var(--soft)}.skillset .sk-check input{width:18px;height:18px;margin:3px 0 0;accent-color:var(--ink)}
+.skillset .sk-check input:checked+span{text-decoration:line-through;color:var(--mut)}
+.skillset .sk-agent{margin:16px 0 0;background:var(--p3);border:var(--ink-line);border-radius:14px;padding:12px 18px;box-shadow:var(--shadow);max-width:90ch}
+.skillset .sk-agent b{font:700 11.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink)}.skillset .sk-agent p{margin:6px 0 0;font-size:15px;line-height:1.65;color:var(--ink)}
+.skillset .sk-answer{margin-top:14px;background:var(--card);border:var(--ink-line);border-radius:14px;box-shadow:var(--shadow);max-width:90ch}
+.skillset .sk-answer summary{cursor:pointer;padding:12px 18px;font:700 13.5px var(--mono);color:var(--ink);list-style:none}.skillset .sk-answer summary::-webkit-details-marker{display:none}
+.skillset .sk-answer summary::before{content:'▸ '}.skillset .sk-answer[open] summary::before{content:'▾ '}.skillset .sk-answer[open] summary{border-bottom:1px solid var(--line)}
+.skillset .sk-answer>div{padding:12px 18px 16px;font-size:15px;line-height:1.7;color:var(--ink)}.skillset .sk-answer>div p{margin:0 0 8px}.skillset .sk-answer pre{overflow-x:auto;background:var(--soft);border-radius:10px;padding:10px 14px;font:13px/1.6 var(--mono);margin:8px 0}
+.skillset .sk-review{list-style:none;margin:0;padding:0;display:grid;gap:8px;max-width:90ch}.skillset .sk-review li{background:var(--p4);border:var(--ink-line);border-radius:12px;padding:10px 14px;font-size:15px;line-height:1.65;color:var(--ink)}
+.skillset .sk-review li:last-child{background:var(--p5)}
+.skillset .sk-outline{margin:0;padding-left:18px}.skillset .sk-outline li{margin:2px 0;font-size:13.5px;line-height:1.5}.skillset td small{color:var(--mut);font:12px var(--mono)}
+/* long module and lesson names must not widen the page on a phone: clip the breadcrumb and ellipsize its links */
+.skillset .course-top nav{overflow:hidden}.skillset .course-top nav a{overflow:hidden;text-overflow:ellipsis;max-width:42vw}
+.skillset .course-top .course-version{flex:none}
+@media(max-width:550px){.skillset .course-top .course-version{display:none}.skillset .course-top nav a{max-width:34vw}}

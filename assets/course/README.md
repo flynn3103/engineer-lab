@@ -117,6 +117,10 @@ node tools/course/browse.js techstack/<id>/course.html    # every page, both the
 `browse.js` needs Playwright and Chromium (pre-installed in the cloud session). Where the CDN is blocked it installs
 `mermaid@10.9.1` from npm once into a temp folder and serves that instead (set `MERMAID_JS` to point at a copy).
 
+## Skill-set courses
+
+A course about a **skill** (backend engineer, product management) uses a second engine, `skillset.js`, on top of the same style, kit and Mermaid layer. Routes are `#/m/N` (module) and `#/m/N/l/M` (lesson). The data global is `SkillData`; the validator is `Course.validateSkill` and `node tools/course/check.js` picks it automatically when a page defines `SkillData`. A page loads `contract.js`, its data files, `course.js`, then `skillset.js` (and `skillset.css`), and ends with `Course.mountSkill(SkillData)`. The layout, the data contract and the build steps are in `.claude/skills/learn-from-scratch/references/skillset-template.md`. The reference page is `skillset/backend-engineer/course.html`.
+
 ## Pitfalls this framework already avoids
 
 - Short class names such as `.lab`, `.row`, `.chip`, `.bar`, `.box` collide with `assets/lab.css`. Picture classes are `cap`, `strip`,
